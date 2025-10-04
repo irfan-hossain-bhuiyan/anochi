@@ -1,4 +1,4 @@
-use anochi::token::{Tokenizer, TokenType};
+use anochi::token::{TokenType, Tokenizer};
 
 fn main() {
     // Test 1: Mixed quotes - "valid" invalid" "another valid"

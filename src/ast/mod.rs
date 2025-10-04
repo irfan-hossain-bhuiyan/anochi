@@ -11,22 +11,9 @@
 //! - **Unary expressions**: Operations on a single operand (e.g., `-x`, `!flag`)
 //! - **Literal expressions**: Direct values (numbers, strings, identifiers)
 //! - **Grouping expressions**: Parenthesized expressions for precedence control
-//!
-//! # Example
-//!
-//! ```
-//! use anochi::ast::{Expression, BinaryOperator, Literal};
-//!
-//! // Represents the expression: 2 + 3
-//! let expr = Expression::Binary {
-//!     left: Box::new(Expression::Literal(Literal::Integer(2))),
-//!     operator: BinaryOperator::Plus,
-//!     right: Box::new(Expression::Literal(Literal::Integer(3))),
-//! };
-//! ```
 
-use std::fmt;
 use display_tree::DisplayTree;
+use std::fmt;
 
 use crate::token::Position;
 
@@ -101,25 +88,10 @@ pub enum UnaryOperator {
 ///
 /// This enum encompasses all types of expressions that can appear in
 /// Anochi source code, from simple literals to complex nested expressions.
-///
-/// # Examples
-///
-/// ```
-/// use anochi::ast::{Expression, BinaryOperator, UnaryOperator, Literal};
-///
-/// // Literal: 42
-/// let literal = Expression::Literal(Literal::Integer(42));
-///
-/// // Unary: -42
-/// let unary = Expression::Unary {
-///     operator: UnaryOperator::Minus,
-///     operand: Box::new(Expression::Literal(Literal::Integer(42))),
-/// };
-/// ```
 #[derive(Debug, Clone, PartialEq, DisplayTree)]
 pub enum Expression {
     /// A literal value (number, string, identifier)
-    Literal(#[node_label]Literal),
+    Literal(#[node_label] Literal),
 
     /// A binary operation between two expressions
     Binary {
@@ -148,7 +120,7 @@ pub enum Expression {
     Grouping {
         /// The expression inside the parentheses
         #[tree]
-        expression: Box<Expression>,
+        expression: Box<ExpressionNode>,
     },
 }
 
@@ -194,9 +166,7 @@ impl fmt::Display for UnaryOperator {
     }
 }
 
-
 impl Expression {
-
     /// Creates a new literal integer expression.
     ///
     /// # Arguments
@@ -206,14 +176,6 @@ impl Expression {
     /// # Returns
     ///
     /// An `Expression::Literal` containing the integer value.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use anochi::ast::Expression;
-    ///
-    /// let expr = Expression::integer(42);
-    /// ```
     pub fn integer(value: i64) -> Self {
         Expression::Literal(Literal::Integer(value))
     }
@@ -227,14 +189,6 @@ impl Expression {
     /// # Returns
     ///
     /// An `Expression::Literal` containing the float value.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use anochi::ast::Expression;
-    ///
-    /// let expr = Expression::float(3.14);
-    /// ```
     pub fn float(value: f64) -> Self {
         Expression::Literal(Literal::Float(value))
     }
@@ -248,14 +202,6 @@ impl Expression {
     /// # Returns
     ///
     /// An `Expression::Literal` containing the string value.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use anochi::ast::Expression;
-    ///
-    /// let expr = Expression::string("hello".to_string());
-    /// ```
     pub fn string(value: String) -> Self {
         Expression::Literal(Literal::String(value))
     }
@@ -269,14 +215,6 @@ impl Expression {
     /// # Returns
     ///
     /// An `Expression::Literal` containing the identifier.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use anochi::ast::Expression;
-    ///
-    /// let expr = Expression::identifier("variable_name".to_string());
-    /// ```
     pub fn identifier(name: String) -> Self {
         Expression::Literal(Literal::Identifier(name))
     }
@@ -292,23 +230,15 @@ impl Expression {
     /// # Returns
     ///
     /// An `Expression::Binary` representing the binary operation.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use anochi::ast::{Expression, BinaryOperator};
-    ///
-    /// let expr = Expression::binary(
-    ///     Expression::integer(2),
-    ///     BinaryOperator::Plus,
-    ///     Expression::integer(3)
-    /// );
-    /// ```
-    pub fn binary(left: Expression, operator: BinaryOperator, right: Expression) -> Self {
+    pub fn binary(
+        left: impl Into<ExpressionNode>,
+        operator: BinaryOperator,
+        right: impl Into<ExpressionNode>,
+    ) -> Self {
         Expression::Binary {
-            left: Box::new(left),
+            left: Box::new(left.into()),
             operator,
-            right: Box::new(right),
+            right: Box::new(right.into()),
         }
     }
 
@@ -322,18 +252,10 @@ impl Expression {
     /// # Returns
     ///
     /// An `Expression::Unary` representing the unary operation.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use anochi::ast::{Expression, UnaryOperator};
-    ///
-    /// let expr = Expression::unary(UnaryOperator::Minus, Expression::integer(42));
-    /// ```
-    pub fn unary(operator: UnaryOperator, operand: Expression) -> Self {
-        Expression::Unary {
+    pub fn unary(operator: UnaryOperator, operand: impl Into<ExpressionNode>) -> Self {
+        Self::Unary {
             operator,
-            operand: Box::new(operand),
+            operand: Box::new(operand.into()),
         }
     }
 
@@ -346,35 +268,52 @@ impl Expression {
     /// # Returns
     ///
     /// An `Expression::Grouping` representing the grouped expression.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use anochi::ast::{Expression, BinaryOperator};
-    ///
-    /// let inner = Expression::binary(
-    ///     Expression::integer(2),
-    ///     BinaryOperator::Plus,
-    ///     Expression::integer(3)
-    /// );
-    /// let expr = Expression::grouping(inner);
-    /// ```
-    pub fn grouping(expression: Expression) -> Self {
+    pub fn grouping(expression: impl Into<ExpressionNode>) -> Self {
         Expression::Grouping {
-            expression: Box::new(expression),
+            expression: Box::new(expression.into()),
         }
     }
 }
-type ExpressionNode=AstNode<Expression>;
-impl<T:CodeNode+DisplayTree> DisplayTree for AstNode<T>{
+#[derive(Debug, Clone, PartialEq)]
+pub enum Statement {
+    Assignment {
+        identifier: String,
+        value: ExpressionNode,
+    },
+    StatementBlock {
+        statements: Vec<Statement>,
+    },
+}
+pub type ExpressionNode = AstNode<Expression>;
+impl<T: AstElement + DisplayTree> DisplayTree for AstNode<T> {
     fn fmt(&self, f: &mut fmt::Formatter, style: display_tree::Style) -> fmt::Result {
         self.node.fmt(f, style)
     }
 }
-trait CodeNode{}
-impl CodeNode for Expression{}
-#[derive(Clone,Debug,PartialEq)]
-struct AstNode<T:CodeNode>{
-    node:T,
-    position:Position,
+pub trait AstElement {}
+impl AstElement for Expression {}
+#[derive(Clone, Debug, PartialEq)]
+pub struct AstNode<T: AstElement> {
+    pub node: T,
+    pub position: Option<Position>,
+}
+
+impl<T: AstElement> AstNode<T> {
+    pub fn new(node: T, position: Position) -> Self {
+        Self {
+            node,
+            position: Some(position),
+        }
+    }
+    pub fn new_temp(node: T) -> Self {
+        Self {
+            node,
+            position: None,
+        }
+    }
+}
+impl<T: AstElement> From<T> for AstNode<T> {
+    fn from(value: T) -> Self {
+        AstNode::new_temp(value)
+    }
 }

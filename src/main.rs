@@ -1,8 +1,8 @@
-mod token;
 mod ast;
+mod token;
 
-use display_tree::{format_tree, CharSet, StyleBuilder,Style};
-use ast::{Expression, BinaryOperator, UnaryOperator};
+use ast::{BinaryOperator, Expression, UnaryOperator};
+use display_tree::{CharSet, Style, StyleBuilder, format_tree};
 
 fn main() {
     // Create an AST representing the expression: (-2 + 7)
@@ -15,7 +15,9 @@ fn main() {
     // Display the AST using the display_tree crate
     let formatted_tree = format_tree!(
         expr,
-        Style::default().indentation(1).char_set(CharSet::DOUBLE_LINE)
+        Style::default()
+            .indentation(1)
+            .char_set(CharSet::DOUBLE_LINE)
     );
 
     println!("{formatted_tree}");

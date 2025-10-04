@@ -52,16 +52,13 @@ This document outlines the step-by-step implementation plan for the Anochi progr
 ### Task 2.1: AST define
 - [ ] Make a ast structure.Because I am just starting,I will go with ast of expression,Binary and unary operation inside a ast.
 - [ ] A parser preferably recursive parser that will parse the expression to an ast.
-    Expr    ::= Expr "+" Term
+Expr    ::= Expr "+" Term
           | Expr "-" Term
           | Term
 
-Term    ::= Term "*" Power
-          | Term "/" Power
-          | Power
-
-Power   ::= Unary
-          | Unary "^" Power        // right-associative exponentiation
+Term    ::= Term "*" Unary
+          | Term "/" Unary
+          | Unary
 
 Unary   ::= "+" Unary
           | "-" Unary
