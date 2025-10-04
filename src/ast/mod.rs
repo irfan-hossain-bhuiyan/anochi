@@ -15,7 +15,8 @@
 use display_tree::DisplayTree;
 use std::fmt;
 
-use crate::token::Position;
+use crate::{token::Position};
+use crate::token::token_type::TokenType;
 
 /// Represents different types of literal values in the AST.
 ///
@@ -273,6 +274,21 @@ impl Expression {
             expression: Box::new(expression.into()),
         }
     }
+    /// Converts a Literal token into an Expression::Literal.
+    pub fn from_literal(literal: Literal) -> Self {
+        Expression::Literal(literal)
+    }
+
+    /// Converts a Token to an Expression if it is a literal token.
+    pub fn from_token_type(token_type: TokenType) -> Option<Self> {
+        match token_type {
+            crate::token::TokenType::Integer(i) => Some(Expression::Literal(Literal::Integer(i))),
+            crate::token::TokenType::Float(f) => Some(Expression::Literal(Literal::Float(f))),
+            crate::token::TokenType::String(s) => Some(Expression::Literal(Literal::String(s))),
+            crate::token::TokenType::Identifier(id) => Some(Expression::Literal(Literal::Identifier(id))),
+            _ => None,
+        }
+    }
 }
 #[derive(Debug, Clone, PartialEq)]
 pub enum Statement {
@@ -311,6 +327,7 @@ impl<T: AstElement> AstNode<T> {
             position: None,
         }
     }
+
 }
 impl<T: AstElement> From<T> for AstNode<T> {
     fn from(value: T) -> Self {

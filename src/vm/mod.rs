@@ -1,1 +1,1 @@
-mod tree_walk;
+pub mod tree_walk;
