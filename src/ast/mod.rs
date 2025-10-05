@@ -15,7 +15,10 @@
 use display_tree::DisplayTree;
 use std::fmt;
 
-use crate::{token::Position};
+pub type Identifier = String;
+
+use crate::token::Position;
+use crate::token::token_type::Keyword::{False, True};
 use crate::token::token_type::TokenType;
 
 /// Represents different types of literal values in the AST.
@@ -28,10 +31,11 @@ pub enum Literal {
     Integer(i64),
     /// Floating-point literal (e.g., `3.14`, `-2.5`)
     Float(f64),
-    /// String literal (e.g., `"hello"`, `"world"`)
+    /// String literal (e.g., "hello", "world")
     String(String),
     /// Identifier (variable name, function name, etc.)
-    Identifier(String),
+    Identifier(Identifier),
+    Bool(bool),
 }
 
 /// Binary operators for expressions that operate on two operands.
@@ -132,6 +136,7 @@ impl fmt::Display for Literal {
             Literal::Float(fl) => write!(f, "{fl}"),
             Literal::String(s) => write!(f, "\"{s}\""),
             Literal::Identifier(id) => write!(f, "{id}"),
+            Literal::Bool(b) => write!(f, "{b}"),
         }
     }
 }
@@ -193,7 +198,9 @@ impl Expression {
     pub fn float(value: f64) -> Self {
         Expression::Literal(Literal::Float(value))
     }
-
+    pub fn bool(value: bool) -> Self {
+        Self::Literal(Literal::Bool(value))
+    }
     /// Creates a new literal string expression.
     ///
     /// # Arguments
@@ -216,7 +223,7 @@ impl Expression {
     /// # Returns
     ///
     /// An `Expression::Literal` containing the identifier.
-    pub fn identifier(name: String) -> Self {
+    pub fn identifier(name: Identifier) -> Self {
         Expression::Literal(Literal::Identifier(name))
     }
 
@@ -281,11 +288,14 @@ impl Expression {
 
     /// Converts a Token to an Expression if it is a literal token.
     pub fn from_token_type(token_type: TokenType) -> Option<Self> {
+        use TokenType::{Float, Identifier, Integer, Keyword, String};
         match token_type {
-            crate::token::TokenType::Integer(i) => Some(Expression::Literal(Literal::Integer(i))),
-            crate::token::TokenType::Float(f) => Some(Expression::Literal(Literal::Float(f))),
-            crate::token::TokenType::String(s) => Some(Expression::Literal(Literal::String(s))),
-            crate::token::TokenType::Identifier(id) => Some(Expression::Literal(Literal::Identifier(id))),
+            Integer(i) => Some(Expression::Literal(Literal::Integer(i))),
+            Float(f) => Some(Expression::Literal(Literal::Float(f))),
+            String(s) => Some(Expression::Literal(Literal::String(s))),
+            Identifier(id) => Some(Expression::Literal(Literal::Identifier(id))),
+            Keyword(True) => Some(Expression::Literal(Literal::Bool(true))),
+            Keyword(False) => Some(Expression::Literal(Literal::Bool(false))),
             _ => None,
         }
     }
@@ -293,11 +303,15 @@ impl Expression {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Statement {
     Assignment {
-        identifier: String,
+        identifier: Identifier,
         value: ExpressionNode,
     },
     StatementBlock {
         statements: Vec<Statement>,
+    },
+    CallStatement {
+        identifier: Identifier,
+        argument: Vec<ExpressionNode>,
     },
 }
 pub type ExpressionNode = AstNode<Expression>;
@@ -327,7 +341,6 @@ impl<T: AstElement> AstNode<T> {
             position: None,
         }
     }
-
 }
 impl<T: AstElement> From<T> for AstNode<T> {
     fn from(value: T) -> Self {

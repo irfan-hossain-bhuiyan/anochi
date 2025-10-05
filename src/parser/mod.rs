@@ -1,4 +1,5 @@
 use crate::ast::{BinaryOperator, Expression, ExpressionNode, UnaryOperator};
+use crate::token::token_type::Keyword::{And, Or};
 use crate::token::{Token, TokenType};
 
 pub struct Parser<'a> {
@@ -7,12 +8,70 @@ pub struct Parser<'a> {
 }
 
 impl<'a> Parser<'a> {
+    // Logical OR: expr || expr
+    fn parse_logical_or(&mut self) -> Option<ExpressionNode> {
+        let mut node = self.parse_logical_and()?;
+        while self.match_token(&[TokenType::Keyword(Or)]).is_some() {
+            let operator = BinaryOperator::Or;
+            let right = self.parse_logical_and()?;
+            node = Expression::binary(node, operator, right).into();
+        }
+        Some(node)
+    }
+
+    // Logical AND: expr && expr
+    fn parse_logical_and(&mut self) -> Option<ExpressionNode> {
+        let mut node = self.parse_equality()?;
+        while self.match_token(&[TokenType::Keyword(And)]).is_some() {
+            let operator = BinaryOperator::And;
+            let right = self.parse_equality()?;
+            node = Expression::binary(node, operator, right).into();
+        }
+        Some(node)
+    }
+
+    // Equality: expr == expr, expr != expr
+    fn parse_equality(&mut self) -> Option<ExpressionNode> {
+        let mut node = self.parse_comparison()?;
+        while let Some(op) = self.match_token(&[TokenType::EqualEqual, TokenType::BangEqual]) {
+            let operator = match op {
+                TokenType::EqualEqual => BinaryOperator::Equal,
+                TokenType::BangEqual => BinaryOperator::NotEqual,
+                _ => unreachable!(),
+            };
+            let right = self.parse_comparison()?;
+            node = Expression::binary(node, operator, right).into();
+        }
+        Some(node)
+    }
+
+    // Comparison: < > <= >=
+    fn parse_comparison(&mut self) -> Option<ExpressionNode> {
+        let mut node = self.parse_expr()?;
+        while let Some(op) = self.match_token(&[
+            TokenType::Less,
+            TokenType::LessEqual,
+            TokenType::Greater,
+            TokenType::GreaterEqual,
+        ]) {
+            let operator = match op {
+                TokenType::Less => BinaryOperator::Less,
+                TokenType::LessEqual => BinaryOperator::LessEqual,
+                TokenType::Greater => BinaryOperator::Greater,
+                TokenType::GreaterEqual => BinaryOperator::GreaterEqual,
+                _ => unreachable!(),
+            };
+            let right = self.parse_expr()?;
+            node = Expression::binary(node, operator, right).into();
+        }
+        Some(node)
+    }
     pub fn new(tokens: &'a [Token]) -> Self {
         Parser { tokens, current: 0 }
     }
 
     pub fn parse_expression(&mut self) -> Option<ExpressionNode> {
-        self.parse_expr()
+        self.parse_logical_or()
     }
 
     // Expr ::= Term (("+" | "-") Term)*
@@ -47,9 +106,10 @@ impl<'a> Parser<'a> {
 
     // Unary ::= ("+" | "-") Unary | Primary
     fn parse_unary(&mut self) -> Option<ExpressionNode> {
-        if let Some(op) = self.match_token(&[TokenType::Minus]) {
+        if let Some(op) = self.match_token(&[TokenType::Minus, TokenType::Bang]) {
             let operator = match op {
                 TokenType::Minus => UnaryOperator::Minus,
+                TokenType::Bang => UnaryOperator::Not,
                 _ => unreachable!(),
             };
             let operand = self.parse_unary()?;
@@ -174,7 +234,8 @@ mod tests {
             Expression::integer(1),
             BinaryOperator::Minus,
             Expression::integer(2),
-        ).into();
+        )
+        .into();
         assert_eq!(parsed, expected);
     }
 
@@ -190,7 +251,8 @@ mod tests {
             Expression::integer(2),
             BinaryOperator::Multiply,
             Expression::integer(3),
-        ).into();
+        )
+        .into();
         assert_eq!(parsed, expected);
     }
 
@@ -206,7 +268,8 @@ mod tests {
             Expression::integer(4),
             BinaryOperator::Divide,
             Expression::integer(2),
-        ).into();
+        )
+        .into();
         assert_eq!(parsed, expected);
     }
 
@@ -218,10 +281,7 @@ mod tests {
         let tokens = tokenizer.tokenize();
         let mut parser = Parser::new(&tokens);
         let parsed = parser.parse_expression().unwrap();
-        let expected = Expression::unary(
-            UnaryOperator::Minus,
-            Expression::integer(5),
-        ).into();
+        let expected = Expression::unary(UnaryOperator::Minus, Expression::integer(5)).into();
         assert_eq!(parsed, expected);
     }
 
@@ -234,16 +294,15 @@ mod tests {
         let mut parser = Parser::new(&tokens);
         let parsed = parser.parse_expression().unwrap();
         let expected = Expression::binary(
-            Expression::grouping(
-                Expression::binary(
-                    Expression::integer(1),
-                    BinaryOperator::Plus,
-                    Expression::integer(2),
-                )
-            ),
+            Expression::grouping(Expression::binary(
+                Expression::integer(1),
+                BinaryOperator::Plus,
+                Expression::integer(2),
+            )),
             BinaryOperator::Multiply,
             Expression::integer(3),
-        ).into();
+        )
+        .into();
         assert_eq!(parsed, expected);
     }
 
@@ -263,19 +322,20 @@ mod tests {
                 BinaryOperator::Multiply,
                 Expression::integer(3),
             ),
-        ).into();
+        )
+        .into();
         assert_eq!(parsed, expected);
     }
 
     #[test]
     fn test_parse_float_literal() {
         // 3.14
-        let source = "3.14";
+        let source = "3.1";
         let tokenizer = Tokenizer::new(source);
         let tokens = tokenizer.tokenize();
         let mut parser = Parser::new(&tokens);
         let parsed = parser.parse_expression().unwrap();
-        let expected = Expression::float(3.14).into();
+        let expected = Expression::float(3.1).into();
         assert_eq!(parsed, expected);
     }
 
@@ -287,25 +347,20 @@ mod tests {
         let tokens = tokenizer.tokenize();
         let mut parser = Parser::new(&tokens);
         let parsed = parser.parse_expression().unwrap();
-        let expected = Expression::grouping(
-            Expression::binary(
-                Expression::grouping(
-                    Expression::binary(
-                        Expression::integer(1),
-                        BinaryOperator::Plus,
-                        Expression::integer(2),
-                    )
-                ),
-                BinaryOperator::Multiply,
-                Expression::grouping(
-                    Expression::binary(
-                        Expression::integer(3),
-                        BinaryOperator::Minus,
-                        Expression::integer(4),
-                    )
-                ),
-            )
-        ).into();
+        let expected = Expression::grouping(Expression::binary(
+            Expression::grouping(Expression::binary(
+                Expression::integer(1),
+                BinaryOperator::Plus,
+                Expression::integer(2),
+            )),
+            BinaryOperator::Multiply,
+            Expression::grouping(Expression::binary(
+                Expression::integer(3),
+                BinaryOperator::Minus,
+                Expression::integer(4),
+            )),
+        ))
+        .into();
         assert_eq!(parsed, expected);
     }
 }

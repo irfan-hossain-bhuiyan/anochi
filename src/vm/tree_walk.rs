@@ -135,6 +135,18 @@ impl Vm {
         right: &Literal,
     ) -> VmResult {
         match (left, right) {
+            // Bool operations
+            (Literal::Bool(l), Literal::Bool(r)) => match operator {
+                BinaryOperator::Equal => Ok(Literal::Bool(l == r)),
+                BinaryOperator::NotEqual => Ok(Literal::Bool(l != r)),
+                BinaryOperator::And => Ok(Literal::Bool(*l && *r)),
+                BinaryOperator::Or => Ok(Literal::Bool(*l || *r)),
+                BinaryOperator::Less => Ok(Literal::Bool(!*l && *r)), // false < true
+                BinaryOperator::LessEqual => Ok(Literal::Bool(!*l || *r)), // false <= true, true <= true
+                BinaryOperator::Greater => Ok(Literal::Bool(*l && !*r)), // true > false
+                BinaryOperator::GreaterEqual => Ok(Literal::Bool(*l || !*r)), // true >= false, true >= true
+                _ => Err(VmError::InvalidOperation(format!("Cannot apply {operator:?} to Bool"))),
+            },
             // Integer operations
             (Literal::Integer(l), Literal::Integer(r)) => match operator {
                 BinaryOperator::Plus => Ok(Literal::Integer(l + r)),
@@ -154,14 +166,14 @@ impl Vm {
                         Ok(Literal::Integer(l % r))
                     }
                 }
-                BinaryOperator::Equal => Ok(Literal::Integer(if l == r { 1 } else { 0 })),
-                BinaryOperator::NotEqual => Ok(Literal::Integer(if l != r { 1 } else { 0 })),
-                BinaryOperator::Less => Ok(Literal::Integer(if l < r { 1 } else { 0 })),
-                BinaryOperator::LessEqual => Ok(Literal::Integer(if l <= r { 1 } else { 0 })),
-                BinaryOperator::Greater => Ok(Literal::Integer(if l > r { 1 } else { 0 })),
-                BinaryOperator::GreaterEqual => Ok(Literal::Integer(if l >= r { 1 } else { 0 })),
-                BinaryOperator::And => Ok(Literal::Integer(if *l != 0 && *r != 0 { 1 } else { 0 })),
-                BinaryOperator::Or => Ok(Literal::Integer(if *l != 0 || *r != 0 { 1 } else { 0 })),
+                BinaryOperator::Equal => Ok(Literal::Bool(l == r)),
+                BinaryOperator::NotEqual => Ok(Literal::Bool(l != r)),
+                BinaryOperator::Less => Ok(Literal::Bool(l < r)),
+                BinaryOperator::LessEqual => Ok(Literal::Bool(l <= r)),
+                BinaryOperator::Greater => Ok(Literal::Bool(l > r)),
+                BinaryOperator::GreaterEqual => Ok(Literal::Bool(l >= r)),
+                _ => Err(VmError::InvalidOperation(format!("Cannot apply {operator:?} to integer"))),
+
             },
 
             // Float operations
@@ -183,136 +195,14 @@ impl Vm {
                         Ok(Literal::Float(l % r))
                     }
                 }
-                BinaryOperator::Equal => Ok(Literal::Integer(if (l - r).abs() < f64::EPSILON {
-                    1
-                } else {
-                    0
-                })),
-                BinaryOperator::NotEqual => {
-                    Ok(Literal::Integer(if (l - r).abs() >= f64::EPSILON {
-                        1
-                    } else {
-                        0
-                    }))
-                }
-                BinaryOperator::Less => Ok(Literal::Integer(if l < r { 1 } else { 0 })),
-                BinaryOperator::LessEqual => Ok(Literal::Integer(if l <= r { 1 } else { 0 })),
-                BinaryOperator::Greater => Ok(Literal::Integer(if l > r { 1 } else { 0 })),
-                BinaryOperator::GreaterEqual => Ok(Literal::Integer(if l >= r { 1 } else { 0 })),
-                BinaryOperator::And => {
-                    Ok(Literal::Integer(if *l != 0.0 && *r != 0.0 { 1 } else { 0 }))
-                }
-                BinaryOperator::Or => {
-                    Ok(Literal::Integer(if *l != 0.0 || *r != 0.0 { 1 } else { 0 }))
-                }
+                BinaryOperator::Equal => Ok(Literal::Bool((l - r).abs() < f64::EPSILON)),
+                BinaryOperator::NotEqual => Ok(Literal::Bool((l - r).abs() >= f64::EPSILON)),
+                BinaryOperator::Less => Ok(Literal::Bool(l < r)),
+                BinaryOperator::LessEqual => Ok(Literal::Bool(l <= r)),
+                BinaryOperator::Greater => Ok(Literal::Bool(l > r)),
+                BinaryOperator::GreaterEqual => Ok(Literal::Bool(l >= r)),
+                _ => Err(VmError::InvalidOperation(format!("Cannot apply {operator:?} to integer"))),
             },
-
-            // Mixed integer and float operations
-            (Literal::Integer(l), Literal::Float(r)) => {
-                let l_float = *l as f64;
-                match operator {
-                    BinaryOperator::Plus => Ok(Literal::Float(l_float + r)),
-                    BinaryOperator::Minus => Ok(Literal::Float(l_float - r)),
-                    BinaryOperator::Multiply => Ok(Literal::Float(l_float * r)),
-                    BinaryOperator::Divide => {
-                        if *r == 0.0 {
-                            Err(VmError::DivisionByZero)
-                        } else {
-                            Ok(Literal::Float(l_float / r))
-                        }
-                    }
-                    BinaryOperator::Modulo => {
-                        if *r == 0.0 {
-                            Err(VmError::DivisionByZero)
-                        } else {
-                            Ok(Literal::Float(l_float % r))
-                        }
-                    }
-                    BinaryOperator::Equal => {
-                        Ok(Literal::Integer(if (l_float - r).abs() < f64::EPSILON {
-                            1
-                        } else {
-                            0
-                        }))
-                    }
-                    BinaryOperator::NotEqual => {
-                        Ok(Literal::Integer(if (l_float - r).abs() >= f64::EPSILON {
-                            1
-                        } else {
-                            0
-                        }))
-                    }
-                    BinaryOperator::Less => Ok(Literal::Integer(if l_float < *r { 1 } else { 0 })),
-                    BinaryOperator::LessEqual => {
-                        Ok(Literal::Integer(if l_float <= *r { 1 } else { 0 }))
-                    }
-                    BinaryOperator::Greater => {
-                        Ok(Literal::Integer(if l_float > *r { 1 } else { 0 }))
-                    }
-                    BinaryOperator::GreaterEqual => {
-                        Ok(Literal::Integer(if l_float >= *r { 1 } else { 0 }))
-                    }
-                    BinaryOperator::And => {
-                        Ok(Literal::Integer(if *l != 0 && *r != 0.0 { 1 } else { 0 }))
-                    }
-                    BinaryOperator::Or => {
-                        Ok(Literal::Integer(if *l != 0 || *r != 0.0 { 1 } else { 0 }))
-                    }
-                }
-            }
-
-            (Literal::Float(l), Literal::Integer(r)) => {
-                let r_float = *r as f64;
-                match operator {
-                    BinaryOperator::Plus => Ok(Literal::Float(l + r_float)),
-                    BinaryOperator::Minus => Ok(Literal::Float(l - r_float)),
-                    BinaryOperator::Multiply => Ok(Literal::Float(l * r_float)),
-                    BinaryOperator::Divide => {
-                        if *r == 0 {
-                            Err(VmError::DivisionByZero)
-                        } else {
-                            Ok(Literal::Float(l / r_float))
-                        }
-                    }
-                    BinaryOperator::Modulo => {
-                        if *r == 0 {
-                            Err(VmError::DivisionByZero)
-                        } else {
-                            Ok(Literal::Float(l % r_float))
-                        }
-                    }
-                    BinaryOperator::Equal => {
-                        Ok(Literal::Integer(if (l - r_float).abs() < f64::EPSILON {
-                            1
-                        } else {
-                            0
-                        }))
-                    }
-                    BinaryOperator::NotEqual => {
-                        Ok(Literal::Integer(if (l - r_float).abs() >= f64::EPSILON {
-                            1
-                        } else {
-                            0
-                        }))
-                    }
-                    BinaryOperator::Less => Ok(Literal::Integer(if *l < r_float { 1 } else { 0 })),
-                    BinaryOperator::LessEqual => {
-                        Ok(Literal::Integer(if *l <= r_float { 1 } else { 0 }))
-                    }
-                    BinaryOperator::Greater => {
-                        Ok(Literal::Integer(if *l > r_float { 1 } else { 0 }))
-                    }
-                    BinaryOperator::GreaterEqual => {
-                        Ok(Literal::Integer(if *l >= r_float { 1 } else { 0 }))
-                    }
-                    BinaryOperator::And => {
-                        Ok(Literal::Integer(if *l != 0.0 && *r != 0 { 1 } else { 0 }))
-                    }
-                    BinaryOperator::Or => {
-                        Ok(Literal::Integer(if *l != 0.0 || *r != 0 { 1 } else { 0 }))
-                    }
-                }
-            }
 
             // Type mismatch for other combinations
             _ => Err(VmError::TypeMismatch),
@@ -335,12 +225,7 @@ impl Vm {
         match (operator, operand) {
             (UnaryOperator::Minus, Literal::Integer(i)) => Ok(Literal::Integer(-i)),
             (UnaryOperator::Minus, Literal::Float(f)) => Ok(Literal::Float(-f)),
-            (UnaryOperator::Not, Literal::Integer(i)) => {
-                Ok(Literal::Integer(if *i == 0 { 1 } else { 0 }))
-            }
-            (UnaryOperator::Not, Literal::Float(f)) => {
-                Ok(Literal::Integer(if *f == 0.0 { 1 } else { 0 }))
-            }
+            (UnaryOperator::Not,Literal::Bool(b))=> Ok(Literal::Bool(!b)),
             _ => Err(VmError::InvalidOperation(format!(
                 "Cannot apply {operator:?} to {operand:?}",
             ))),
@@ -354,6 +239,69 @@ mod tests {
     use crate::ast::{AstNode, BinaryOperator, Expression, UnaryOperator};
 
     #[test]
+    fn test_vm_bool_operations() {
+        let vm = Vm::new();
+
+        // true == true
+        let expr = Expression::binary(Expression::bool(true), BinaryOperator::Equal, Expression::bool(true));
+        let expr_node = AstNode::new_temp(expr);
+        let result = vm.evaluate(&expr_node).unwrap();
+        assert_eq!(result, Literal::Bool(true));
+
+        // true != false
+        let expr = Expression::binary(Expression::bool(true), BinaryOperator::NotEqual, Expression::bool(false));
+        let expr_node = AstNode::new_temp(expr);
+        let result = vm.evaluate(&expr_node).unwrap();
+        assert_eq!(result, Literal::Bool(true));
+
+        // true && false
+        let expr = Expression::binary(Expression::bool(true), BinaryOperator::And, Expression::bool(false));
+        let expr_node = AstNode::new_temp(expr);
+        let result = vm.evaluate(&expr_node).unwrap();
+        assert_eq!(result, Literal::Bool(false));
+
+        // true || false
+        let expr = Expression::binary(Expression::bool(true), BinaryOperator::Or, Expression::bool(false));
+        let expr_node = AstNode::new_temp(expr);
+        let result = vm.evaluate(&expr_node).unwrap();
+        assert_eq!(result, Literal::Bool(true));
+
+        // false < true
+        let expr = Expression::binary(Expression::bool(false), BinaryOperator::Less, Expression::bool(true));
+        let expr_node = AstNode::new_temp(expr);
+        let result = vm.evaluate(&expr_node).unwrap();
+        assert_eq!(result, Literal::Bool(true));
+
+        // false <= true
+        let expr = Expression::binary(Expression::bool(false), BinaryOperator::LessEqual, Expression::bool(true));
+        let expr_node = AstNode::new_temp(expr);
+        let result = vm.evaluate(&expr_node).unwrap();
+        assert_eq!(result, Literal::Bool(true));
+
+        // true > false
+        let expr = Expression::binary(Expression::bool(true), BinaryOperator::Greater, Expression::bool(false));
+        let expr_node = AstNode::new_temp(expr);
+        let result = vm.evaluate(&expr_node).unwrap();
+        assert_eq!(result, Literal::Bool(true));
+
+        // true >= false
+        let expr = Expression::binary(Expression::bool(true), BinaryOperator::GreaterEqual, Expression::bool(false));
+        let expr_node = AstNode::new_temp(expr);
+        let result = vm.evaluate(&expr_node).unwrap();
+        assert_eq!(result, Literal::Bool(true));
+
+        // Unary NOT: !true = false
+        let expr = Expression::unary(UnaryOperator::Not, Expression::bool(true));
+        let expr_node = AstNode::new_temp(expr);
+        let result = vm.evaluate(&expr_node).unwrap();
+        assert_eq!(result, Literal::Bool(false));
+
+        // Unary NOT: !false = true
+        let expr = Expression::unary(UnaryOperator::Not, Expression::bool(false));
+        let expr_node = AstNode::new_temp(expr);
+        let result = vm.evaluate(&expr_node).unwrap();
+        assert_eq!(result, Literal::Bool(true));
+    }
     fn test_vm_basic_operations() {
         let vm = Vm::new();
 
@@ -387,8 +335,8 @@ mod tests {
         let right = Expression::float(2.5);
                       let expr = Expression::binary(left, BinaryOperator::Plus, right);
         let expr_node = AstNode::new_temp(expr);
-        let result = vm.evaluate(&expr_node).unwrap();
-        assert_eq!(result, Literal::Float(7.5));
+        let result = vm.evaluate(&expr_node);
+        assert_eq!(result, Err(VmError::TypeMismatch));
 
         // Test complex expression: (2 + 3) * 4 - 1 = 19
         let inner_left = Expression::integer(2);
@@ -438,7 +386,7 @@ mod tests {
         let expr = Expression::binary(left, BinaryOperator::Greater, right);
         let expr_node = AstNode::new_temp(expr);
         let result = vm.evaluate(&expr_node).unwrap();
-        assert_eq!(result, Literal::Integer(1)); // true
+        assert_eq!(result, Literal::Bool(true)); // true
 
         // Test float equality with epsilon: 1.0 == 1.0
         let float_left = Expression::float(1.0);
@@ -446,34 +394,35 @@ mod tests {
         let float_expr = Expression::binary(float_left, BinaryOperator::Equal, float_right);
         let float_expr_node = AstNode::new_temp(float_expr);
         let float_result = vm.evaluate(&float_expr_node).unwrap();
-        assert_eq!(float_result, Literal::Integer(1)); // true
+        assert_eq!(float_result, Literal::Bool(true)); // true
     }
 
     #[test]
-    fn test_vm_logical_operations() {
-        let vm = Vm::new();
+   fn test_vm_logical_operations() { 
+    let vm = Vm::new();
 
-        // Test logical AND: 1 && 0 = 0
-        let left = Expression::integer(1);
-        let right = Expression::integer(0);
-        let expr = Expression::binary(left, BinaryOperator::And, right);
-        let expr_node = AstNode::new_temp(expr);
-        let result = vm.evaluate(&expr_node).unwrap();
-        assert_eq!(result, Literal::Integer(0)); // false
+    // Test logical AND: true && false = false
+    let left = Expression::bool(true);
+    let right = Expression::bool(false);
+    let expr = Expression::binary(left, BinaryOperator::And, right);
+    let expr_node = AstNode::new_temp(expr);
+    let result = vm.evaluate(&expr_node).unwrap();
+    assert_eq!(result, Literal::Bool(false)); // false
 
-        // Test logical OR: 0 || 5 = 1
-        let left = Expression::integer(0);
-        let right = Expression::integer(5);
-        let expr = Expression::binary(left, BinaryOperator::Or, right);
-        let expr_node = AstNode::new_temp(expr);
-        let result = vm.evaluate(&expr_node).unwrap();
-        assert_eq!(result, Literal::Integer(1)); // true
+    // Test logical OR: false || true = true
+    let left = Expression::bool(false);
+    let right = Expression::bool(true);
+    let expr = Expression::binary(left, BinaryOperator::Or, right);
+    let expr_node = AstNode::new_temp(expr);
+    let result = vm.evaluate(&expr_node).unwrap();
+    assert_eq!(result, Literal::Bool(true)); // true
 
-        // Test logical NOT: !0 = 1
-        let operand = Expression::integer(0);
-        let unary_expr = Expression::unary(UnaryOperator::Not, operand);
-        let unary_expr_node = AstNode::new_temp(unary_expr);
-        let result = vm.evaluate(&unary_expr_node).unwrap();
-        assert_eq!(result, Literal::Integer(1)); // true
-    }
+    // Test logical NOT: !false = true
+    let operand = Expression::bool(false);
+    let unary_expr = Expression::unary(UnaryOperator::Not, operand);
+    let unary_expr_node = AstNode::new_temp(unary_expr);
+    let result = vm.evaluate(&unary_expr_node).unwrap();
+    assert_eq!(result, Literal::Bool(true)); // true
+}
+
 }

@@ -1,7 +1,5 @@
-mod ast;
-mod token;
 
-use ast::{BinaryOperator, Expression, UnaryOperator};
+use anochi::ast::{BinaryOperator, Expression, UnaryOperator};
 use display_tree::{CharSet, Style, StyleBuilder, format_tree};
 
 fn main() {

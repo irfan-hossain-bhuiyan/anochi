@@ -5,6 +5,8 @@ pub use token_type::TokenType;
 
 use std::num::NonZeroUsize;
 
+use crate::token::token_type::Keyword;
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum CharType {
     Alpha,
@@ -163,10 +165,17 @@ impl<'a> Tokenizer<'a> {
         }
 
         if !identifier.is_empty() {
-            Token::new(
-                TokenType::Identifier(identifier),
-                Position::new(start_line, start_column).unwrap(),
-            )
+            // Check if identifier is a keyword
+            match Keyword::try_from(identifier.clone()) {
+                Ok(keyword) => Token::new(
+                    TokenType::Keyword(keyword),
+                    Position::new(start_line, start_column).unwrap(),
+                ),
+                Err(_) => Token::new(
+                    TokenType::Identifier(identifier),
+                    Position::new(start_line, start_column).unwrap(),
+                ),
+            }
         } else {
             Token::new(
                 TokenType::Error("Empty identifier".to_string()),
@@ -462,7 +471,7 @@ impl<'a> Tokenizer<'a> {
                     let unknown_char = ch;
                     self.advance();
                     Token::new(
-                        TokenType::Error(format!("Unknown character: '{}'", unknown_char)),
+                        TokenType::Error(format!("Unknown character: '{unknown_char}'")),
                         Position::new(start_line, start_column).unwrap(),
                     )
                 }
