@@ -64,7 +64,7 @@ pub struct Vm<Backend: VmBackend = IoBackend> {
 type ExpNode<'a> = ExpressionNode<'a>;
 type StmtNode<'a> = StatementNode<'a>;
 impl<Backend: VmBackend> Vm<Backend> {
-    fn new(backend: Backend) -> Self {
+    pub fn new(backend: Backend) -> Self {
         Self {
             variable: HashMap::new(),
             backend,
