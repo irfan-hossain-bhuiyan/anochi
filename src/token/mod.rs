@@ -16,28 +16,30 @@ pub enum CharType {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Position {
+pub struct Position<'a> {
     pub line: NonZeroUsize,
     pub column: NonZeroUsize,
+    pub slice: &'a str,
 }
 
-impl Position {
-    pub fn new(line: usize, column: usize) -> Option<Self> {
+impl<'a> Position<'a> {
+    pub fn new(line: usize, column: usize, slice: &'a str) -> Option<Self> {
         Some(Self {
             line: NonZeroUsize::new(line)?,
             column: NonZeroUsize::new(column)?,
+            slice,
         })
     }
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Token {
+pub struct Token<'a> {
     pub token_type: TokenType,
-    pub position: Position,
+    pub position: Position<'a>,
 }
 
-impl Token {
-    pub fn new(token_type: TokenType, position: Position) -> Self {
+impl<'a> Token<'a> {
+    pub fn new(token_type: TokenType, position: Position<'a>) -> Self {
         Self {
             token_type,
             position,
@@ -47,7 +49,7 @@ impl Token {
 
 pub struct Tokenizer<'a> {
     source: &'a str,
-    tokens: Vec<Token>,
+    tokens: Vec<Token<'a>>,
     current: usize,
     line: usize,
     column: usize,
@@ -64,7 +66,7 @@ impl<'a> Tokenizer<'a> {
         }
     }
 
-    pub fn tokenize(mut self) -> Vec<Token> {
+    pub fn tokenize(mut self) -> Vec<Token<'a>> {
         while self.peek().is_some() {
             match self.char_type() {
                 Some(CharType::Alpha) => {
@@ -94,7 +96,7 @@ impl<'a> Tokenizer<'a> {
         }
         self.tokens.push(Token::new(
             TokenType::Eof,
-            Position::new(self.line, self.column).unwrap(),
+            Position::new(self.line, self.column, "").unwrap(),
         ));
         self.tokens
     }
@@ -139,9 +141,10 @@ impl<'a> Tokenizer<'a> {
     }
 
     /// Parses an identifier or keyword token
-    fn parse_identifier_or_keyword(&mut self) -> Token {
+    fn parse_identifier_or_keyword(&mut self) -> Token<'a> {
         let start_line = self.line;
         let start_column = self.column;
+        let start_pos = self.current;
         let mut identifier = String::new();
         let mut first_loop = true;
         // Collect all alphanumeric characters and underscores
@@ -164,30 +167,33 @@ impl<'a> Tokenizer<'a> {
             }
         }
 
+        let slice = &self.source[start_pos..self.current];
+
         if !identifier.is_empty() {
             // Check if identifier is a keyword
             match Keyword::try_from(identifier.clone()) {
                 Ok(keyword) => Token::new(
                     TokenType::Keyword(keyword),
-                    Position::new(start_line, start_column).unwrap(),
+                    Position::new(start_line, start_column, slice).unwrap(),
                 ),
                 Err(_) => Token::new(
                     TokenType::Identifier(identifier),
-                    Position::new(start_line, start_column).unwrap(),
+                    Position::new(start_line, start_column, slice).unwrap(),
                 ),
             }
         } else {
             Token::new(
                 TokenType::Error("Empty identifier".to_string()),
-                Position::new(start_line, start_column).unwrap(),
+                Position::new(start_line, start_column, slice).unwrap(),
             )
         }
     }
 
     /// Parses a numeric token (integer or float)
-    fn parse_numeric(&mut self) -> Token {
+    fn parse_numeric(&mut self) -> Token<'a> {
         let start_line = self.line;
         let start_column = self.column;
+        let start_pos = self.current;
         let mut number = String::new();
         let mut is_float = false;
 
@@ -209,10 +215,12 @@ impl<'a> Tokenizer<'a> {
             }
         }
 
+        let slice = &self.source[start_pos..self.current];
+
         if number.is_empty() {
             return Token::new(
                 TokenType::Error("Empty number".to_string()),
-                Position::new(start_line, start_column).unwrap(),
+                Position::new(start_line, start_column, slice).unwrap(),
             );
         }
 
@@ -220,31 +228,32 @@ impl<'a> Tokenizer<'a> {
             match number.parse::<f64>() {
                 Ok(value) => Token::new(
                     TokenType::Float(value),
-                    Position::new(start_line, start_column).unwrap(),
+                    Position::new(start_line, start_column, slice).unwrap(),
                 ),
                 Err(_) => Token::new(
                     TokenType::Error(format!("Invalid float: {number}")),
-                    Position::new(start_line, start_column).unwrap(),
+                    Position::new(start_line, start_column, slice).unwrap(),
                 ),
             }
         } else {
             match number.parse::<i64>() {
                 Ok(value) => Token::new(
                     TokenType::Integer(value),
-                    Position::new(start_line, start_column).unwrap(),
+                    Position::new(start_line, start_column, slice).unwrap(),
                 ),
                 Err(_) => Token::new(
                     TokenType::Error(format!("Invalid integer: {number}")),
-                    Position::new(start_line, start_column).unwrap(),
+                    Position::new(start_line, start_column, slice).unwrap(),
                 ),
             }
         }
     }
 
     /// Parses a string literal token
-    fn parse_string(&mut self) -> Token {
+    fn parse_string(&mut self) -> Token<'a> {
         let start_line = self.line;
         let start_column = self.column;
+        let start_pos = self.current;
         let mut string_value = String::new();
 
         // Skip opening quote
@@ -254,9 +263,10 @@ impl<'a> Tokenizer<'a> {
             if ch == '"' {
                 // Found closing quote
                 self.advance();
+                let slice = &self.source[start_pos..self.current];
                 return Token::new(
                     TokenType::String(string_value),
-                    Position::new(start_line, start_column).unwrap(),
+                    Position::new(start_line, start_column, slice).unwrap(),
                 );
             } else if ch == '\\' {
                 // Handle escape sequences
@@ -296,9 +306,10 @@ impl<'a> Tokenizer<'a> {
                 }
             } else if ch == '\n' {
                 // Unterminated string at newline
+                let slice = &self.source[start_pos..self.current];
                 return Token::new(
                     TokenType::Error("Unterminated string at newline".to_string()),
-                    Position::new(start_line, start_column).unwrap(),
+                    Position::new(start_line, start_column, slice).unwrap(),
                 );
             } else {
                 string_value.push(ch);
@@ -307,16 +318,18 @@ impl<'a> Tokenizer<'a> {
         }
 
         // Reached end of input without closing quote
+        let slice = &self.source[start_pos..self.current];
         Token::new(
             TokenType::Error("Unterminated string at end of file".to_string()),
-            Position::new(start_line, start_column).unwrap(),
+            Position::new(start_line, start_column, slice).unwrap(),
         )
     }
 
     /// Parses special characters and operators
-    fn parse_special_char(&mut self) -> Token {
+    fn parse_special_char(&mut self) -> Token<'a> {
         let start_line = self.line;
         let start_column = self.column;
+        let start_pos = self.current;
 
         if let Some(ch) = self.peek() {
             match ch {
@@ -325,14 +338,16 @@ impl<'a> Tokenizer<'a> {
                     self.advance();
                     if self.peek() == Some('=') {
                         self.advance();
+                        let slice = &self.source[start_pos..self.current];
                         Token::new(
                             TokenType::BangEqual,
-                            Position::new(start_line, start_column).unwrap(),
+                            Position::new(start_line, start_column, slice).unwrap(),
                         )
                     } else {
+                        let slice = &self.source[start_pos..self.current];
                         Token::new(
                             TokenType::Bang,
-                            Position::new(start_line, start_column).unwrap(),
+                            Position::new(start_line, start_column, slice).unwrap(),
                         )
                     }
                 }
@@ -340,14 +355,16 @@ impl<'a> Tokenizer<'a> {
                     self.advance();
                     if self.peek() == Some('=') {
                         self.advance();
+                        let slice = &self.source[start_pos..self.current];
                         Token::new(
                             TokenType::EqualEqual,
-                            Position::new(start_line, start_column).unwrap(),
+                            Position::new(start_line, start_column, slice).unwrap(),
                         )
                     } else {
+                        let slice = &self.source[start_pos..self.current];
                         Token::new(
                             TokenType::Equal,
-                            Position::new(start_line, start_column).unwrap(),
+                            Position::new(start_line, start_column, slice).unwrap(),
                         )
                     }
                 }
@@ -355,14 +372,16 @@ impl<'a> Tokenizer<'a> {
                     self.advance();
                     if self.peek() == Some('=') {
                         self.advance();
+                        let slice = &self.source[start_pos..self.current];
                         Token::new(
                             TokenType::GreaterEqual,
-                            Position::new(start_line, start_column).unwrap(),
+                            Position::new(start_line, start_column, slice).unwrap(),
                         )
                     } else {
+                        let slice = &self.source[start_pos..self.current];
                         Token::new(
                             TokenType::Greater,
-                            Position::new(start_line, start_column).unwrap(),
+                            Position::new(start_line, start_column, slice).unwrap(),
                         )
                     }
                 }
@@ -370,116 +389,131 @@ impl<'a> Tokenizer<'a> {
                     self.advance();
                     if self.peek() == Some('=') {
                         self.advance();
+                        let slice = &self.source[start_pos..self.current];
                         Token::new(
                             TokenType::LessEqual,
-                            Position::new(start_line, start_column).unwrap(),
+                            Position::new(start_line, start_column, slice).unwrap(),
                         )
                     } else {
+                        let slice = &self.source[start_pos..self.current];
                         Token::new(
                             TokenType::Less,
-                            Position::new(start_line, start_column).unwrap(),
+                            Position::new(start_line, start_column, slice).unwrap(),
                         )
                     }
                 }
                 // Single-character tokens
                 '(' => {
                     self.advance();
+                    let slice = &self.source[start_pos..self.current];
                     Token::new(
                         TokenType::LeftParen,
-                        Position::new(start_line, start_column).unwrap(),
+                        Position::new(start_line, start_column, slice).unwrap(),
                     )
                 }
                 ')' => {
                     self.advance();
+                    let slice = &self.source[start_pos..self.current];
                     Token::new(
                         TokenType::RightParen,
-                        Position::new(start_line, start_column).unwrap(),
+                        Position::new(start_line, start_column, slice).unwrap(),
                     )
                 }
                 '{' => {
                     self.advance();
+                    let slice = &self.source[start_pos..self.current];
                     Token::new(
                         TokenType::LeftBrace,
-                        Position::new(start_line, start_column).unwrap(),
+                        Position::new(start_line, start_column, slice).unwrap(),
                     )
                 }
                 '}' => {
                     self.advance();
+                    let slice = &self.source[start_pos..self.current];
                     Token::new(
                         TokenType::RightBrace,
-                        Position::new(start_line, start_column).unwrap(),
+                        Position::new(start_line, start_column, slice).unwrap(),
                     )
                 }
                 ',' => {
                     self.advance();
+                    let slice = &self.source[start_pos..self.current];
                     Token::new(
                         TokenType::Comma,
-                        Position::new(start_line, start_column).unwrap(),
+                        Position::new(start_line, start_column, slice).unwrap(),
                     )
                 }
                 '.' => {
                     self.advance();
+                    let slice = &self.source[start_pos..self.current];
                     Token::new(
                         TokenType::Dot,
-                        Position::new(start_line, start_column).unwrap(),
+                        Position::new(start_line, start_column, slice).unwrap(),
                     )
                 }
                 '-' => {
                     self.advance();
+                    let slice = &self.source[start_pos..self.current];
                     Token::new(
                         TokenType::Minus,
-                        Position::new(start_line, start_column).unwrap(),
+                        Position::new(start_line, start_column, slice).unwrap(),
                     )
                 }
                 '+' => {
                     self.advance();
+                    let slice = &self.source[start_pos..self.current];
                     Token::new(
                         TokenType::Plus,
-                        Position::new(start_line, start_column).unwrap(),
+                        Position::new(start_line, start_column, slice).unwrap(),
                     )
                 }
                 ';' => {
                     self.advance();
+                    let slice = &self.source[start_pos..self.current];
                     Token::new(
                         TokenType::Semicolon,
-                        Position::new(start_line, start_column).unwrap(),
+                        Position::new(start_line, start_column, slice).unwrap(),
                     )
                 }
                 '/' => {
                     self.advance();
+                    let slice = &self.source[start_pos..self.current];
                     Token::new(
                         TokenType::Slash,
-                        Position::new(start_line, start_column).unwrap(),
+                        Position::new(start_line, start_column, slice).unwrap(),
                     )
                 }
                 '*' => {
                     self.advance();
+                    let slice = &self.source[start_pos..self.current];
                     Token::new(
                         TokenType::Star,
-                        Position::new(start_line, start_column).unwrap(),
+                        Position::new(start_line, start_column, slice).unwrap(),
                     )
                 }
                 '\n' => {
                     self.advance();
+                    let slice = &self.source[start_pos..self.current];
                     Token::new(
                         TokenType::Newline,
-                        Position::new(start_line, start_column).unwrap(),
+                        Position::new(start_line, start_column, slice).unwrap(),
                     )
                 }
                 _ => {
                     // Unknown special character, create an error token
                     let unknown_char = ch;
                     self.advance();
+                    let slice = &self.source[start_pos..self.current];
                     Token::new(
                         TokenType::Error(format!("Unknown character: '{unknown_char}'")),
-                        Position::new(start_line, start_column).unwrap(),
+                        Position::new(start_line, start_column, slice).unwrap(),
                     )
                 }
             }
         } else {
             Token::new(
                 TokenType::Error("Unexpected end of input".to_string()),
-                Position::new(start_line, start_column).unwrap(),
+                Position::new(start_line, start_column, "").unwrap(),
             )
         }
     }

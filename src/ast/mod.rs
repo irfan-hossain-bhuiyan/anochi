@@ -323,9 +323,9 @@ impl<T: AstElement + DisplayTree> DisplayTree for AstNode<T> {
 pub trait AstElement {}
 impl AstElement for Expression {}
 #[derive(Clone, Debug, PartialEq)]
-pub struct AstNode<T: AstElement> {
+pub struct AstNode<'a,T: AstElement> {
     pub node: T,
-    pub position: Option<Position>,
+    pub position: Option<Position<'a>>,
 }
 
 impl<T: AstElement> AstNode<T> {
