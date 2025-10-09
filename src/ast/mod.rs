@@ -300,24 +300,29 @@ pub enum Statement<'a> {
         value: ExpressionNode<'a>,
     },
     StatementBlock {
-        statements: Vec<Statement<'a>>,
+        statements: Vec<StatementNode<'a>>,
     },
-    CallStatement {
-        identifier: Identifier,
-        argument: Vec<ExpressionNode<'a>>,
+    If {
+        condition: ExpressionNode<'a>,
+        on_true: Box<StatementNode<'a>>,
+    },
+    IfElse {
+        condition: ExpressionNode<'a>,
+        on_true: Box<StatementNode<'a>>,
+        on_false: Box<StatementNode<'a>>,
     },
 }
-pub type ExpressionNode<'a> = AstNode<'a,Expression<'a>>;
-
+pub type ExpressionNode<'a> = AstNode<'a, Expression<'a>>;
+pub type StatementNode<'a> = AstNode<'a, Statement<'a>>;
 pub trait AstElement {}
 impl AstElement for Expression<'_> {}
+impl AstElement for Statement<'_> {}
 #[derive(Clone, Debug, PartialEq)]
-pub struct AstNode<'a,T: AstElement> {
+pub struct AstNode<'a, T: AstElement> {
     pub node: T,
     pub position: Option<Position<'a>>,
 }
-
-impl<'a,T: AstElement> AstNode<'a,T> {
+impl<'a, T: AstElement> AstNode<'a, T> {
     pub fn new(node: T, position: Position<'a>) -> Self {
         Self {
             node,
@@ -331,7 +336,7 @@ impl<'a,T: AstElement> AstNode<'a,T> {
         }
     }
 }
-impl<'a,T: AstElement> From<T> for AstNode<'a,T> {
+impl<'a, T: AstElement> From<T> for AstNode<'a, T> {
     fn from(value: T) -> Self {
         AstNode::new_temp(value)
     }

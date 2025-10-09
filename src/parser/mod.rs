@@ -155,15 +155,8 @@ impl<'a,'b:'a> Parser<'a,'b> {
         None
     }
 
-    fn consume(&mut self, tt: &TokenType) -> Option<&Token> {
-        if self.check(tt) {
-            return Some(self.advance());
-        }
-        None
-    }
-
     fn check(&self, tt: &TokenType) -> bool {
-        !self.is_at_end() && self.peek().token_type == *tt
+        Some(tt)==self.peek_type()
     }
 
     fn advance(&mut self) -> &Token {
