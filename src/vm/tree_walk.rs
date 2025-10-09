@@ -101,13 +101,13 @@ impl Vm {
                 let left_val = self.evaluate(left)?;
                 let right_val = self.evaluate(right)?;
 
-                self.evaluate_binary_operation(&left_val, operator, &right_val)
+                self.evaluate_binary_operation(&left_val, &operator, &right_val)
             }
 
             Expression::Unary { operator, operand } => {
                 let operand_val = self.evaluate(operand)?;
 
-                self.evaluate_unary_operation(operator, &operand_val)
+                self.evaluate_unary_operation(&operator, &operand_val)
             }
 
             Expression::Grouping { expression } => self.evaluate(expression),

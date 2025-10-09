@@ -2,14 +2,14 @@ use crate::ast::{BinaryOperator, Expression, ExpressionNode, UnaryOperator};
 use crate::token::token_type::Keyword::{And, Or};
 use crate::token::{Token, TokenType};
 
-pub struct Parser<'a> {
-    tokens: &'a [Token],
+pub struct Parser<'a,'b:'a> {
+    tokens: &'a [Token<'b>],
     current: usize,
 }
 
-impl<'a> Parser<'a> {
+impl<'a,'b:'a> Parser<'a,'b> {
     // Logical OR: expr || expr
-    fn parse_logical_or(&mut self) -> Option<ExpressionNode> {
+    fn parse_logical_or(&mut self) -> Option<ExpressionNode<'b>> {
         let mut node = self.parse_logical_and()?;
         while self.match_token(&[TokenType::Keyword(Or)]).is_some() {
             let operator = BinaryOperator::Or;
@@ -20,7 +20,7 @@ impl<'a> Parser<'a> {
     }
 
     // Logical AND: expr && expr
-    fn parse_logical_and(&mut self) -> Option<ExpressionNode> {
+    fn parse_logical_and(&mut self) -> Option<ExpressionNode<'b>> {
         let mut node = self.parse_equality()?;
         while self.match_token(&[TokenType::Keyword(And)]).is_some() {
             let operator = BinaryOperator::And;
@@ -31,96 +31,96 @@ impl<'a> Parser<'a> {
     }
 
     // Equality: expr == expr, expr != expr
-    fn parse_equality(&mut self) -> Option<ExpressionNode> {
-        let mut node = self.parse_comparison()?;
-        while let Some(op) = self.match_token(&[TokenType::EqualEqual, TokenType::BangEqual]) {
-            let operator = match op {
-                TokenType::EqualEqual => BinaryOperator::Equal,
-                TokenType::BangEqual => BinaryOperator::NotEqual,
-                _ => unreachable!(),
-            };
-            let right = self.parse_comparison()?;
-            node = Expression::binary(node, operator, right).into();
-        }
-        Some(node)
+    fn parse_equality(&mut self) -> Option<ExpressionNode<'b>> {
+                           let mut node = self.parse_comparison()?;
+                           while let Some(op) = self.match_token(&[TokenType::EqualEqual, TokenType::BangEqual]) {
+                               let operator = match op {
+                                   TokenType::EqualEqual => BinaryOperator::Equal,
+                                   TokenType::BangEqual => BinaryOperator::NotEqual,
+                                   _ => unreachable!(),
+                               };
+                               let right = self.parse_comparison()?;
+                               node = Expression::binary(node, operator, right).into();
+                           }
+                           Some(node)
     }
 
     // Comparison: < > <= >=
-    fn parse_comparison(&mut self) -> Option<ExpressionNode> {
-        let mut node = self.parse_expr()?;
-        while let Some(op) = self.match_token(&[
-            TokenType::Less,
-            TokenType::LessEqual,
-            TokenType::Greater,
-            TokenType::GreaterEqual,
-        ]) {
-            let operator = match op {
-                TokenType::Less => BinaryOperator::Less,
-                TokenType::LessEqual => BinaryOperator::LessEqual,
-                TokenType::Greater => BinaryOperator::Greater,
-                TokenType::GreaterEqual => BinaryOperator::GreaterEqual,
-                _ => unreachable!(),
-            };
-            let right = self.parse_expr()?;
-            node = Expression::binary(node, operator, right).into();
-        }
-        Some(node)
+    fn parse_comparison(&mut self) -> Option<ExpressionNode<'b>> {
+                                   let mut node = self.parse_expr()?;
+                                   while let Some(op) = self.match_token(&[
+                                       TokenType::Less,
+                                       TokenType::LessEqual,
+                                       TokenType::Greater,
+                                       TokenType::GreaterEqual,
+                                   ]) {
+                                       let operator = match op {
+                                           TokenType::Less => BinaryOperator::Less,
+                                           TokenType::LessEqual => BinaryOperator::LessEqual,
+                                           TokenType::Greater => BinaryOperator::Greater,
+                                           TokenType::GreaterEqual => BinaryOperator::GreaterEqual,
+                                           _ => unreachable!(),
+                                       };
+                                       let right = self.parse_expr()?;
+                                       node = Expression::binary(node, operator, right).into();
+                                   }
+                                   Some(node)
     }
-    pub fn new(tokens: &'a [Token]) -> Self {
+    pub fn new(tokens: &'a[Token<'b>]) -> Self {
         Parser { tokens, current: 0 }
     }
 
-    pub fn parse_expression(&mut self) -> Option<ExpressionNode> {
+    pub fn parse_expression(& mut self) -> Option<ExpressionNode<'b>> {
         self.parse_logical_or()
     }
 
     // Expr ::= Term (("+" | "-") Term)*
-    fn parse_expr(&mut self) -> Option<ExpressionNode> {
-        let mut node = self.parse_term()?;
-        while let Some(op) = self.match_token(&[TokenType::Plus, TokenType::Minus]) {
-            let operator = match op {
-                TokenType::Plus => BinaryOperator::Plus,
-                TokenType::Minus => BinaryOperator::Minus,
-                _ => unreachable!(),
-            };
-            let right = self.parse_term()?;
-            node = Expression::binary(node, operator, right).into();
-        }
-        Some(node)
+    fn parse_expr(&mut self) -> Option<ExpressionNode<'b>> {
+                             let mut node = self.parse_term()?;
+                             while let Some(op) = self.match_token(&[TokenType::Plus, TokenType::Minus]) {
+                                 let operator = match op {
+                                     TokenType::Plus => BinaryOperator::Plus,
+                                     TokenType::Minus => BinaryOperator::Minus,
+                                     _ => unreachable!(),
+                                 };
+                                 let right = self.parse_term()?;
+                                 node = Expression::binary(node, operator, right).into();
+                             }
+                             Some(node)
     }
 
     // Term ::= Unary (("*" | "/") Unary)*
-    fn parse_term(&mut self) -> Option<ExpressionNode> {
-        let mut node = self.parse_unary()?;
-        while let Some(op) = self.match_token(&[TokenType::Star, TokenType::Slash]) {
-            let operator = match op {
-                TokenType::Star => BinaryOperator::Multiply,
-                TokenType::Slash => BinaryOperator::Divide,
-                _ => unreachable!(),
-            };
-            let right = self.parse_unary()?;
-            node = Expression::binary(node, operator, right).into();
-        }
-        Some(node)
+    fn parse_term(&mut self) -> Option<ExpressionNode<'b>> {
+                            let mut node = self.parse_unary()?;
+                            while let Some(op) = self.match_token(&[TokenType::Star, TokenType::Slash]) {
+                                let operator = match op {
+                                    TokenType::Star => BinaryOperator::Multiply,
+                                    TokenType::Slash => BinaryOperator::Divide,
+                                    _ => unreachable!(),
+                                };
+                                let right = self.parse_unary()?;
+                                node = Expression::binary(node, operator, right).into();
+                            }
+                            Some(node)
     }
 
     // Unary ::= ("+" | "-") Unary | Primary
-    fn parse_unary(&mut self) -> Option<ExpressionNode> {
-        if let Some(op) = self.match_token(&[TokenType::Minus, TokenType::Bang]) {
-            let operator = match op {
-                TokenType::Minus => UnaryOperator::Minus,
-                TokenType::Bang => UnaryOperator::Not,
-                _ => unreachable!(),
-            };
-            let operand = self.parse_unary()?;
-            return Some(Expression::unary(operator, operand).into());
-        }
-        self.parse_primary()
+    fn parse_unary(&mut self) -> Option<ExpressionNode<'b>> {
+               if let Some(op) = self.match_token(&[TokenType::Minus, TokenType::Bang]) {
+                   let operator = match op {
+                       TokenType::Minus => UnaryOperator::Minus,
+                       TokenType::Bang => UnaryOperator::Not,
+                       _ => unreachable!(),
+                   };
+                   let operand = self.parse_unary()?;
+                   return Some(Expression::unary(operator, operand).into());
+               }
+               self.parse_primary()
     }
 
     // Primary ::= Integer | Float | Identifier | "(" Expr ")"
-    fn parse_primary(&mut self) -> Option<ExpressionNode> {
-        match self.peek_type()? {
+    fn parse_primary(&mut self) -> Option<ExpressionNode<'b>> {
+                                         match self.peek_type()? {
             TokenType::LeftParen => {
                 self.advance(); // consume '('
                 let expr = self.parse_expression()?;
@@ -142,22 +142,9 @@ impl<'a> Parser<'a> {
 
     /// Returns the next token (peek), or None if at end.
     fn peek_type(&self) -> Option<&TokenType> {
-        if self.is_at_end() {
-            None
-        } else {
-            Some(&self.tokens[self.current].token_type)
-        }
+        self.peek().map(|x|&x.token_type)
     }
 
-    /// Returns the nth token ahead, or None if out of bounds.
-    fn peek_type_nth(&self, n: usize) -> Option<&TokenType> {
-        let idx = self.current + n;
-        if idx < self.tokens.len() {
-            Some(&self.tokens[idx].token_type)
-        } else {
-            None
-        }
-    }
     fn match_token(&mut self, types: &[TokenType]) -> Option<TokenType> {
         for tt in types.iter() {
             if self.check(tt) {
@@ -190,8 +177,8 @@ impl<'a> Parser<'a> {
         self.current >= self.tokens.len()
     }
 
-    fn peek(&self) -> &Token {
-        &self.tokens[self.current]
+    fn peek(&self) -> Option<&Token> {
+        self.tokens.get(self.current)
     }
 
     fn previous(&self) -> &Token {

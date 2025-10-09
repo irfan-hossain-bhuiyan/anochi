@@ -12,7 +12,6 @@
 //! - **Literal expressions**: Direct values (numbers, strings, identifiers)
 //! - **Grouping expressions**: Parenthesized expressions for precedence control
 
-use display_tree::DisplayTree;
 use std::fmt;
 
 pub type Identifier = String;
@@ -42,7 +41,7 @@ pub enum Literal {
 ///
 /// These operators define the various arithmetic, comparison, and logical
 /// operations that can be performed between two expressions.
-#[derive(Debug, Clone, PartialEq, DisplayTree)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum BinaryOperator {
     // Arithmetic operators
     /// Addition operator (`+`)
@@ -81,7 +80,7 @@ pub enum BinaryOperator {
 ///
 /// These operators define operations that can be applied to a single expression,
 /// such as negation or logical NOT.
-#[derive(Debug, Clone, PartialEq, DisplayTree)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum UnaryOperator {
     /// Arithmetic negation operator (`-`)
     Minus,
@@ -93,39 +92,33 @@ pub enum UnaryOperator {
 ///
 /// This enum encompasses all types of expressions that can appear in
 /// Anochi source code, from simple literals to complex nested expressions.
-#[derive(Debug, Clone, PartialEq, DisplayTree)]
-pub enum Expression {
+#[derive(Debug, Clone, PartialEq)]
+pub enum Expression<'a> {
     /// A literal value (number, string, identifier)
-    Literal(#[node_label] Literal),
+    Literal(Literal),
 
     /// A binary operation between two expressions
     Binary {
         /// The binary operator
-        #[node_label]
         operator: BinaryOperator,
         /// Left operand of the binary operation
-        #[tree]
-        left: Box<ExpressionNode>,
+        left: Box<ExpressionNode<'a>>,
         /// Right operand of the binary operation
-        #[tree]
-        right: Box<ExpressionNode>,
+        right: Box<ExpressionNode<'a>>,
     },
 
     /// A unary operation on a single expression
     Unary {
         /// The unary operator
-        #[node_label]
         operator: UnaryOperator,
         /// The operand of the unary operation
-        #[tree]
-        operand: Box<ExpressionNode>,
+        operand: Box<ExpressionNode<'a>>,
     },
 
     /// A grouped expression (parentheses for precedence control)
     Grouping {
         /// The expression inside the parentheses
-        #[tree]
-        expression: Box<ExpressionNode>,
+        expression: Box<ExpressionNode<'a>>,
     },
 }
 
@@ -172,7 +165,7 @@ impl fmt::Display for UnaryOperator {
     }
 }
 
-impl Expression {
+impl<'a> Expression<'a> {
     /// Creates a new literal integer expression.
     ///
     /// # Arguments
@@ -239,9 +232,9 @@ impl Expression {
     ///
     /// An `Expression::Binary` representing the binary operation.
     pub fn binary(
-        left: impl Into<ExpressionNode>,
+        left: impl Into<ExpressionNode<'a>>,
         operator: BinaryOperator,
-        right: impl Into<ExpressionNode>,
+        right: impl Into<ExpressionNode<'a>>,
     ) -> Self {
         Expression::Binary {
             left: Box::new(left.into()),
@@ -260,7 +253,7 @@ impl Expression {
     /// # Returns
     ///
     /// An `Expression::Unary` representing the unary operation.
-    pub fn unary(operator: UnaryOperator, operand: impl Into<ExpressionNode>) -> Self {
+    pub fn unary(operator: UnaryOperator, operand: impl Into<ExpressionNode<'a>>) -> Self {
         Self::Unary {
             operator,
             operand: Box::new(operand.into()),
@@ -276,7 +269,7 @@ impl Expression {
     /// # Returns
     ///
     /// An `Expression::Grouping` representing the grouped expression.
-    pub fn grouping(expression: impl Into<ExpressionNode>) -> Self {
+    pub fn grouping(expression: impl Into<ExpressionNode<'a>>) -> Self {
         Expression::Grouping {
             expression: Box::new(expression.into()),
         }
@@ -301,35 +294,31 @@ impl Expression {
     }
 }
 #[derive(Debug, Clone, PartialEq)]
-pub enum Statement {
+pub enum Statement<'a> {
     Assignment {
         identifier: Identifier,
-        value: ExpressionNode,
+        value: ExpressionNode<'a>,
     },
     StatementBlock {
-        statements: Vec<Statement>,
+        statements: Vec<Statement<'a>>,
     },
     CallStatement {
         identifier: Identifier,
-        argument: Vec<ExpressionNode>,
+        argument: Vec<ExpressionNode<'a>>,
     },
 }
-pub type ExpressionNode = AstNode<Expression>;
-impl<T: AstElement + DisplayTree> DisplayTree for AstNode<T> {
-    fn fmt(&self, f: &mut fmt::Formatter, style: display_tree::Style) -> fmt::Result {
-        self.node.fmt(f, style)
-    }
-}
+pub type ExpressionNode<'a> = AstNode<'a,Expression<'a>>;
+
 pub trait AstElement {}
-impl AstElement for Expression {}
+impl AstElement for Expression<'_> {}
 #[derive(Clone, Debug, PartialEq)]
 pub struct AstNode<'a,T: AstElement> {
     pub node: T,
     pub position: Option<Position<'a>>,
 }
 
-impl<T: AstElement> AstNode<T> {
-    pub fn new(node: T, position: Position) -> Self {
+impl<'a,T: AstElement> AstNode<'a,T> {
+    pub fn new(node: T, position: Position<'a>) -> Self {
         Self {
             node,
             position: Some(position),
@@ -342,7 +331,7 @@ impl<T: AstElement> AstNode<T> {
         }
     }
 }
-impl<T: AstElement> From<T> for AstNode<T> {
+impl<'a,T: AstElement> From<T> for AstNode<'a,T> {
     fn from(value: T) -> Self {
         AstNode::new_temp(value)
     }
