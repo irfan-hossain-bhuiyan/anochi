@@ -32,6 +32,8 @@ pub enum TokenType {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Keyword {
+    If,
+    Else,
     While,
     For,
     Or,
@@ -52,6 +54,8 @@ impl std::convert::TryFrom<String> for Keyword {
             "not" => Ok(Keyword::Not),
             "true" => Ok(Keyword::True),
             "false" => Ok(Keyword::False),
+            "if" => Ok(Keyword::If),
+            "else" => Ok(Keyword::Else),
             _ => Err(()),
         }
     }
@@ -67,6 +71,8 @@ impl Keyword {
             Keyword::Not => "not",
             Keyword::True => "true",
             Keyword::False => "false",
+            Keyword::If => "if",
+            Keyword::Else => "else",
         }
     }
 }

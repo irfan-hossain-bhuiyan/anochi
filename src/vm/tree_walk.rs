@@ -15,7 +15,15 @@
 //! # Example
 //!
 
-use crate::ast::{BinaryOperator, Expression, ExpressionNode, Literal, UnaryOperator};
+use std::{collections::HashMap, error::Error};
+
+use crate::{
+    ast::{
+        BinaryOperator,  Expression, ExpressionNode, Identifier, Literal, Statement,
+        StatementNode,  UnaryOperator,
+    },
+    vm::backend::{IoBackend, VmBackend},
+};
 
 use thiserror::Error;
 
@@ -49,15 +57,19 @@ pub type VmResult = Result<Literal, VmError>;
 ///
 ///
 #[derive(Debug, Default)]
-pub struct Vm {
-    // For now, the VM is stateless
-    // In the future, this could contain:
-    // - Variable environment/scope
-    // - Call stack
-    // - Memory management
+pub struct Vm<Backend: VmBackend = IoBackend> {
+    variable: HashMap<Identifier, Literal>,
+    backend: Backend,
 }
-
-impl Vm {
+type ExpNode<'a> = ExpressionNode<'a>;
+type StmtNode<'a> = StatementNode<'a>;
+impl<Backend: VmBackend> Vm<Backend> {
+    fn new(backend: Backend) -> Self {
+        Self {
+            variable: HashMap::new(),
+            backend,
+        }
+    }
     /// Creates a new Virtual Machine instance.
     ///
     /// # Returns
@@ -67,10 +79,6 @@ impl Vm {
     /// # Example
     ///
     ///
-    pub fn new() -> Self {
-        Vm {}
-    }
-
     /// Evaluates an expression using tree walking.
     ///
     /// This method recursively walks through the AST and evaluates expressions.
@@ -88,7 +96,7 @@ impl Vm {
     ///
     ///
     ///
-    pub fn evaluate(&self, expression_node: &ExpressionNode) -> VmResult {
+    pub fn evaluate_expr(&self, expression_node: &ExpNode) -> VmResult {
         let expression = &expression_node.node;
         match expression {
             Expression::Literal(literal) => Ok(literal.clone()),
@@ -98,19 +106,59 @@ impl Vm {
                 operator,
                 right,
             } => {
-                let left_val = self.evaluate(left)?;
-                let right_val = self.evaluate(right)?;
+                let left_val = self.evaluate_expr(left)?;
+                let right_val = self.evaluate_expr(right)?;
 
                 self.evaluate_binary_operation(&left_val, &operator, &right_val)
             }
 
             Expression::Unary { operator, operand } => {
-                let operand_val = self.evaluate(operand)?;
+                let operand_val = self.evaluate_expr(operand)?;
 
                 self.evaluate_unary_operation(&operator, &operand_val)
             }
 
-            Expression::Grouping { expression } => self.evaluate(expression),
+            Expression::Grouping { expression } => self.evaluate_expr(expression),
+        }
+    }
+    pub fn execute_statement(&mut self, stat_node: &StmtNode) -> Result<(), VmError> {
+        let ref stmt = stat_node.node;
+        match stmt {
+            Statement::Assignment { identifier, value } => {
+                self.variable
+                    .insert(identifier.clone(), self.evaluate_expr(&value)?);
+                Ok(())
+            }
+            Statement::StatementBlock { statements } => {
+                for stmt in statements.iter() {
+                    self.execute_statement(stmt)?;
+                }
+                Ok(())
+            }
+            Statement::If { condition, on_true } => {
+                let Literal::Bool(x) = self.evaluate_expr(&condition)? else {
+                    return Err(VmError::TypeMismatch);
+                };
+                if x {
+                    self.execute_statement(&on_true)?;
+                }
+                Ok(())
+            }
+            Statement::IfElse {
+                condition,
+                on_true,
+                on_false,
+            } => {
+                let Literal::Bool(x) = self.evaluate_expr(&condition)? else {
+                    return Err(VmError::TypeMismatch);
+                };
+                if x {
+                    self.execute_statement(&on_true)?;
+                } else {
+                    self.execute_statement(&on_false)?;
+                }
+                Ok(())
+            }
         }
     }
 
@@ -143,9 +191,11 @@ impl Vm {
                 BinaryOperator::Or => Ok(Literal::Bool(*l || *r)),
                 BinaryOperator::Less => Ok(Literal::Bool(!*l && *r)), // false < true
                 BinaryOperator::LessEqual => Ok(Literal::Bool(!*l || *r)), // false <= true, true <= true
-                BinaryOperator::Greater => Ok(Literal::Bool(*l && !*r)), // true > false
+                BinaryOperator::Greater => Ok(Literal::Bool(*l && !*r)),   // true > false
                 BinaryOperator::GreaterEqual => Ok(Literal::Bool(*l || !*r)), // true >= false, true >= true
-                _ => Err(VmError::InvalidOperation(format!("Cannot apply {operator:?} to Bool"))),
+                _ => Err(VmError::InvalidOperation(format!(
+                    "Cannot apply {operator:?} to Bool"
+                ))),
             },
             // Integer operations
             (Literal::Integer(l), Literal::Integer(r)) => match operator {
@@ -172,8 +222,9 @@ impl Vm {
                 BinaryOperator::LessEqual => Ok(Literal::Bool(l <= r)),
                 BinaryOperator::Greater => Ok(Literal::Bool(l > r)),
                 BinaryOperator::GreaterEqual => Ok(Literal::Bool(l >= r)),
-                _ => Err(VmError::InvalidOperation(format!("Cannot apply {operator:?} to integer"))),
-
+                _ => Err(VmError::InvalidOperation(format!(
+                    "Cannot apply {operator:?} to integer"
+                ))),
             },
 
             // Float operations
@@ -201,7 +252,9 @@ impl Vm {
                 BinaryOperator::LessEqual => Ok(Literal::Bool(l <= r)),
                 BinaryOperator::Greater => Ok(Literal::Bool(l > r)),
                 BinaryOperator::GreaterEqual => Ok(Literal::Bool(l >= r)),
-                _ => Err(VmError::InvalidOperation(format!("Cannot apply {operator:?} to integer"))),
+                _ => Err(VmError::InvalidOperation(format!(
+                    "Cannot apply {operator:?} to integer"
+                ))),
             },
 
             // Type mismatch for other combinations
@@ -225,7 +278,7 @@ impl Vm {
         match (operator, operand) {
             (UnaryOperator::Minus, Literal::Integer(i)) => Ok(Literal::Integer(-i)),
             (UnaryOperator::Minus, Literal::Float(f)) => Ok(Literal::Float(-f)),
-            (UnaryOperator::Not,Literal::Bool(b))=> Ok(Literal::Bool(!b)),
+            (UnaryOperator::Not, Literal::Bool(b)) => Ok(Literal::Bool(!b)),
             _ => Err(VmError::InvalidOperation(format!(
                 "Cannot apply {operator:?} to {operand:?}",
             ))),
@@ -240,74 +293,106 @@ mod tests {
 
     #[test]
     fn test_vm_bool_operations() {
-        let vm = Vm::new();
+        let vm: Vm = Vm::default();
 
         // true == true
-        let expr = Expression::binary(Expression::bool(true), BinaryOperator::Equal, Expression::bool(true));
+        let expr = Expression::binary(
+            Expression::bool(true),
+            BinaryOperator::Equal,
+            Expression::bool(true),
+        );
         let expr_node = AstNode::new_temp(expr);
-        let result = vm.evaluate(&expr_node).unwrap();
+        let result = vm.evaluate_expr(&expr_node).unwrap();
         assert_eq!(result, Literal::Bool(true));
 
         // true != false
-        let expr = Expression::binary(Expression::bool(true), BinaryOperator::NotEqual, Expression::bool(false));
+        let expr = Expression::binary(
+            Expression::bool(true),
+            BinaryOperator::NotEqual,
+            Expression::bool(false),
+        );
         let expr_node = AstNode::new_temp(expr);
-        let result = vm.evaluate(&expr_node).unwrap();
+        let result = vm.evaluate_expr(&expr_node).unwrap();
         assert_eq!(result, Literal::Bool(true));
 
         // true && false
-        let expr = Expression::binary(Expression::bool(true), BinaryOperator::And, Expression::bool(false));
+        let expr = Expression::binary(
+            Expression::bool(true),
+            BinaryOperator::And,
+            Expression::bool(false),
+        );
         let expr_node = AstNode::new_temp(expr);
-        let result = vm.evaluate(&expr_node).unwrap();
+        let result = vm.evaluate_expr(&expr_node).unwrap();
         assert_eq!(result, Literal::Bool(false));
 
         // true || false
-        let expr = Expression::binary(Expression::bool(true), BinaryOperator::Or, Expression::bool(false));
+        let expr = Expression::binary(
+            Expression::bool(true),
+            BinaryOperator::Or,
+            Expression::bool(false),
+        );
         let expr_node = AstNode::new_temp(expr);
-        let result = vm.evaluate(&expr_node).unwrap();
+        let result = vm.evaluate_expr(&expr_node).unwrap();
         assert_eq!(result, Literal::Bool(true));
 
         // false < true
-        let expr = Expression::binary(Expression::bool(false), BinaryOperator::Less, Expression::bool(true));
+        let expr = Expression::binary(
+            Expression::bool(false),
+            BinaryOperator::Less,
+            Expression::bool(true),
+        );
         let expr_node = AstNode::new_temp(expr);
-        let result = vm.evaluate(&expr_node).unwrap();
+        let result = vm.evaluate_expr(&expr_node).unwrap();
         assert_eq!(result, Literal::Bool(true));
 
         // false <= true
-        let expr = Expression::binary(Expression::bool(false), BinaryOperator::LessEqual, Expression::bool(true));
+        let expr = Expression::binary(
+            Expression::bool(false),
+            BinaryOperator::LessEqual,
+            Expression::bool(true),
+        );
         let expr_node = AstNode::new_temp(expr);
-        let result = vm.evaluate(&expr_node).unwrap();
+        let result = vm.evaluate_expr(&expr_node).unwrap();
         assert_eq!(result, Literal::Bool(true));
 
         // true > false
-        let expr = Expression::binary(Expression::bool(true), BinaryOperator::Greater, Expression::bool(false));
+        let expr = Expression::binary(
+            Expression::bool(true),
+            BinaryOperator::Greater,
+            Expression::bool(false),
+        );
         let expr_node = AstNode::new_temp(expr);
-        let result = vm.evaluate(&expr_node).unwrap();
+        let result = vm.evaluate_expr(&expr_node).unwrap();
         assert_eq!(result, Literal::Bool(true));
 
         // true >= false
-        let expr = Expression::binary(Expression::bool(true), BinaryOperator::GreaterEqual, Expression::bool(false));
+        let expr = Expression::binary(
+            Expression::bool(true),
+            BinaryOperator::GreaterEqual,
+            Expression::bool(false),
+        );
         let expr_node = AstNode::new_temp(expr);
-        let result = vm.evaluate(&expr_node).unwrap();
+        let result = vm.evaluate_expr(&expr_node).unwrap();
         assert_eq!(result, Literal::Bool(true));
 
         // Unary NOT: !true = false
         let expr = Expression::unary(UnaryOperator::Not, Expression::bool(true));
         let expr_node = AstNode::new_temp(expr);
-        let result = vm.evaluate(&expr_node).unwrap();
+        let result = vm.evaluate_expr(&expr_node).unwrap();
         assert_eq!(result, Literal::Bool(false));
 
         // Unary NOT: !false = true
         let expr = Expression::unary(UnaryOperator::Not, Expression::bool(false));
         let expr_node = AstNode::new_temp(expr);
-        let result = vm.evaluate(&expr_node).unwrap();
+        let result = vm.evaluate_expr(&expr_node).unwrap();
         assert_eq!(result, Literal::Bool(true));
     }
     fn test_vm_basic_operations() {
-        let vm = Vm::new();
+        let vm: Vm = Vm::default();
 
         // Test integer literal
         let integer = AstNode::new_temp(Expression::integer(42));
-        let result = vm.evaluate(&integer).unwrap();
+        let result = vm.evaluate_expr(&integer).unwrap();
         assert_eq!(result, Literal::Integer(42));
 
         // Test binary expression: 5 + 3
@@ -315,27 +400,27 @@ mod tests {
         let right = Expression::integer(3);
         let expr = Expression::binary(left, BinaryOperator::Plus, right);
         let expr_node = AstNode::new_temp(expr);
-        let result = vm.evaluate(&expr_node).unwrap();
+        let result = vm.evaluate_expr(&expr_node).unwrap();
         assert_eq!(result, Literal::Integer(8));
 
         // Test unary expression: -42
         let operand = Expression::integer(42);
         let unary_expr = Expression::unary(UnaryOperator::Minus, operand);
         let unary_expr_node = AstNode::new_temp(unary_expr);
-        let result = vm.evaluate(&unary_expr_node).unwrap();
+        let result = vm.evaluate_expr(&unary_expr_node).unwrap();
         assert_eq!(result, Literal::Integer(-42));
     }
 
     #[test]
     fn test_vm_expression_evaluation_with_type_coercion() {
-        let vm = Vm::new();
+        let vm: Vm = Vm::default();
 
         // Test mixed integer and float operations: 5 + 2.5 = 7.5
         let left = Expression::integer(5);
         let right = Expression::float(2.5);
-                      let expr = Expression::binary(left, BinaryOperator::Plus, right);
+        let expr = Expression::binary(left, BinaryOperator::Plus, right);
         let expr_node = AstNode::new_temp(expr);
-        let result = vm.evaluate(&expr_node);
+        let result = vm.evaluate_expr(&expr_node);
         assert_eq!(result, Err(VmError::TypeMismatch));
 
         // Test complex expression: (2 + 3) * 4 - 1 = 19
@@ -351,20 +436,20 @@ mod tests {
         let final_expr = Expression::binary(multiplied, BinaryOperator::Minus, sub_right);
 
         let final_expr_node = AstNode::new_temp(final_expr);
-        let result = vm.evaluate(&final_expr_node).unwrap();
+        let result = vm.evaluate_expr(&final_expr_node).unwrap();
         assert_eq!(result, Literal::Integer(19));
     }
 
     #[test]
     fn test_vm_error_handling() {
-        let vm = Vm::new();
+        let vm: Vm = Vm::default();
 
         // Test division by zero
         let left = Expression::integer(5);
         let right = Expression::integer(0);
         let expr = Expression::binary(left, BinaryOperator::Divide, right);
         let expr_node = AstNode::new_temp(expr);
-        let result = vm.evaluate(&expr_node);
+        let result = vm.evaluate_expr(&expr_node);
         assert_eq!(result, Err(VmError::DivisionByZero));
 
         // Test float division by zero
@@ -372,20 +457,20 @@ mod tests {
         let float_right = Expression::float(0.0);
         let float_expr = Expression::binary(float_left, BinaryOperator::Divide, float_right);
         let float_expr_node = AstNode::new_temp(float_expr);
-        let float_result = vm.evaluate(&float_expr_node);
+        let float_result = vm.evaluate_expr(&float_expr_node);
         assert_eq!(float_result, Err(VmError::DivisionByZero));
     }
 
     #[test]
     fn test_vm_comparison_operations() {
-        let vm = Vm::new();
+        let vm: Vm = Vm::default();
 
         // Test integer comparison: 5 > 3
         let left = Expression::integer(5);
         let right = Expression::integer(3);
         let expr = Expression::binary(left, BinaryOperator::Greater, right);
         let expr_node = AstNode::new_temp(expr);
-        let result = vm.evaluate(&expr_node).unwrap();
+        let result = vm.evaluate_expr(&expr_node).unwrap();
         assert_eq!(result, Literal::Bool(true)); // true
 
         // Test float equality with epsilon: 1.0 == 1.0
@@ -393,36 +478,35 @@ mod tests {
         let float_right = Expression::float(1.0);
         let float_expr = Expression::binary(float_left, BinaryOperator::Equal, float_right);
         let float_expr_node = AstNode::new_temp(float_expr);
-        let float_result = vm.evaluate(&float_expr_node).unwrap();
+        let float_result = vm.evaluate_expr(&float_expr_node).unwrap();
         assert_eq!(float_result, Literal::Bool(true)); // true
     }
 
     #[test]
-   fn test_vm_logical_operations() { 
-    let vm = Vm::new();
+    fn test_vm_logical_operations() {
+        let vm: Vm = Vm::default();
 
-    // Test logical AND: true && false = false
-    let left = Expression::bool(true);
-    let right = Expression::bool(false);
-    let expr = Expression::binary(left, BinaryOperator::And, right);
-    let expr_node = AstNode::new_temp(expr);
-    let result = vm.evaluate(&expr_node).unwrap();
-    assert_eq!(result, Literal::Bool(false)); // false
+        // Test logical AND: true && false = false
+        let left = Expression::bool(true);
+        let right = Expression::bool(false);
+        let expr = Expression::binary(left, BinaryOperator::And, right);
+        let expr_node = AstNode::new_temp(expr);
+        let result = vm.evaluate_expr(&expr_node).unwrap();
+        assert_eq!(result, Literal::Bool(false)); // false
 
-    // Test logical OR: false || true = true
-    let left = Expression::bool(false);
-    let right = Expression::bool(true);
-    let expr = Expression::binary(left, BinaryOperator::Or, right);
-    let expr_node = AstNode::new_temp(expr);
-    let result = vm.evaluate(&expr_node).unwrap();
-    assert_eq!(result, Literal::Bool(true)); // true
+        // Test logical OR: false || true = true
+        let left = Expression::bool(false);
+        let right = Expression::bool(true);
+        let expr = Expression::binary(left, BinaryOperator::Or, right);
+        let expr_node = AstNode::new_temp(expr);
+        let result = vm.evaluate_expr(&expr_node).unwrap();
+        assert_eq!(result, Literal::Bool(true)); // true
 
-    // Test logical NOT: !false = true
-    let operand = Expression::bool(false);
-    let unary_expr = Expression::unary(UnaryOperator::Not, operand);
-    let unary_expr_node = AstNode::new_temp(unary_expr);
-    let result = vm.evaluate(&unary_expr_node).unwrap();
-    assert_eq!(result, Literal::Bool(true)); // true
-}
-
+        // Test logical NOT: !false = true
+        let operand = Expression::bool(false);
+        let unary_expr = Expression::unary(UnaryOperator::Not, operand);
+        let unary_expr_node = AstNode::new_temp(unary_expr);
+        let result = vm.evaluate_expr(&unary_expr_node).unwrap();
+        assert_eq!(result, Literal::Bool(true)); // true
+    }
 }

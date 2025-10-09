@@ -48,7 +48,7 @@ pub trait VmBackend: std::fmt::Debug {
 
 
 /// Unified backend for file or console I/O
-#[derive(Debug)]
+#[derive(Debug,Default)]
 pub struct IoBackend {
     output_file: Option<std::fs::File>,
     input_file: Option<std::fs::File>,

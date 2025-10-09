@@ -132,6 +132,8 @@ impl fmt::Display for Literal {
             Literal::Bool(b) => write!(f, "{b}"),
         }
     }
+
+
 }
 
 impl fmt::Display for BinaryOperator {
@@ -159,7 +161,7 @@ impl fmt::Display for UnaryOperator {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let symbol = match self {
             UnaryOperator::Minus => "-",
-            UnaryOperator::Not => "!",
+            UnaryOperator::Not => "not",
         };
         write!(f, "{symbol}")
     }
@@ -339,5 +341,36 @@ impl<'a, T: AstElement> AstNode<'a, T> {
 impl<'a, T: AstElement> From<T> for AstNode<'a, T> {
     fn from(value: T) -> Self {
         AstNode::new_temp(value)
+    }
+}
+impl<'a> Statement<'a> {
+    pub fn assignment(identifier: Identifier, value: impl Into<ExpressionNode<'a>>) -> Self {
+        Statement::Assignment {
+            identifier,
+            value: value.into(),
+        }
+    }
+
+    pub fn statement_block(statements: Vec<StatementNode<'a>>) -> Self {
+        Statement::StatementBlock { statements }
+    }
+
+    pub fn if_stmt(condition: impl Into<ExpressionNode<'a>>, on_true: impl Into<StatementNode<'a>>) -> Self {
+        Statement::If {
+            condition: condition.into(),
+            on_true: Box::new(on_true.into()),
+        }
+    }
+
+    pub fn if_else(
+        condition: impl Into<ExpressionNode<'a>>,
+        on_true: impl Into<StatementNode<'a>>,
+        on_false: impl Into<StatementNode<'a>>,
+    ) -> Self {
+        Statement::IfElse {
+            condition: condition.into(),
+            on_true: Box::new(on_true.into()),
+            on_false: Box::new(on_false.into()),
+        }
     }
 }
