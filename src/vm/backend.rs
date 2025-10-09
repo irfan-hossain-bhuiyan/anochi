@@ -97,7 +97,7 @@ impl VmBackend for IoBackend {
                 self.input_buffer = buf.split_whitespace().map(|s| s.to_string()).collect();
             }
             // Pop next token
-            if let Some(token) = self.input_buffer.get(0) {
+            if let Some(token) = self.input_buffer.first() {
                 let token = token.clone();
                 self.input_buffer.remove(0);
                 Ok(Some(token))

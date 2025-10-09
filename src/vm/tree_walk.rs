@@ -19,8 +19,8 @@ use std::{collections::HashMap, error::Error};
 
 use crate::{
     ast::{
-        BinaryOperator,  Expression, ExpressionNode, Identifier, Literal, Statement,
-        StatementNode,  UnaryOperator,
+        BinaryOperator, Expression, ExpressionNode, Identifier, Literal, Statement, StatementNode,
+        UnaryOperator,
     },
     vm::backend::{IoBackend, VmBackend},
 };
@@ -99,7 +99,16 @@ impl<Backend: VmBackend> Vm<Backend> {
     pub fn evaluate_expr(&self, expression_node: &ExpNode) -> VmResult {
         let expression = &expression_node.node;
         match expression {
-            Expression::Literal(literal) => Ok(literal.clone()),
+            Expression::Literal(literal) => match literal {
+                Literal::Identifier(x) => self
+                    .variable
+                    .get(x)
+                    .cloned()
+                    .ok_or(VmError::UndefinedIdentifier(format!("{x} doesn't exist."))),
+                Literal::Bool(_) | Literal::Float(_) | Literal::String(_) | Literal::Integer(_) => {
+                    Ok(literal.clone())
+                }
+            },
 
             Expression::Binary {
                 left,
