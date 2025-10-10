@@ -5,6 +5,7 @@
 //! and return the result.
 
 use crate::{
+    ast::Literal,
     parser::Parser,
     token::Tokenizer,
     vm::{backend::VmBackend, tree_walk::Vm},
@@ -18,19 +19,15 @@ pub enum CodeRunnerError {
     /// Error occurred during tokenization
     #[error("Tokenization error: {0}")]
     TokenizationError(String),
-    
+
     /// Error occurred during parsing
     #[error("Parse error: could not parse the input")]
     ParseError,
-    
+
     /// Error occurred during VM execution
     #[error("Runtime error: {0}")]
     RuntimeError(#[from] crate::vm::tree_walk::VmError),
 }
-
-/// Result type for code execution operations.
-pub type CodeRunnerResult<T> = Result<T, CodeRunnerError>;
-
 /// Main code runner that orchestrates tokenization, parsing, and execution.
 ///
 /// The `CodeRunner` takes a string of source code and processes it through
@@ -49,7 +46,7 @@ pub type CodeRunnerResult<T> = Result<T, CodeRunnerError>;
 /// ```rust
 /// use anochi::CodeRunner;
 /// use anochi::vm::backend::IoBackend;
-/// 
+///
 /// let mut runner = CodeRunner::new(IoBackend::default());
 /// let result = runner.run("2 + 3 * 4").unwrap();
 /// println!("Result: {}", result); // Result: 14
@@ -93,13 +90,14 @@ impl<Backend: VmBackend> CodeRunner<Backend> {
     ///
     /// ```rust
     /// use anochi::CodeRunner;
-    /// 
+    ///
     /// let mut runner = CodeRunner::default();
     /// let result = runner.run("10 - 4")?;
     /// assert_eq!(result.to_string(), "6");
     /// # Ok::<(), anochi::code_runner::CodeRunnerError>(())
     /// ```
-    pub fn run(&mut self, source: &str) -> CodeRunnerResult<String> {
+
+    pub fn run_statement(&mut self, source: &str) -> Result<(), CodeRunnerError> {
         // Step 1: Tokenize the source code
         let tokenizer = Tokenizer::new(source);
         let tokens = tokenizer.tokenize();
@@ -110,27 +108,42 @@ impl<Backend: VmBackend> CodeRunner<Backend> {
                 return Err(CodeRunnerError::TokenizationError(err.clone()));
             }
         }
-
         // Step 2: Parse tokens into AST
-        let mut parser = Parser::new(&tokens);
-        
-        // Try to parse as an expression first
-        if let Some(expr_node) = parser.parse_expression() {
-            // Step 3: Execute the expression
-            let result = self.vm.evaluate_expr(&expr_node)?;
-            return Ok(result.to_string());
-        }
-
-        // If expression parsing fails, try statement parsing
         let mut parser = Parser::new(&tokens);
         if let Some(stmt_node) = parser.parse_statement() {
             // Step 3: Execute the statement
             self.vm.execute_statement(&stmt_node)?;
-            return Ok("()".to_string()); // Return unit type for statements
+            return Ok(()); // Return unit type for statements
         }
 
         // If both fail, return parse error
         Err(CodeRunnerError::ParseError)
+    }
+    pub fn evaluate_expr(&mut self, source: &str) -> Result<Literal, CodeRunnerError> {
+        // Step 1: Tokenize the source code
+        let tokenizer = Tokenizer::new(source);
+        let tokens = tokenizer.tokenize();
+
+        // Check for tokenization errors
+        for token in &tokens {
+            if let crate::token::TokenType::Error(err) = &token.token_type {
+                return Err(CodeRunnerError::TokenizationError(err.clone()));
+            }
+        }
+        // Step 2: Parse tokens into AST
+        let mut parser = Parser::new(&tokens);
+        if let Some(stmt_node) = parser.parse_expression() {
+            // Step 3: Execute the statement
+            let value=self.vm.evaluate_expr(&stmt_node)?;
+            return Ok(value); // Return unit type for statements
+        }
+
+        // If both fail, return parse error
+        Err(CodeRunnerError::ParseError)
+    }
+
+    pub fn vm(&self) -> &Vm<Backend> {
+        &self.vm
     }
 }
 
@@ -154,93 +167,48 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_basic_arithmetic() {
+    fn test_basic_arithmetic_and_float_and_bool() {
         let mut runner = CodeRunner::default();
-        
-        // Test addition
-        assert_eq!(runner.run("2 + 3").unwrap(), "5");
-        
-        // Test multiplication with precedence
-        assert_eq!(runner.run("2 + 3 * 4").unwrap(), "14");
-        
-        // Test parentheses
-        assert_eq!(runner.run("(2 + 3) * 4").unwrap(), "20");
-        
-        // Test subtraction
-        assert_eq!(runner.run("10 - 4").unwrap(), "6");
-        
-        // Test division
-        assert_eq!(runner.run("15 / 3").unwrap(), "5");
-    }
-
-    #[test]
-    fn test_float_operations() {
-        let mut runner = CodeRunner::default();
-        
-        // Test float literal
-        assert_eq!(runner.run("3.14").unwrap(), "3.14");
-        
-        // Test float arithmetic
-        assert_eq!(runner.run("2.5 + 1.5").unwrap(), "4");
-    }
-
-    #[test]
-    fn test_boolean_operations() {
-        let mut runner = CodeRunner::default();
-        
-        // Test boolean literals
-        assert_eq!(runner.run("true").unwrap(), "true");
-        assert_eq!(runner.run("false").unwrap(), "false");
-        
-        // Test logical operations
-        assert_eq!(runner.run("true and false").unwrap(), "false");
-        assert_eq!(runner.run("true or false").unwrap(), "true");
-        assert_eq!(runner.run("not true").unwrap(), "false");
-    }
-
-    #[test]
-    fn test_comparison_operations() {
-        let mut runner = CodeRunner::default();
-        
-        // Test comparisons
-        assert_eq!(runner.run("5 > 3").unwrap(), "true");
-        assert_eq!(runner.run("2 < 1").unwrap(), "false");
-        assert_eq!(runner.run("4 == 4").unwrap(), "true");
-        assert_eq!(runner.run("3 != 5").unwrap(), "true");
-    }
-
-    #[test]
-    fn test_unary_operations() {
-        let mut runner = CodeRunner::default();
-        
-        // Test unary minus
-        assert_eq!(runner.run("-5").unwrap(), "-5");
-        assert_eq!(runner.run("-(2 + 3)").unwrap(), "-5");
+        // Integer arithmetic
+        assert_eq!(runner.evaluate_expr("2 + 3").unwrap(), Literal::Integer(5));
+        assert_eq!(runner.evaluate_expr("2 + 3 * 4").unwrap(), Literal::Integer(14));
+        assert_eq!(runner.evaluate_expr("(2 + 3) * 4").unwrap(), Literal::Integer(20));
+        assert_eq!(runner.evaluate_expr("10 - 4").unwrap(), Literal::Integer(6));
+        assert_eq!(runner.evaluate_expr("15 / 3").unwrap(), Literal::Integer(5));
+        // Float arithmetic
+        assert_eq!(runner.evaluate_expr("3.14").unwrap(), Literal::Float(3.14));
+        assert_eq!(runner.evaluate_expr("2.5 + 1.5").unwrap(), Literal::Float(4.0));
+        // Boolean
+        assert_eq!(runner.evaluate_expr("true").unwrap(), Literal::Bool(true));
+        assert_eq!(runner.evaluate_expr("false").unwrap(), Literal::Bool(false));
+        assert_eq!(runner.evaluate_expr("true and false").unwrap(), Literal::Bool(false));
+        assert_eq!(runner.evaluate_expr("true or false").unwrap(), Literal::Bool(true));
+        assert_eq!(runner.evaluate_expr("not true").unwrap(), Literal::Bool(false));
+        // Comparison
+        assert_eq!(runner.evaluate_expr("5 > 3").unwrap(), Literal::Bool(true));
+        assert_eq!(runner.evaluate_expr("2 < 1").unwrap(), Literal::Bool(false));
+        assert_eq!(runner.evaluate_expr("4 == 4").unwrap(), Literal::Bool(true));
+        assert_eq!(runner.evaluate_expr("3 != 5").unwrap(), Literal::Bool(true));
+        // Unary minus
+        assert_eq!(runner.evaluate_expr("-5").unwrap(), Literal::Integer(-5));
+        assert_eq!(runner.evaluate_expr("-(2 + 3)").unwrap(), Literal::Integer(-5));
+        // Complex nested expression
+        assert_eq!(runner.evaluate_expr("((2 + 3) * 4) - (10 / 2)").unwrap(), Literal::Integer(15));
+        // Mixed arithmetic and logical
+        assert_eq!(runner.evaluate_expr("(5 > 3) and (2 < 4)").unwrap(), Literal::Bool(true));
     }
 
     #[test]
     fn test_error_handling() {
         let mut runner = CodeRunner::default();
-        
         // Test division by zero
-        let result = runner.run("5 / 0");
+        let result = runner.evaluate_expr("5 / 0");
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), CodeRunnerError::RuntimeError(_)));
-        
         // Test invalid syntax (should be parse error)
-        let result = runner.run("2 + + 3");
+        let result = runner.evaluate_expr("2 + + 3");
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), CodeRunnerError::ParseError));
     }
-
-    #[test]
-    fn test_complex_expressions() {
-        let mut runner = CodeRunner::default();
-        
-        // Test complex nested expression
-        assert_eq!(runner.run("((2 + 3) * 4) - (10 / 2)").unwrap(), "15");
-        
-        // Test mixed arithmetic and logical
-        assert_eq!(runner.run("(5 > 3) and (2 < 4)").unwrap(), "true");
-    }
 }
+

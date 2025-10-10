@@ -1,5 +1,3 @@
-use std::ops::Not;
-
 use crate::ast::{
     BinaryOperator, Expression, ExpressionNode, Statement, StatementNode, UnaryOperator,
 };
@@ -149,7 +147,9 @@ impl<'a, 'b: 'a> Parser<'a, 'b> {
         let operator = match self.peek_type()? {
             TokenType::Minus => UnaryOperator::Minus,
             TokenType::Keyword(Keyword::Not) => UnaryOperator::Not,
-            _ =>{return self.parse_primary();},
+            _ => {
+                return self.parse_primary();
+            }
         };
         self.advance();
         let operand = self.parse_unary()?;
@@ -231,6 +231,87 @@ mod tests {
     use crate::token::Tokenizer;
 
     #[test]
+    fn test_parse_assignment_statement() {
+        // x = 42;
+        let source = "x = 42;";
+        let tokenizer = Tokenizer::new(source);
+        let tokens = tokenizer.tokenize();
+        let mut parser = Parser::new(&tokens);
+        let parsed = parser.parse_statement().unwrap();
+        let expected = Statement::assignment("x".to_string(), Expression::integer(42)).into();
+        assert_eq!(parsed, expected);
+    }
+
+    #[test]
+    fn test_parse_statement_block() {
+        // (x = 1; y = 2;)
+        let source = "(x = 1; y = 2;)";
+        let tokenizer = Tokenizer::new(source);
+        let tokens = tokenizer.tokenize();
+        let mut parser = Parser::new(&tokens);
+        let parsed = parser.parse_statement().unwrap();
+        let expected = Statement::statement_block(vec![
+            Statement::assignment("x".to_string(), Expression::integer(1)).into(),
+            Statement::assignment("y".to_string(), Expression::integer(2)).into(),
+        ])
+        .into();
+        assert_eq!(parsed, expected);
+    }
+
+    #[test]
+    fn test_parse_if_statement() {
+        // if 1 x = 2;
+        let source = "if 1 x = 2;";
+        let tokenizer = Tokenizer::new(source);
+        let tokens = tokenizer.tokenize();
+        let mut parser = Parser::new(&tokens);
+        let parsed = parser.parse_statement().unwrap();
+        let expected = Statement::if_stmt(
+            Expression::integer(1),
+            Statement::assignment("x".to_string(), Expression::integer(2)),
+        )
+        .into();
+        assert_eq!(parsed, expected);
+    }
+
+    #[test]
+    fn test_parse_if_comparison_block() {
+        // if (2 > 1) { x = 42; }
+        let source = "if (2 > 1) { x = 42; }";
+        let tokenizer = Tokenizer::new(source);
+        let tokens = tokenizer.tokenize();
+        let mut parser = Parser::new(&tokens);
+        let parsed = parser.parse_statement().unwrap();
+        let expected = Statement::if_stmt(
+            Expression::grouping(Expression::binary(
+                Expression::integer(2),
+                BinaryOperator::Greater,
+                Expression::integer(1),
+            )),
+            Statement::statement_block(vec![
+                Statement::assignment("x".to_string(), Expression::integer(42)).into(),
+            ]),
+        )
+        .into();
+        assert_eq!(parsed, expected);
+    }
+
+    #[test]
+    fn test_parse_if_else_statement() {
+        // if 1 x = 2; else x = 3;
+        let source = "if 1 x = 2; else x = 3;";
+        let tokenizer = Tokenizer::new(source);
+        let tokens = tokenizer.tokenize();
+        let mut parser = Parser::new(&tokens);
+        let parsed = parser.parse_statement().unwrap();
+        let expected = Statement::if_else(
+            Expression::integer(1),
+            Statement::assignment("x".to_string(), Expression::integer(2)),
+            Statement::assignment("x".to_string(), Expression::integer(3)),
+        )
+        .into();
+        assert_eq!(parsed, expected);
+    }
     fn test_parse_addition_with_tokenizer() {
         // 1 + 2
         let source = "1 + 2";
