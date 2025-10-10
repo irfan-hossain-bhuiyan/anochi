@@ -1,4 +1,5 @@
-Always write on code style,on how the code is written in file.
-Follow rust format convention.
-Always implement small code,Keep it simple,With minimal testing,As the implmemtation of the code will change frequently.
-Keep the code as modular as possible.
+1. Always write on code style,on how the code is written in file.
+2. Follow rust format convention.
+3. Always implement small code,Keep it simple,With minimal testing,As the implmemtation of the code will change frequently.
+4. Keep the code as modular as possible.
+5. Always ask on what I wanna do,then do it,other than jumping around writing test.

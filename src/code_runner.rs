@@ -34,23 +34,6 @@ pub enum CodeRunnerError {
 /// the complete pipeline: tokenization -> parsing -> execution, returning
 /// the final result or any errors that occur along the way.
 ///
-/// # Design
-///
-/// - Simple and stateless for basic expression evaluation
-/// - Minimal interface: string input, result output
-/// - Proper error handling and propagation
-/// - Modular design allowing different VM backends
-///
-/// # Example
-///
-/// ```rust
-/// use anochi::CodeRunner;
-/// use anochi::vm::backend::IoBackend;
-///
-/// let mut runner = CodeRunner::new(IoBackend::default());
-/// let result = runner.run("2 + 3 * 4").unwrap();
-/// println!("Result: {}", result); // Result: 14
-/// ```
 pub struct CodeRunner<Backend: VmBackend = crate::vm::backend::IoBackend> {
     vm: Vm<Backend>,
 }
@@ -85,18 +68,6 @@ impl<Backend: VmBackend> CodeRunner<Backend> {
     /// # Returns
     ///
     /// A `CodeRunnerResult` containing the execution result or an error.
-    ///
-    /// # Example
-    ///
-    /// ```rust
-    /// use anochi::CodeRunner;
-    ///
-    /// let mut runner = CodeRunner::default();
-    /// let result = runner.run("10 - 4")?;
-    /// assert_eq!(result.to_string(), "6");
-    /// # Ok::<(), anochi::code_runner::CodeRunnerError>(())
-    /// ```
-
     pub fn run_statement(&mut self, source: &str) -> Result<(), CodeRunnerError> {
         // Step 1: Tokenize the source code
         let tokenizer = Tokenizer::new(source);

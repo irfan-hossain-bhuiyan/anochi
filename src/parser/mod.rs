@@ -33,13 +33,13 @@ impl<'a, 'b: 'a> Parser<'a, 'b> {
                 let _ = self.match_token(&TokenType::Semicolon)?;
                 Some(Statement::assignment(x.to_string(), expr).into())
             }
-            TokenType::LeftParen => {
+            TokenType::LeftBrace => {
                 self.advance();
                 let mut statements = Vec::new();
                 while let Some(stmt) = self.parse_statement() {
                     statements.push(stmt);
                 }
-                let _ = self.match_token(&TokenType::RightParen);
+                let _ = self.match_token(&TokenType::RightBrace);
                 Some(Statement::statement_block(statements).into())
             }
             TokenType::Keyword(Keyword::If) => {
@@ -245,7 +245,7 @@ mod tests {
     #[test]
     fn test_parse_statement_block() {
         // (x = 1; y = 2;)
-        let source = "(x = 1; y = 2;)";
+        let source = "{x = 1; y = 2;}";
         let tokenizer = Tokenizer::new(source);
         let tokens = tokenizer.tokenize();
         let mut parser = Parser::new(&tokens);
@@ -254,22 +254,6 @@ mod tests {
             Statement::assignment("x".to_string(), Expression::integer(1)).into(),
             Statement::assignment("y".to_string(), Expression::integer(2)).into(),
         ])
-        .into();
-        assert_eq!(parsed, expected);
-    }
-
-    #[test]
-    fn test_parse_if_statement() {
-        // if 1 x = 2;
-        let source = "if 1 x = 2;";
-        let tokenizer = Tokenizer::new(source);
-        let tokens = tokenizer.tokenize();
-        let mut parser = Parser::new(&tokens);
-        let parsed = parser.parse_statement().unwrap();
-        let expected = Statement::if_stmt(
-            Expression::integer(1),
-            Statement::assignment("x".to_string(), Expression::integer(2)),
-        )
         .into();
         assert_eq!(parsed, expected);
     }
@@ -312,137 +296,39 @@ mod tests {
         .into();
         assert_eq!(parsed, expected);
     }
-    fn test_parse_addition_with_tokenizer() {
-        // 1 + 2
-        let source = "1 + 2";
-        let tokenizer = Tokenizer::new(source);
-        let tokens = tokenizer.tokenize();
-        let mut parser = Parser::new(&tokens);
-        let parsed = parser.parse_expression().unwrap();
-        let expected = Expression::binary(
-            Expression::integer(1),
-            BinaryOperator::Plus,
-            Expression::integer(2),
-        )
-        .into();
-        assert_eq!(parsed, expected);
-    }
-
     #[test]
-    fn test_parse_subtraction() {
-        // 1 - 2
-        let source = "1 - 2";
-        let tokenizer = Tokenizer::new(source);
-        let tokens = tokenizer.tokenize();
-        let mut parser = Parser::new(&tokens);
-        let parsed = parser.parse_expression().unwrap();
-        let expected = Expression::binary(
-            Expression::integer(1),
-            BinaryOperator::Minus,
-            Expression::integer(2),
-        )
-        .into();
-        assert_eq!(parsed, expected);
-    }
-
-    #[test]
-    fn test_parse_multiplication() {
-        // 2 * 3
-        let source = "2 * 3";
-        let tokenizer = Tokenizer::new(source);
-        let tokens = tokenizer.tokenize();
-        let mut parser = Parser::new(&tokens);
-        let parsed = parser.parse_expression().unwrap();
-        let expected = Expression::binary(
-            Expression::integer(2),
-            BinaryOperator::Multiply,
-            Expression::integer(3),
-        )
-        .into();
-        assert_eq!(parsed, expected);
-    }
-
-    #[test]
-    fn test_parse_division() {
-        // 4 / 2
-        let source = "4 / 2";
-        let tokenizer = Tokenizer::new(source);
-        let tokens = tokenizer.tokenize();
-        let mut parser = Parser::new(&tokens);
-        let parsed = parser.parse_expression().unwrap();
-        let expected = Expression::binary(
-            Expression::integer(4),
-            BinaryOperator::Divide,
-            Expression::integer(2),
-        )
-        .into();
-        assert_eq!(parsed, expected);
-    }
-
-    #[test]
-    fn test_parse_unary_minus() {
-        // -5
-        let source = "-5";
-        let tokenizer = Tokenizer::new(source);
-        let tokens = tokenizer.tokenize();
-        let mut parser = Parser::new(&tokens);
-        let parsed = parser.parse_expression().unwrap();
-        let expected = Expression::unary(UnaryOperator::Minus, Expression::integer(5)).into();
-        assert_eq!(parsed, expected);
-    }
-
-    #[test]
-    fn test_parse_grouping_and_precedence() {
-        // (1 + 2) * 3
-        let source = "(1 + 2) * 3";
-        let tokenizer = Tokenizer::new(source);
-        let tokens = tokenizer.tokenize();
-        let mut parser = Parser::new(&tokens);
-        let parsed = parser.parse_expression().unwrap();
-        let expected = Expression::binary(
-            Expression::grouping(Expression::binary(
+    fn test_comprehensive_expression_parsing() {
+        // Test arithmetic operators and precedence in one comprehensive test
+        let test_cases = vec![
+            // Basic arithmetic
+            ("1 + 2", Expression::binary(Expression::integer(1), BinaryOperator::Plus, Expression::integer(2))),
+            ("4 / 2", Expression::binary(Expression::integer(4), BinaryOperator::Divide, Expression::integer(2))),
+            // Unary operations
+            ("-5", Expression::unary(UnaryOperator::Minus, Expression::integer(5))),
+            // Float literals
+            ("3.1", Expression::float(3.1)),
+            // Precedence: multiplication before addition
+            ("1 + 2 * 3", Expression::binary(
                 Expression::integer(1),
                 BinaryOperator::Plus,
-                Expression::integer(2),
+                Expression::binary(Expression::integer(2), BinaryOperator::Multiply, Expression::integer(3))
             )),
-            BinaryOperator::Multiply,
-            Expression::integer(3),
-        )
-        .into();
-        assert_eq!(parsed, expected);
-    }
-
-    #[test]
-    fn test_parse_mixed_precedence() {
-        // 1 + 2 * 3
-        let source = "1 + 2 * 3";
-        let tokenizer = Tokenizer::new(source);
-        let tokens = tokenizer.tokenize();
-        let mut parser = Parser::new(&tokens);
-        let parsed = parser.parse_expression().unwrap();
-        let expected = Expression::binary(
-            Expression::integer(1),
-            BinaryOperator::Plus,
-            Expression::binary(
-                Expression::integer(2),
+            // Grouping overrides precedence
+            ("(1 + 2) * 3", Expression::binary(
+                Expression::grouping(Expression::binary(Expression::integer(1), BinaryOperator::Plus, Expression::integer(2))),
                 BinaryOperator::Multiply,
-                Expression::integer(3),
-            ),
-        )
-        .into();
-        assert_eq!(parsed, expected);
-    }
+                Expression::integer(3)
+            )),
+        ];
 
-    #[test]
-    fn test_parse_float_literal() {
-        // 3.14
-        let source = "3.1";
-        let tokenizer = Tokenizer::new(source);
-        let tokens = tokenizer.tokenize();
-        let mut parser = Parser::new(&tokens);
-        let parsed = parser.parse_expression().unwrap();
-        let expected = Expression::float(3.1).into();
-        assert_eq!(parsed, expected);
+        for (source, expected_expr) in test_cases {
+            let tokenizer = Tokenizer::new(source);
+            let tokens = tokenizer.tokenize();
+            let mut parser = Parser::new(&tokens);
+            let parsed = parser.parse_expression().unwrap();
+            let expected = expected_expr.into();
+            assert_eq!(parsed, expected, "Failed parsing: {}", source);
+        }
     }
 
     #[test]

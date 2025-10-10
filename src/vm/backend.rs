@@ -259,17 +259,16 @@ mod tests {
     use std::fs;
     
     #[test]
-    fn test_io_backend_console() {
-        let mut backend = IoBackend::new();
-        backend.print("test output").unwrap();
-        backend.print_error("test error").unwrap();
-        backend.flush().unwrap();
-        assert!(!backend.has_input());
-        assert!(!backend.has_output());
-    }
-    
-    #[test]
-    fn test_test_backend() {
+    fn test_backends_comprehensive() {
+        // Test IoBackend console functionality
+        let mut io_backend = IoBackend::new();
+        io_backend.print("test output").unwrap();
+        io_backend.print_error("test error").unwrap();
+        io_backend.flush().unwrap();
+        assert!(!io_backend.has_input());
+        assert!(!io_backend.has_output());
+        
+        // Test TestBackend functionality
         let mut backend = TestBackend::new();
         
         backend.debug_print("debug1").unwrap();
