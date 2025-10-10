@@ -1,3 +1,5 @@
+use std::ops::Not;
+
 use crate::ast::{
     BinaryOperator, Expression, ExpressionNode, Statement, StatementNode, UnaryOperator,
 };
@@ -23,38 +25,38 @@ impl<'a, 'b: 'a> Parser<'a, 'b> {
         }
         Some(node)
     }
-    fn parse_statement(&mut self) -> OpStatNode<'b> {
+    pub fn parse_statement(&mut self) -> OpStatNode<'b> {
         // Assignment: identifier = expression
         match self.peek_type()?.clone() {
             TokenType::Identifier(x) => {
                 self.advance();
                 let _ = self.match_token(&TokenType::Equal)?;
-                let expr=self.parse_expression()?;
+                let expr = self.parse_expression()?;
                 let _ = self.match_token(&TokenType::Semicolon)?;
                 Some(Statement::assignment(x.to_string(), expr).into())
-            },
-            TokenType::LeftParen=>{
+            }
+            TokenType::LeftParen => {
                 self.advance();
-                let mut statements=Vec::new();
-                while let Some(stmt)=self.parse_statement() {
+                let mut statements = Vec::new();
+                while let Some(stmt) = self.parse_statement() {
                     statements.push(stmt);
                 }
                 let _ = self.match_token(&TokenType::RightParen);
                 Some(Statement::statement_block(statements).into())
-            },
-            TokenType::Keyword(Keyword::If)=>{
+            }
+            TokenType::Keyword(Keyword::If) => {
                 self.advance();
-                let expr=self.parse_expression()?;
-                let on_true=self.parse_statement()?;
-                match self.match_token(&TokenType::Keyword(Keyword::Else)){
-                    None=>Some(Statement::if_stmt(expr, on_true).into()),
-                    Some(_)=>{
-                        let on_false=self.parse_statement()?;
+                let expr = self.parse_expression()?;
+                let on_true = self.parse_statement()?;
+                match self.match_token(&TokenType::Keyword(Keyword::Else)) {
+                    None => Some(Statement::if_stmt(expr, on_true).into()),
+                    Some(_) => {
+                        let on_false = self.parse_statement()?;
                         Some(Statement::if_else(expr, on_true, on_false).into())
                     }
                 }
-            },
-            _=>{None}
+            }
+            _ => None,
         }
     }
     // Logical AND: expr && expr
@@ -144,16 +146,14 @@ impl<'a, 'b: 'a> Parser<'a, 'b> {
 
     // Unary ::= ("+" | "-") Unary | Primary
     fn parse_unary(&mut self) -> OpExpNode<'b> {
-        if let Some(op) = self.match_tokens(&[TokenType::Minus, TokenType::Bang]) {
-            let operator = match op {
-                TokenType::Minus => UnaryOperator::Minus,
-                TokenType::Bang => UnaryOperator::Not,
-                _ => unreachable!(),
-            };
-            let operand = self.parse_unary()?;
-            return Some(Expression::unary(operator, operand).into());
-        }
-        self.parse_primary()
+        let operator = match self.peek_type()? {
+            TokenType::Minus => UnaryOperator::Minus,
+            TokenType::Keyword(Keyword::Not) => UnaryOperator::Not,
+            _ =>{return self.parse_primary();},
+        };
+        self.advance();
+        let operand = self.parse_unary()?;
+        Some(Expression::unary(operator, operand).into())
     }
 
     // Primary ::= Integer | Float | Identifier | "(" Expr ")"
@@ -183,7 +183,7 @@ impl<'a, 'b: 'a> Parser<'a, 'b> {
         self.peek().map(|x| &x.token_type)
     }
 
-    fn match_tokens(&mut self, types: &'static[TokenType]) -> Option<&'static TokenType> {
+    fn match_tokens(&mut self, types: &'static [TokenType]) -> Option<&'static TokenType> {
         for tt in types.iter() {
             if self.check(tt) {
                 self.advance();

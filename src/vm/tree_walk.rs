@@ -15,7 +15,7 @@
 //! # Example
 //!
 
-use std::{collections::HashMap, error::Error};
+use std::collections::HashMap;
 
 use crate::{
     ast::{
@@ -131,11 +131,11 @@ impl<Backend: VmBackend> Vm<Backend> {
         }
     }
     pub fn execute_statement(&mut self, stat_node: &StmtNode) -> Result<(), VmError> {
-        let ref stmt = stat_node.node;
+        let stmt = &stat_node.node;
         match stmt {
             Statement::Assignment { identifier, value } => {
                 self.variable
-                    .insert(identifier.clone(), self.evaluate_expr(&value)?);
+                    .insert(identifier.clone(), self.evaluate_expr(value)?);
                 Ok(())
             }
             Statement::StatementBlock { statements } => {
@@ -145,11 +145,11 @@ impl<Backend: VmBackend> Vm<Backend> {
                 Ok(())
             }
             Statement::If { condition, on_true } => {
-                let Literal::Bool(x) = self.evaluate_expr(&condition)? else {
+                let Literal::Bool(x) = self.evaluate_expr(condition)? else {
                     return Err(VmError::TypeMismatch);
                 };
                 if x {
-                    self.execute_statement(&on_true)?;
+                    self.execute_statement(on_true)?;
                 }
                 Ok(())
             }
@@ -158,13 +158,13 @@ impl<Backend: VmBackend> Vm<Backend> {
                 on_true,
                 on_false,
             } => {
-                let Literal::Bool(x) = self.evaluate_expr(&condition)? else {
+                let Literal::Bool(x) = self.evaluate_expr(condition)? else {
                     return Err(VmError::TypeMismatch);
                 };
                 if x {
-                    self.execute_statement(&on_true)?;
+                    self.execute_statement(on_true)?;
                 } else {
-                    self.execute_statement(&on_false)?;
+                    self.execute_statement(on_false)?;
                 }
                 Ok(())
             }
