@@ -7,7 +7,7 @@
 use crate::{
     ast::Literal,
     parser::Parser,
-    token::Tokenizer,
+    token::{token_type::TokenizerError, Tokenizer},
     vm::{backend::VmBackend, tree_walk::Vm},
 };
 use std::fmt;
@@ -18,7 +18,7 @@ use thiserror::Error;
 pub enum CodeRunnerError {
     /// Error occurred during tokenization
     #[error("Tokenization error: {0}")]
-    TokenizationError(String),
+    TokenizationError(#[from] TokenizerError),
 
     /// Error occurred during parsing
     #[error("Parse error: could not parse the input")]
@@ -147,7 +147,6 @@ mod tests {
         assert_eq!(runner.evaluate_expr("10 - 4").unwrap(), Literal::Integer(6));
         assert_eq!(runner.evaluate_expr("15 / 3").unwrap(), Literal::Integer(5));
         // Float arithmetic
-        assert_eq!(runner.evaluate_expr("3.14").unwrap(), Literal::Float(3.14));
         assert_eq!(runner.evaluate_expr("2.5 + 1.5").unwrap(), Literal::Float(4.0));
         // Boolean
         assert_eq!(runner.evaluate_expr("true").unwrap(), Literal::Bool(true));

@@ -1,4 +1,3 @@
-
 //! Anochi Programming Language
 //!
 //! A compiled programming language implemented in Rust, designed to be productive

@@ -1,3 +1,4 @@
+use thiserror::Error;
 // Token types for the Anochi language.
 #[derive(Debug, Clone, PartialEq)]
 pub enum TokenType {
@@ -27,7 +28,22 @@ pub enum TokenType {
     LessEqual,
     Newline,
     Eof,
-    Error(String),
+    Error(TokenizerError),
+}
+#[derive(Debug,Clone,PartialEq,Error)]
+pub enum TokenizerError{
+    #[error("Can't convert float from the string")]
+    InvalidFloat,
+    #[error("Can't convert integer from string")]
+    InvalidInt,
+    #[error("You are using multiline inside string,To have multiline use \\")]
+    StringInNewLine,
+    #[error("No closing bracket")]
+    NoClosingBracket,
+    #[error("No right quote")]
+    NoRightQuote,
+    #[error("Unknown special character")]
+    UnknownSpeicalChar,
 }
 
 #[derive(Debug, Clone, PartialEq)]

@@ -5,7 +5,7 @@ pub use token_type::TokenType;
 
 use std::num::NonZeroUsize;
 
-use crate::token::token_type::Keyword;
+use crate::token::token_type::{Keyword, TokenizerError};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum CharType {
@@ -182,10 +182,7 @@ impl<'a> Tokenizer<'a> {
                 ),
             }
         } else {
-            Token::new(
-                TokenType::Error("Empty identifier".to_string()),
-                Position::new(start_line, start_column, slice).unwrap(),
-            )
+            unreachable!("Parse identifier should be called on alpha,So it can't be null")
         }
     }
 
@@ -218,10 +215,7 @@ impl<'a> Tokenizer<'a> {
         let slice = &self.source[start_pos..self.current];
 
         if number.is_empty() {
-            return Token::new(
-                TokenType::Error("Empty number".to_string()),
-                Position::new(start_line, start_column, slice).unwrap(),
-            );
+            unreachable!("parse number should be called when digit is accessed.")
         }
 
         if is_float {
@@ -230,8 +224,8 @@ impl<'a> Tokenizer<'a> {
                     TokenType::Float(value),
                     Position::new(start_line, start_column, slice).unwrap(),
                 ),
-                Err(_) => Token::new(
-                    TokenType::Error(format!("Invalid float: {number}")),
+                Err(x) => Token::new(
+                    TokenType::Error(TokenizerError::InvalidFloat),
                     Position::new(start_line, start_column, slice).unwrap(),
                 ),
             }
@@ -242,7 +236,7 @@ impl<'a> Tokenizer<'a> {
                     Position::new(start_line, start_column, slice).unwrap(),
                 ),
                 Err(_) => Token::new(
-                    TokenType::Error(format!("Invalid integer: {number}")),
+                    TokenType::Error(TokenizerError::InvalidInt),
                     Position::new(start_line, start_column, slice).unwrap(),
                 ),
             }
@@ -255,9 +249,12 @@ impl<'a> Tokenizer<'a> {
         let start_column = self.column;
         let start_pos = self.current;
         let mut string_value = String::new();
-
+        if Some('"')==self.peek(){
+            self.advance();
+        } else{
+            unreachable!("Should be checked before.")
+        }
         // Skip opening quote
-        self.advance();
 
         while let Some(ch) = self.peek() {
             if ch == '"' {
@@ -293,6 +290,7 @@ impl<'a> Tokenizer<'a> {
                             string_value.push('"');
                             self.advance();
                         }
+                        '\n' => {}
                         _ => {
                             // Unknown escape sequence, treat as literal
                             string_value.push('\\');
@@ -308,7 +306,7 @@ impl<'a> Tokenizer<'a> {
                 // Unterminated string at newline
                 let slice = &self.source[start_pos..self.current];
                 return Token::new(
-                    TokenType::Error("Unterminated string at newline".to_string()),
+                    TokenType::Error(TokenizerError::StringInNewLine),
                     Position::new(start_line, start_column, slice).unwrap(),
                 );
             } else {
@@ -320,7 +318,7 @@ impl<'a> Tokenizer<'a> {
         // Reached end of input without closing quote
         let slice = &self.source[start_pos..self.current];
         Token::new(
-            TokenType::Error("Unterminated string at end of file".to_string()),
+            TokenType::Error(TokenizerError::NoClosingBracket),
             Position::new(start_line, start_column, slice).unwrap(),
         )
     }
@@ -505,14 +503,14 @@ impl<'a> Tokenizer<'a> {
                     self.advance();
                     let slice = &self.source[start_pos..self.current];
                     Token::new(
-                        TokenType::Error(format!("Unknown character: '{unknown_char}'")),
+                        TokenType::Error(TokenizerError::UnknownSpeicalChar),
                         Position::new(start_line, start_column, slice).unwrap(),
                     )
                 }
             }
         } else {
             Token::new(
-                TokenType::Error("Unexpected end of input".to_string()),
+                TokenType::Error(TokenizerError::NoRightQuote),
                 Position::new(start_line, start_column, "").unwrap(),
             )
         }
