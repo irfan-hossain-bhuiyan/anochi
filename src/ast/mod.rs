@@ -321,7 +321,9 @@ pub enum Statement<'a> {
         on_true: Box<StatementNode<'a>>,
         on_false: Box<StatementNode<'a>>,
     },
-
+    Debug{
+        expression:Vec<ExpressionNode<'a>>,
+    }
 }
 pub type ExpressionNode<'a> = AstNode<'a, Expression<'a>>;
 pub type StatementNode<'a> = AstNode<'a, Statement<'a>>;
@@ -381,5 +383,8 @@ impl<'a> Statement<'a> {
             on_true: Box::new(on_true.into()),
             on_false: Box::new(on_false.into()),
         }
+    }
+    pub fn debug(expr_vec:Vec<ExpressionNode<'a>>)->Self{
+        Self::Debug { expression: expr_vec }
     }
 }

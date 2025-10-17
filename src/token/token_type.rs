@@ -56,6 +56,7 @@ pub enum Keyword {
     Not,
     True,
     False,
+    Debug,
 }
 
 impl std::convert::TryFrom<String> for Keyword {
@@ -71,6 +72,7 @@ impl std::convert::TryFrom<String> for Keyword {
             "false" => Ok(Keyword::False),
             "if" => Ok(Keyword::If),
             "else" => Ok(Keyword::Else),
+            "debug" => Ok(Keyword::Debug),
             _ => Err(()),
         }
     }
@@ -88,6 +90,7 @@ impl Keyword {
             Keyword::False => "false",
             Keyword::If => "if",
             Keyword::Else => "else",
+            Keyword::Debug => "debug",
         }
     }
 }

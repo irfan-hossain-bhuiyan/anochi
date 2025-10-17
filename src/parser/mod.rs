@@ -31,13 +31,9 @@ impl<'a, 'b: 'a> Parser<'a, 'b> {
         match self.peek_type().unwrap().clone() {
             TokenType::Identifier(x) => {
                 self.advance();
-                let _ = self
-                    .match_token(&TokenType::Equal)
-                    .map_err(|x| x.to_parser_error())?;
+                let _ = self.match_token_or_err(&TokenType::Equal)?;
                 let expr = self.parse_expression()?;
-                let _ = self
-                    .match_token(&TokenType::Semicolon)
-                    .map_err(|x| x.to_parser_error())?;
+                let _ = self.match_token_or_err(&TokenType::Semicolon)?;
                 Ok(Statement::assignment(x.to_string(), expr).into())
             }
             TokenType::LeftBrace => {
@@ -65,6 +61,19 @@ impl<'a, 'b: 'a> Parser<'a, 'b> {
                         Ok(Statement::if_else(expr, on_true, on_false).into())
                     }
                 }
+            }
+            TokenType::Keyword(Keyword::Debug) => {
+                self.advance();
+                let _=self.match_token_or_err(&TokenType::LeftParen)?;
+                let mut expr_vec=Vec::new();
+                while let Ok(x)=self.parse_expr(){
+                    expr_vec.push(x);
+                    if self.match_token(&TokenType::Comma).is_err(){
+                        break;
+                    }
+                }
+                let _=self.match_token_or_err(&TokenType::RightParen)?;
+                return Ok(Statement::debug(expr_vec).into());
             }
             _ => Err(StatementParseError::NoStatement.into()),
         }
@@ -222,6 +231,15 @@ impl<'a, 'b: 'a> Parser<'a, 'b> {
             return Ok(r#type);
         }
         Err(NoTokenFound::new(current_token_type.clone()))
+    }
+
+    /// Attempts to match a token and returns a ParserError on failure.
+    fn match_token_or_err(&mut self, r#type: &'static TokenType) -> Result<&'static TokenType, ParserError> {
+        self.match_token(r#type).map_err(|x| x.to_parser_error())
+    }
+    /// Attempts to match any of the given token types and returns a ParserError on failure.
+    fn match_tokens_or_err(&mut self, types: &'static [TokenType]) -> Result<&'static TokenType, ParserError> {
+        self.match_tokens(types).map_err(|x| x.to_parser_error())
     }
     fn check(&self, tt: &TokenType) -> bool {
         Some(tt) == self.peek_type()
