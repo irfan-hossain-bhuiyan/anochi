@@ -1,20 +1,20 @@
 mod parser_error;
-use parser_error::*;
 use crate::ast::{
-     BinaryOperator,  Expression, ExpressionNode, Statement, StatementNode, UnaryOperator,
+    BinaryOperator, Expression, ExpressionNode, Statement, StatementNode, UnaryOperator,
 };
 use crate::token::token_type::Keyword::{self, And, Or};
 use crate::token::{Token, TokenType};
+use parser_error::*;
 pub struct Parser<'a, 'b: 'a> {
     tokens: &'a [Token<'b>],
     current: usize,
     is_error: bool,
 }
 type ExpNode<'a> = ExpressionNode<'a>;
-type ReExpNode<'a> = Result<ExpNode<'a>,ParserError>;
+type ReExpNode<'a> = Result<ExpNode<'a>, ParserError>;
 type StatNode<'a> = StatementNode<'a>;
-type ReStatNode<'a> = Result<StatementNode<'a>,ParserError>;
-type MatchTokenResult = Result<&'static TokenType,NoTokenFound>;
+type ReStatNode<'a> = Result<StatementNode<'a>, ParserError>;
+type MatchTokenResult = Result<&'static TokenType, NoTokenFound>;
 impl<'a, 'b: 'a> Parser<'a, 'b> {
     // Logical OR: expr || expr
     fn parse_logical_or(&mut self) -> ReExpNode<'b> {
@@ -31,21 +31,25 @@ impl<'a, 'b: 'a> Parser<'a, 'b> {
         match self.peek_type().unwrap().clone() {
             TokenType::Identifier(x) => {
                 self.advance();
-                let _ = self.match_token(&TokenType::Equal).map_err(|x|x.to_parser_error())?;
+                let _ = self
+                    .match_token(&TokenType::Equal)
+                    .map_err(|x| x.to_parser_error())?;
                 let expr = self.parse_expression()?;
-                let _ = self.match_token(&TokenType::Semicolon).map_err(|x|x.to_parser_error())?;
+                let _ = self
+                    .match_token(&TokenType::Semicolon)
+                    .map_err(|x| x.to_parser_error())?;
                 Ok(Statement::assignment(x.to_string(), expr).into())
             }
             TokenType::LeftBrace => {
                 self.advance();
                 let mut statements = Vec::new();
                 loop {
-                    if self.match_token(&TokenType::RightBrace).is_ok(){
+                    if self.match_token(&TokenType::RightBrace).is_ok() {
                         break;
                     }
                     match self.parse_statement() {
-                        Ok(x)=>statements.push(x),
-                        err @ Err(_)=>return err,
+                        Ok(x) => statements.push(x),
+                        err @ Err(_) => return err,
                     }
                 }
                 Ok(Statement::statement_block(statements).into())
@@ -62,9 +66,7 @@ impl<'a, 'b: 'a> Parser<'a, 'b> {
                     }
                 }
             }
-            _=>{
-                Err(StatementParseError::NoStatement.into())
-            }
+            _ => Err(StatementParseError::NoStatement.into()),
         }
     }
     // Logical AND: expr && expr
@@ -115,7 +117,11 @@ impl<'a, 'b: 'a> Parser<'a, 'b> {
         Ok(node)
     }
     pub fn new(tokens: &'a [Token<'b>]) -> Self {
-        Parser { tokens, current: 0,is_error:false }
+        Parser {
+            tokens,
+            current: 0,
+            is_error: false,
+        }
     }
 
     pub fn parse_expression(&mut self) -> ReExpNode<'b> {
@@ -154,7 +160,7 @@ impl<'a, 'b: 'a> Parser<'a, 'b> {
 
     // Unary ::= ("+" | "-") Unary | Primary
     fn parse_unary(&mut self) -> ReExpNode<'b> {
-        let operator = match self.peek_type().ok_or(ParserError::NO_EXPN_FOUND)?{
+        let operator = match self.peek_type().ok_or(ParserError::NO_EXPN_FOUND)? {
             TokenType::Minus => UnaryOperator::Minus,
             TokenType::Keyword(Keyword::Not) => UnaryOperator::Not,
             _ => {
@@ -174,13 +180,16 @@ impl<'a, 'b: 'a> Parser<'a, 'b> {
                 let expr = self.parse_expression()?;
                 if let Some(TokenType::RightParen) = self.peek_type() {
                     self.advance(); // consume ')'
-                    return Ok(Expression::grouping(expr).into());
-                } else{
-                    Err(ParserError::expected_token_in_expression(TokenType::RightParen))
+                    Ok(Expression::grouping(expr).into())
+                } else {
+                    Err(ParserError::expected_token_in_expression(
+                        TokenType::RightParen,
+                    ))
                 }
             }
             any => {
-                let expression = Expression::from_token_type(any.clone()).ok_or(ParserError::NO_EXPN_FOUND)?;
+                let expression =
+                    Expression::from_token_type(any.clone()).ok_or(ParserError::NO_EXPN_FOUND)?;
                 self.advance();
                 Ok(expression.into())
             }
@@ -192,25 +201,27 @@ impl<'a, 'b: 'a> Parser<'a, 'b> {
         self.peek().map(|x| &x.token_type)
     }
 
-    fn match_tokens(&mut self, types: &'static [TokenType]) ->MatchTokenResult {
-        let Some(current_token_type)=self.peek_type() else{return Err(NoTokenFound::NoneToken);};
+    fn match_tokens(&mut self, types: &'static [TokenType]) -> MatchTokenResult {
+        let Some(current_token_type) = self.peek_type() else {
+            return Err(NoTokenFound::NoneToken);
+        };
         for tt in types.iter() {
-            if tt==current_token_type{
+            if tt == current_token_type {
                 self.advance();
-                return Ok(tt)
+                return Ok(tt);
             }
         }
         Err(NoTokenFound::new(current_token_type.clone()))
-        
     }
     fn match_token(&mut self, r#type: &'static TokenType) -> MatchTokenResult {
-        let Some(current_token_type)= self.peek_type() else{return Err(NoTokenFound::NoneToken)};
-        if current_token_type==r#type {
+        let Some(current_token_type) = self.peek_type() else {
+            return Err(NoTokenFound::NoneToken);
+        };
+        if current_token_type == r#type {
             self.advance();
             return Ok(r#type);
         }
         Err(NoTokenFound::new(current_token_type.clone()))
-
     }
     fn check(&self, tt: &TokenType) -> bool {
         Some(tt) == self.peek_type()
@@ -285,9 +296,11 @@ mod tests {
                 BinaryOperator::Greater,
                 Expression::integer(1),
             )),
-            Statement::statement_block(vec![
-                Statement::assignment("x".to_string(), Expression::integer(42)).into(),
-            ]),
+            Statement::statement_block(vec![Statement::assignment(
+                "x".to_string(),
+                Expression::integer(42),
+            )
+            .into()]),
         )
         .into();
         assert_eq!(parsed, expected);
@@ -314,24 +327,55 @@ mod tests {
         // Test arithmetic operators and precedence in one comprehensive test
         let test_cases = vec![
             // Basic arithmetic
-            ("1 + 2", Expression::binary(Expression::integer(1), BinaryOperator::Plus, Expression::integer(2))),
-            ("4 / 2", Expression::binary(Expression::integer(4), BinaryOperator::Divide, Expression::integer(2))),
+            (
+                "1 + 2",
+                Expression::binary(
+                    Expression::integer(1),
+                    BinaryOperator::Plus,
+                    Expression::integer(2),
+                ),
+            ),
+            (
+                "4 / 2",
+                Expression::binary(
+                    Expression::integer(4),
+                    BinaryOperator::Divide,
+                    Expression::integer(2),
+                ),
+            ),
             // Unary operations
-            ("-5", Expression::unary(UnaryOperator::Minus, Expression::integer(5))),
+            (
+                "-5",
+                Expression::unary(UnaryOperator::Minus, Expression::integer(5)),
+            ),
             // Float literals
             ("3.1", Expression::float(3.1)),
             // Precedence: multiplication before addition
-            ("1 + 2 * 3", Expression::binary(
-                Expression::integer(1),
-                BinaryOperator::Plus,
-                Expression::binary(Expression::integer(2), BinaryOperator::Multiply, Expression::integer(3))
-            )),
+            (
+                "1 + 2 * 3",
+                Expression::binary(
+                    Expression::integer(1),
+                    BinaryOperator::Plus,
+                    Expression::binary(
+                        Expression::integer(2),
+                        BinaryOperator::Multiply,
+                        Expression::integer(3),
+                    ),
+                ),
+            ),
             // Grouping overrides precedence
-            ("(1 + 2) * 3", Expression::binary(
-                Expression::grouping(Expression::binary(Expression::integer(1), BinaryOperator::Plus, Expression::integer(2))),
-                BinaryOperator::Multiply,
-                Expression::integer(3)
-            )),
+            (
+                "(1 + 2) * 3",
+                Expression::binary(
+                    Expression::grouping(Expression::binary(
+                        Expression::integer(1),
+                        BinaryOperator::Plus,
+                        Expression::integer(2),
+                    )),
+                    BinaryOperator::Multiply,
+                    Expression::integer(3),
+                ),
+            ),
         ];
 
         for (source, expected_expr) in test_cases {
