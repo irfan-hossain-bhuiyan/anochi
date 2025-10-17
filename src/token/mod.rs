@@ -94,10 +94,6 @@ impl<'a> Tokenizer<'a> {
                 }
             }
         }
-        self.tokens.push(Token::new(
-            TokenType::Eof,
-            Position::new(self.line, self.column, "").unwrap(),
-        ));
         self.tokens
     }
 
@@ -224,7 +220,8 @@ impl<'a> Tokenizer<'a> {
                     TokenType::Float(value),
                     Position::new(start_line, start_column, slice).unwrap(),
                 ),
-                Err(x) => Token::new(
+                Err(_x) =>
+                    Token::new(
                     TokenType::Error(TokenizerError::InvalidFloat),
                     Position::new(start_line, start_column, slice).unwrap(),
                 ),
@@ -499,7 +496,7 @@ impl<'a> Tokenizer<'a> {
                 }
                 _ => {
                     // Unknown special character, create an error token
-                    let unknown_char = ch;
+                    let _ = ch;
                     self.advance();
                     let slice = &self.source[start_pos..self.current];
                     Token::new(

@@ -118,13 +118,13 @@ impl<Backend: VmBackend> Vm<Backend> {
                 let left_val = self.evaluate_expr(left)?;
                 let right_val = self.evaluate_expr(right)?;
 
-                self.evaluate_binary_operation(&left_val, &operator, &right_val)
+                self.evaluate_binary_operation(&left_val, operator, &right_val)
             }
 
             Expression::Unary { operator, operand } => {
                 let operand_val = self.evaluate_expr(operand)?;
 
-                self.evaluate_unary_operation(&operator, &operand_val)
+                self.evaluate_unary_operation(operator, &operand_val)
             }
 
             Expression::Grouping { expression } => self.evaluate_expr(expression),

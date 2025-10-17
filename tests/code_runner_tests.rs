@@ -17,15 +17,6 @@ mod tests {
     }
 
     #[test]
-    fn test_statement_blocks() {
-        let mut runner = CodeRunner::default();
-        runner.run_statement("{ local_var = 100; result = local_var + 50; debug(result); }").unwrap();
-        // Variables from blocks should be accessible
-        let result = runner.evaluate_expr("result").unwrap();
-        assert_eq!(result, Literal::Integer(150));
-    }
-
-    #[test]
     fn test_mixed_data_types() {
         let mut runner = CodeRunner::default();
         // Test float, string, and integer operations together

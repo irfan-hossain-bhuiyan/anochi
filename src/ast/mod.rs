@@ -20,6 +20,16 @@ use crate::token::Position;
 use crate::token::token_type::Keyword::{False, True};
 use crate::token::token_type::TokenType;
 
+/// Trait for operators that can be matched from a TokenType.
+pub trait MatchOperator: Sized {
+    /// Tries to match a TokenType to this operator variant.
+    /// Returns Some(operator) if the token matches, None otherwise.
+    fn match_with(token_type: &TokenType) -> Option<Self>;
+    
+    /// Returns all TokenTypes that can match this operator type.
+    fn token_types() -> &'static [TokenType];
+}
+
 /// Represents different types of literal values in the AST.
 ///
 /// Literals are the most basic expressions, representing direct values
@@ -70,9 +80,7 @@ pub enum BinaryOperator {
     GreaterEqual,
 
     // Logical operators
-    /// Logical AND operator (`&&`)
     And,
-    /// Logical OR operator (`||`)
     Or,
 }
 
@@ -84,7 +92,7 @@ pub enum BinaryOperator {
 pub enum UnaryOperator {
     /// Arithmetic negation operator (`-`)
     Minus,
-    /// Logical NOT operator (`!`)
+    
     Not,
 }
 

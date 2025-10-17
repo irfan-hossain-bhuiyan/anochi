@@ -81,7 +81,7 @@ impl<Backend: VmBackend> CodeRunner<Backend> {
         }
         // Step 2: Parse tokens into AST
         let mut parser = Parser::new(&tokens);
-        if let Some(stmt_node) = parser.parse_statement() {
+        if let Ok(stmt_node) = parser.parse_statement() {
             // Step 3: Execute the statement
             self.vm.execute_statement(&stmt_node)?;
             return Ok(()); // Return unit type for statements
@@ -103,7 +103,7 @@ impl<Backend: VmBackend> CodeRunner<Backend> {
         }
         // Step 2: Parse tokens into AST
         let mut parser = Parser::new(&tokens);
-        if let Some(stmt_node) = parser.parse_expression() {
+        if let Ok(stmt_node) = parser.parse_expression() {
             // Step 3: Execute the statement
             let value=self.vm.evaluate_expr(&stmt_node)?;
             return Ok(value); // Return unit type for statements

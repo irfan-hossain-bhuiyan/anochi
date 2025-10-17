@@ -27,7 +27,6 @@ pub enum TokenType {
     Less,
     LessEqual,
     Newline,
-    Eof,
     Error(TokenizerError),
 }
 #[derive(Debug,Clone,PartialEq,Error)]
