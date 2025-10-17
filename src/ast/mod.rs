@@ -322,7 +322,7 @@ pub enum Statement<'a> {
         on_false: Box<StatementNode<'a>>,
     },
     Debug{
-        expression:Vec<ExpressionNode<'a>>,
+        expr_vec:Vec<ExpressionNode<'a>>,
     }
 }
 pub type ExpressionNode<'a> = AstNode<'a, Expression<'a>>;
@@ -385,6 +385,6 @@ impl<'a> Statement<'a> {
         }
     }
     pub fn debug(expr_vec:Vec<ExpressionNode<'a>>)->Self{
-        Self::Debug { expression: expr_vec }
+        Self::Debug { expr_vec: expr_vec }
     }
 }

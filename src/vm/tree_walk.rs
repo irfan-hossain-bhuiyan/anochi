@@ -19,7 +19,7 @@ use std::collections::HashMap;
 
 use crate::{
     ast::{
-        BinaryOperator, Expression, ExpressionNode, Identifier, Literal, Statement, StatementNode,
+        AstNode, BinaryOperator, Expression, ExpressionNode, Identifier, Literal, Statement, StatementNode,
         UnaryOperator,
     },
     vm::backend::{IoBackend, VmBackend},
@@ -168,6 +168,13 @@ impl<Backend: VmBackend> Vm<Backend> {
                 }
                 Ok(())
             }
+            Statement::Debug { expr_vec }=>{
+                for expr in expr_vec.iter(){
+                    let expr=self.evaluate_expr(expr)?;
+                    self.backend.debug_print(&expr.to_string()).unwrap();
+                }
+                Ok(())
+            }   
         }
     }
 
@@ -372,3 +379,105 @@ mod tests {
         assert_eq!(type_result, Err(VmError::TypeMismatch));
     }
 }
+     #[test]
+     fn test_debug_statement_single_value() {
+         use crate::vm::backend::TestBackend;
+         let backend = TestBackend::new();
+         let mut vm: Vm<TestBackend> = Vm::new(backend);
+         
+         // Create a debug statement with a single integer expression
+         let expr = AstNode::new_temp(Expression::integer(42));
+         let debug_stmt = AstNode::new_temp(Statement::debug(vec![expr]));
+         
+         // Execute the debug statement
+         vm.execute_statement(&debug_stmt).unwrap();
+         
+         // Verify the debug output
+         let debug_output = vm.backend.get_debug_output();
+         assert_eq!(debug_output, "42");
+     }
+
+     #[test]
+     fn test_debug_statement_multiple_values() {
+         use crate::vm::backend::TestBackend;
+         let backend = TestBackend::new();
+         let mut vm: Vm<TestBackend> = Vm::new(backend);
+         
+         // Create a debug statement with multiple expressions
+         let expr1 = AstNode::new_temp(Expression::integer(100));
+         let expr2 = AstNode::new_temp(Expression::float(3.14));
+         let expr3 = AstNode::new_temp(Expression::string("hello".to_string()));
+         
+         let debug_stmt = AstNode::new_temp(Statement::debug(vec![expr1, expr2, expr3]));
+         
+         // Execute the debug statement
+         vm.execute_statement(&debug_stmt).unwrap();
+         
+         // Verify the debug output
+         let debug_output = vm.backend.get_debug_output();
+         assert_eq!(debug_output, "100\n3.14\n\"hello\"");
+     }
+
+     #[test]
+     fn test_debug_statement_with_expressions() {
+         use crate::vm::backend::TestBackend;
+         let backend = TestBackend::new();
+         let mut vm: Vm<TestBackend> = Vm::new(backend);
+         
+         // Create a debug statement with arithmetic expression: 5 + 3
+         let expr = Expression::binary(Expression::integer(5), BinaryOperator::Plus, Expression::integer(3));
+         let expr_node = AstNode::new_temp(expr);
+         let debug_stmt = AstNode::new_temp(Statement::debug(vec![expr_node]));
+         
+         // Execute the debug statement
+         vm.execute_statement(&debug_stmt).unwrap();
+         
+         // Verify the debug output shows the evaluated result
+         let debug_output = vm.backend.get_debug_output();
+         assert_eq!(debug_output, "8");
+     }
+
+     #[test]
+     fn test_debug_statement_with_variables() {
+         use crate::vm::backend::TestBackend;
+         let backend = TestBackend::new();
+         let mut vm: Vm<TestBackend> = Vm::new(backend);
+         
+         // First, assign a value to a variable
+         let assign_stmt = AstNode::new_temp(Statement::assignment(
+             "x".to_string(),
+             Expression::integer(42),
+         ));
+         vm.execute_statement(&assign_stmt).unwrap();
+         
+         // Then debug print the variable
+         let var_expr = AstNode::new_temp(Expression::identifier("x".to_string()));
+         let debug_stmt = AstNode::new_temp(Statement::debug(vec![var_expr]));
+         vm.execute_statement(&debug_stmt).unwrap();
+         
+         // Verify the debug output shows the variable value
+         let debug_output = vm.backend.get_debug_output();
+         assert_eq!(debug_output, "42");
+     }
+
+     #[test]
+     fn test_debug_statement_boolean_values() {
+         use crate::vm::backend::TestBackend;
+         let backend = TestBackend::new();
+         let mut vm: Vm<TestBackend> = Vm::new(backend);
+         
+         // Create a debug statement with boolean expressions
+         let true_expr = AstNode::new_temp(Expression::bool(true));
+         let false_expr = AstNode::new_temp(Expression::bool(false));
+         let comparison = Expression::binary(Expression::integer(5), BinaryOperator::Greater, Expression::integer(3));
+         let comp_expr = AstNode::new_temp(comparison);
+         
+         let debug_stmt = AstNode::new_temp(Statement::debug(vec![true_expr, false_expr, comp_expr]));
+         
+         // Execute the debug statement
+         vm.execute_statement(&debug_stmt).unwrap();
+         
+         // Verify the debug output
+         let debug_output = vm.backend.get_debug_output();
+         assert_eq!(debug_output, "true\nfalse\ntrue");
+     }

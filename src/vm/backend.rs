@@ -326,4 +326,51 @@ mod tests {
         Ok(())
     }
     
+     #[test]
+     fn test_debug_backend_debug_print() {
+         let mut backend = TestBackend::new();
+         
+         // Test single debug print
+         backend.debug_print("Debug value: 42").unwrap();
+         assert_eq!(backend.get_debug_output(), "Debug value: 42");
+         
+         // Test multiple debug prints
+         backend.debug_print("Second debug").unwrap();
+         assert_eq!(backend.get_debug_output(), "Debug value: 42\nSecond debug");
+         
+         // Test clearing output
+         backend.clear();
+         assert_eq!(backend.get_debug_output(), "");
+     }
+
+     #[test]
+     fn test_debug_backend_disabled() {
+         let mut backend = TestBackend::new();
+         backend.debug_enabled = false;
+         
+         // When debug is disabled, output should not be captured
+         backend.debug_print("This should not appear").unwrap();
+         assert_eq!(backend.get_debug_output(), "");
+         
+         // Enable debug and verify it works
+         backend.debug_enabled = true;
+         backend.debug_print("This should appear").unwrap();
+         assert_eq!(backend.get_debug_output(), "This should appear");
+     }
+
+     #[test]
+     fn test_debug_backend_mixed_output() {
+         let mut backend = TestBackend::new();
+         
+         // Mix debug, regular output, and error output
+         backend.debug_print("debug info").unwrap();
+         backend.print("regular output").unwrap();
+         backend.print_error("error message").unwrap();
+         backend.debug_print("more debug").unwrap();
+         
+         // Verify each output type is captured separately
+         assert_eq!(backend.get_debug_output(), "debug info\nmore debug");
+         assert_eq!(backend.get_output(), "regular output");
+         assert_eq!(backend.get_error_output(), "error message");
+     }
 }
