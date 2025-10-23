@@ -6,9 +6,9 @@
 //! - Type container for managing types and name resolution
 //! - Variable identifier aliasing
 
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use crate::prelude::HashCons;
 use crate::{ast::Identifier, prelude::HashPtr};
-use std::collections::HashSet;
+use std::collections::{BTreeMap, BTreeSet};
 /// Represents primitive types that are built into the type system.
 /// These types are pre-registered in the TypeContainer and cannot be user-defined.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -24,16 +24,16 @@ pub enum BuiltinKind {
 }
 type TypeId = HashPtr<TypeDefinition>;
 /// Type definition representing the structure of a type.
-/// 
+///
 /// Supports both product types (structs with named fields) and sum types
 /// (enums with variants). In the future, function types may be added.
-/// 
+///
 /// Product types use HashMap<Identifier, TypeId> to map field names to their types,
 /// preventing field name duplication.
-/// 
+///
 /// Sum types use HashSet<TypeId> to store variant types,
 /// preventing type duplication across variants.
-#[derive(Debug, Clone, PartialEq, Eq,Hash)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TypeDefinition {
     /// Product type: a collection of named fields (struct-like).
     /// Fields are stored as a HashMap mapping field names to their types.
@@ -50,7 +50,7 @@ pub enum TypeDefinition {
     /// Built-in type: a primitive type provided by the language.
     Builtin(BuiltinKind),
 }
-
+pub type TypeContainer = HashCons<TypeDefinition>;
 impl TypeDefinition {
     /// Creates a new product type (struct).
     pub fn product(fields: BTreeMap<Identifier, TypeId>) -> Self {
@@ -86,8 +86,3 @@ impl TypeDefinition {
         }
     }
 }
-
-
-
-
-
