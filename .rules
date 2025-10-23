@@ -1,5 +1,7 @@
 1. Always write on code style,on how the code is written in file.
-2. Follow rust format convention.
-3. Always implement small code,Keep it simple,With minimal testing,As the implmemtation of the code will change frequently.
+2. Follow the official language format convention of that language.
+3. Always implement small code,Keep it simple,With minimal testing or no testing
+,As the implmemtation of the code will change frequently.
 4. Keep the code as modular as possible.
 5. Always ask on what I wanna do,then do it,other than jumping around writing test.
+6. When giving diff,give the line before and after it,so the diff tool can verify the changes.

@@ -10,6 +10,8 @@ pub mod token;
 pub mod vm;
 pub mod parser;
 pub mod code_runner;
+pub mod typing;
+pub mod prelude;
 
 pub use token::{Token, TokenType, Tokenizer};
 pub use code_runner::CodeRunner;
