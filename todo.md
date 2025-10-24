@@ -9,7 +9,13 @@
     - Add debug statement for rust
     - Added a type system,type container
 ## Doing:
-    - Add struct based type in Literal,where I can create (x=10,y=10),
+    - Add struct based type in Literal,where I can create {x=10,y=10},
+        Now I am in a confused do I use first bracket or seacnd bracket,If I am using
+        first bracket it can be confused with grouping
+        If I am using third bracket It won't be hard to parse,As there is no expression that use third bracket,
+            A question than arise,like what about if I wanna add x=if(x) y else z,Let's not think about that,It also need to if to
+            take expression as input,Which I not doing,Let's think about it later.
+        So that's why I am using third bracket
        
 ## Todo:
     - change assignment to other than like Identifier = Identifer convert to Expression=Expression,and I can do something like a.x=10;
@@ -19,6 +25,17 @@
     - Change the ast to encompass it,to know what kind of assignment is this 
     - Add Option<TypeDefination>,int eh assignment ast,To do static type checking,
         - I need to transfer the ast as mut,in typechecker function,which will update the necessary types in there
+
+## QnA:
+> Why use third bracket for statement,not first bracket?
+Add struct based type in Literal,where I can create {x=10,y=10},
+        Now I am in a confused do I use first bracket or seacnd bracket,If I am using
+        first bracket it can be confused with grouping
+        If I am using third bracket It won't be hard to parse,As there is no expression that use third bracket,
+            A question than arise,like what about if I wanna add x=if(x) y else z,Let's not think about that,It also need to if to
+            take expression as input,Which I not doing,Let's think about it later.
+        So that's why I am using third bracket
+
 ## Ideas:
     Every objects are global,localization is in the name,the name is connected to a scope,or a path.
     All the type that get created,It will work like python,the typeId will be pushed to the hashmap,Now there are 2 problem,

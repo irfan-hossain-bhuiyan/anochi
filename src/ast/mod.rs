@@ -12,7 +12,8 @@
 //! - **Literal expressions**: Direct values (numbers, strings, identifiers)
 //! - **Grouping expressions**: Parenthesized expressions for precedence control
 
-use std::fmt;
+use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::{self};
 
 pub type Identifier = String;
 
@@ -45,6 +46,7 @@ pub enum Literal {
     /// Identifier (variable name, function name, etc.)
     Identifier(Identifier),
     Bool(bool),
+    Product(BTreeMap<Identifier,Literal>),
 }
 
 /// Binary operators for expressions that operate on two operands.
@@ -138,6 +140,7 @@ impl fmt::Display for Literal {
             Literal::String(s) => write!(f, "\"{s}\""),
             Literal::Identifier(id) => write!(f, "{id}"),
             Literal::Bool(b) => write!(f, "{b}"),
+            Literal::Product(p) => write!(f,"Product{p:?}"),
         }
     }
 
