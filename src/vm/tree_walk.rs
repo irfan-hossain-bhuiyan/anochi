@@ -15,11 +15,11 @@
 //! # Example
 //!
 
-use std::collections::HashMap;
-
+use std::{collections::HashMap, fmt::Display};
+mod VmValueOperation;
 use crate::{
     ast::{
-        AstNode, BinaryOperator, Expression, ExpressionNode, Identifier, Literal, Statement, StatementNode,
+        BinaryOperator, Expression, ExpressionNode, Identifier, Literal, Statement, StatementNode,
         UnaryOperator,
     },
     vm::backend::{IoBackend, VmBackend},
@@ -43,9 +43,31 @@ pub enum VmError {
     #[error("Invalid operation: {0}")]
     InvalidOperation(String),
 }
+#[derive(Debug,Clone,PartialEq)]
+pub enum VmValue{
+    Literal(Literal),
+    Product(HashMap<Identifier,VmValue>),
+}
+impl Display for VmValue{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self{
+            Self::Literal(x)=>Display::fmt(x, f),
+            Self::Product(x)=>write!(f,"Product{x:?}"),
+        }
+    }
+}
+
+impl From<Literal> for VmValue {
+    fn from(v: Literal) -> Self {
+        Self::Literal(v)
+    }
+}
+
+
 
 /// Result type for VM evaluation operations.
-pub type VmResult = Result<Literal, VmError>;
+pub type VmResult = Result<VmValue, VmError>;
+
 
 /// Virtual Machine for evaluating expressions.
 ///
@@ -57,12 +79,13 @@ pub type VmResult = Result<Literal, VmError>;
 ///
 ///
 #[derive(Debug, Default)]
-pub struct Vm<Backend: VmBackend = IoBackend> {
-    variable: HashMap<Identifier, Literal>,
+pub struct Vm<Backend= IoBackend> {
+    variable: HashMap<Identifier, VmValue>,
     backend: Backend,
 }
 type ExpNode<'a> = ExpressionNode<'a>;
 type StmtNode<'a> = StatementNode<'a>;
+
 impl<Backend: VmBackend> Vm<Backend> {
     pub fn new(backend: Backend) -> Self {
         Self {
@@ -106,7 +129,7 @@ impl<Backend: VmBackend> Vm<Backend> {
                     .cloned()
                     .ok_or(VmError::UndefinedIdentifier(format!("{x} doesn't exist."))),
                 Literal::Bool(_) | Literal::Float(_) | Literal::String(_) | Literal::Integer(_) => {
-                    Ok(literal.clone())
+                    Ok(literal.clone().into())
                 }
             },
 
@@ -118,13 +141,12 @@ impl<Backend: VmBackend> Vm<Backend> {
                 let left_val = self.evaluate_expr(left)?;
                 let right_val = self.evaluate_expr(right)?;
 
-                self.evaluate_binary_operation(&left_val, operator, &right_val)
+                VmValueOperation::evaluate_binary_op(&left_val, operator, &right_val)
             }
 
             Expression::Unary { operator, operand } => {
                 let operand_val = self.evaluate_expr(operand)?;
-
-                self.evaluate_unary_operation(operator, &operand_val)
+                VmValueOperation::evaluate_unary_op(operator, &operand_val)
             }
 
             Expression::Grouping { expression } => self.evaluate_expr(expression),
@@ -145,7 +167,7 @@ impl<Backend: VmBackend> Vm<Backend> {
                 Ok(())
             }
             Statement::If { condition, on_true } => {
-                let Literal::Bool(x) = self.evaluate_expr(condition)? else {
+                let VmValue::Literal(Literal::Bool(x)) = self.evaluate_expr(condition)? else {
                     return Err(VmError::TypeMismatch);
                 };
                 if x {
@@ -158,7 +180,7 @@ impl<Backend: VmBackend> Vm<Backend> {
                 on_true,
                 on_false,
             } => {
-                let Literal::Bool(x) = self.evaluate_expr(condition)? else {
+                let VmValue::Literal(Literal::Bool(x)) = self.evaluate_expr(condition)? else {
                     return Err(VmError::TypeMismatch);
                 };
                 if x {
@@ -178,134 +200,12 @@ impl<Backend: VmBackend> Vm<Backend> {
         }
     }
 
-    /// Evaluates a binary operation between two literals.
-    ///
-    /// Handles arithmetic, comparison, and logical operations with type coercion
-    /// between integers and floats when necessary.
-    ///
-    /// # Arguments
-    ///
-    /// * `left` - The left operand literal
-    /// * `operator` - The binary operator
-    /// * `right` - The right operand literal
-    ///
-    /// # Returns
-    ///
-    /// A `VmResult` containing the computed result or an error.
-    fn evaluate_binary_operation(
-        &self,
-        left: &Literal,
-        operator: &BinaryOperator,
-        right: &Literal,
-    ) -> VmResult {
-        match (left, right) {
-            // Bool operations
-            (Literal::Bool(l), Literal::Bool(r)) => match operator {
-                BinaryOperator::Equal => Ok(Literal::Bool(l == r)),
-                BinaryOperator::NotEqual => Ok(Literal::Bool(l != r)),
-                BinaryOperator::And => Ok(Literal::Bool(*l && *r)),
-                BinaryOperator::Or => Ok(Literal::Bool(*l || *r)),
-                BinaryOperator::Less => Ok(Literal::Bool(!*l && *r)), // false < true
-                BinaryOperator::LessEqual => Ok(Literal::Bool(!*l || *r)), // false <= true, true <= true
-                BinaryOperator::Greater => Ok(Literal::Bool(*l && !*r)),   // true > false
-                BinaryOperator::GreaterEqual => Ok(Literal::Bool(*l || !*r)), // true >= false, true >= true
-                _ => Err(VmError::InvalidOperation(format!(
-                    "Cannot apply {operator:?} to Bool"
-                ))),
-            },
-            // Integer operations
-            (Literal::Integer(l), Literal::Integer(r)) => match operator {
-                BinaryOperator::Plus => Ok(Literal::Integer(l + r)),
-                BinaryOperator::Minus => Ok(Literal::Integer(l - r)),
-                BinaryOperator::Multiply => Ok(Literal::Integer(l * r)),
-                BinaryOperator::Divide => {
-                    if *r == 0 {
-                        Err(VmError::DivisionByZero)
-                    } else {
-                        Ok(Literal::Integer(l / r))
-                    }
-                }
-                BinaryOperator::Modulo => {
-                    if *r == 0 {
-                        Err(VmError::DivisionByZero)
-                    } else {
-                        Ok(Literal::Integer(l % r))
-                    }
-                }
-                BinaryOperator::Equal => Ok(Literal::Bool(l == r)),
-                BinaryOperator::NotEqual => Ok(Literal::Bool(l != r)),
-                BinaryOperator::Less => Ok(Literal::Bool(l < r)),
-                BinaryOperator::LessEqual => Ok(Literal::Bool(l <= r)),
-                BinaryOperator::Greater => Ok(Literal::Bool(l > r)),
-                BinaryOperator::GreaterEqual => Ok(Literal::Bool(l >= r)),
-                _ => Err(VmError::InvalidOperation(format!(
-                    "Cannot apply {operator:?} to integer"
-                ))),
-            },
-
-            // Float operations
-            (Literal::Float(l), Literal::Float(r)) => match operator {
-                BinaryOperator::Plus => Ok(Literal::Float(l + r)),
-                BinaryOperator::Minus => Ok(Literal::Float(l - r)),
-                BinaryOperator::Multiply => Ok(Literal::Float(l * r)),
-                BinaryOperator::Divide => {
-                    if *r == 0.0 {
-                        Err(VmError::DivisionByZero)
-                    } else {
-                        Ok(Literal::Float(l / r))
-                    }
-                }
-                BinaryOperator::Modulo => {
-                    if *r == 0.0 {
-                        Err(VmError::DivisionByZero)
-                    } else {
-                        Ok(Literal::Float(l % r))
-                    }
-                }
-                BinaryOperator::Equal => Ok(Literal::Bool((l - r).abs() < f64::EPSILON)),
-                BinaryOperator::NotEqual => Ok(Literal::Bool((l - r).abs() >= f64::EPSILON)),
-                BinaryOperator::Less => Ok(Literal::Bool(l < r)),
-                BinaryOperator::LessEqual => Ok(Literal::Bool(l <= r)),
-                BinaryOperator::Greater => Ok(Literal::Bool(l > r)),
-                BinaryOperator::GreaterEqual => Ok(Literal::Bool(l >= r)),
-                _ => Err(VmError::InvalidOperation(format!(
-                    "Cannot apply {operator:?} to integer"
-                ))),
-            },
-
-            // Type mismatch for other combinations
-            _ => Err(VmError::TypeMismatch),
-        }
-    }
-
-    /// Evaluates a unary operation on a literal.
-    ///
-    /// Handles negation and logical NOT operations on numeric values.
-    ///
-    /// # Arguments
-    ///
-    /// * `operator` - The unary operator
-    /// * `operand` - The operand literal
-    ///
-    /// # Returns
-    ///
-    /// A `VmResult` containing the computed result or an error.
-    fn evaluate_unary_operation(&self, operator: &UnaryOperator, operand: &Literal) -> VmResult {
-        match (operator, operand) {
-            (UnaryOperator::Minus, Literal::Integer(i)) => Ok(Literal::Integer(-i)),
-            (UnaryOperator::Minus, Literal::Float(f)) => Ok(Literal::Float(-f)),
-            (UnaryOperator::Not, Literal::Bool(b)) => Ok(Literal::Bool(!b)),
-            _ => Err(VmError::InvalidOperation(format!(
-                "Cannot apply {operator:?} to {operand:?}",
-            ))),
-        }
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::{AstNode, BinaryOperator, Expression, UnaryOperator};
+    use crate::ast::{AstNode, BinaryOperator, Expression, UnaryOperator, Statement};
 
     #[test]
     fn test_vm_comprehensive_operations() {
@@ -314,37 +214,37 @@ mod tests {
         // Test integer literal
         let integer = AstNode::new_temp(Expression::integer(42));
         let result = vm.evaluate_expr(&integer).unwrap();
-        assert_eq!(result, Literal::Integer(42));
+        assert_eq!(result, VmValue::Literal(Literal::Integer(42)));
 
         // Test binary expression: 5 + 3
         let expr = Expression::binary(Expression::integer(5), BinaryOperator::Plus, Expression::integer(3));
         let expr_node = AstNode::new_temp(expr);
         let result = vm.evaluate_expr(&expr_node).unwrap();
-        assert_eq!(result, Literal::Integer(8));
+        assert_eq!(result, VmValue::Literal(Literal::Integer(8)));
 
         // Test unary expression: -42
         let unary_expr = Expression::unary(UnaryOperator::Minus, Expression::integer(42));
         let unary_expr_node = AstNode::new_temp(unary_expr);
         let result = vm.evaluate_expr(&unary_expr_node).unwrap();
-        assert_eq!(result, Literal::Integer(-42));
+        assert_eq!(result, VmValue::Literal(Literal::Integer(-42)));
         
         // Test boolean operations: true && false
         let bool_expr = Expression::binary(Expression::bool(true), BinaryOperator::And, Expression::bool(false));
         let bool_node = AstNode::new_temp(bool_expr);
         let result = vm.evaluate_expr(&bool_node).unwrap();
-        assert_eq!(result, Literal::Bool(false));
+        assert_eq!(result, VmValue::Literal(Literal::Bool(false)));
         
         // Test NOT operation: !true = false
         let not_expr = Expression::unary(UnaryOperator::Not, Expression::bool(true));
         let not_node = AstNode::new_temp(not_expr);
         let result = vm.evaluate_expr(&not_node).unwrap();
-        assert_eq!(result, Literal::Bool(false));
+        assert_eq!(result, VmValue::Literal(Literal::Bool(false)));
         
         // Test comparison: 5 > 3
         let comp_expr = Expression::binary(Expression::integer(5), BinaryOperator::Greater, Expression::integer(3));
         let comp_node = AstNode::new_temp(comp_expr);
         let result = vm.evaluate_expr(&comp_node).unwrap();
-        assert_eq!(result, Literal::Bool(true));
+        assert_eq!(result, VmValue::Literal(Literal::Bool(true)));
 
         // Test complex expression: (2 + 3) * 4 - 1 = 19
         let inner = Expression::binary(Expression::integer(2), BinaryOperator::Plus, Expression::integer(3));
@@ -353,7 +253,7 @@ mod tests {
         let final_expr = Expression::binary(multiplied, BinaryOperator::Minus, Expression::integer(1));
         let final_expr_node = AstNode::new_temp(final_expr);
         let result = vm.evaluate_expr(&final_expr_node).unwrap();
-        assert_eq!(result, Literal::Integer(19));
+        assert_eq!(result, VmValue::Literal(Literal::Integer(19)));
     }
 
     #[test]
@@ -378,9 +278,9 @@ mod tests {
         let type_result = vm.evaluate_expr(&type_mismatch_node);
         assert_eq!(type_result, Err(VmError::TypeMismatch));
     }
-}
-     #[test]
-     fn test_debug_statement_single_value() {
+
+    #[test]
+    fn test_debug_statement_single_value() {
          use crate::vm::backend::TestBackend;
          let backend = TestBackend::new();
          let mut vm: Vm<TestBackend> = Vm::new(backend);
@@ -481,3 +381,4 @@ mod tests {
          let debug_output = vm.backend.get_debug_output();
          assert_eq!(debug_output, "true\nfalse\ntrue");
      }
+}

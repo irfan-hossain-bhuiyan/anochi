@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
     use anochi::ast::{AstNode, Expression, Statement, BinaryOperator, Literal};
-    use anochi::vm::tree_walk::Vm;
+    use anochi::vm::tree_walk::{Vm, VmValue};
     use anochi::vm::backend::IoBackend;
 
     #[test]
@@ -39,7 +39,7 @@ mod tests {
         );
 
         let result = vm.evaluate_expr(&AstNode::new_temp(expr)).unwrap();
-        assert_eq!(result, Literal::Integer(90)); // (10 + 20) * 30 / 10 = 90
+        assert_eq!(result, VmValue::Literal(Literal::Integer(90))); // (10 + 20) * 30 / 10 = 90
     }
 
     #[test]
@@ -53,7 +53,7 @@ mod tests {
             Expression::bool(false)
         );
         let result = vm.evaluate_expr(&AstNode::new_temp(and_expr)).unwrap();
-        assert_eq!(result, Literal::Bool(false));
+        assert_eq!(result, VmValue::Literal(Literal::Bool(false)));
 
         // Test float operations
         let div_expr = Expression::binary(
@@ -62,7 +62,7 @@ mod tests {
             Expression::float(2.0)
         );
         let result = vm.evaluate_expr(&AstNode::new_temp(div_expr)).unwrap();
-        assert_eq!(result, Literal::Float(5.0));
+        assert_eq!(result, VmValue::Literal(Literal::Float(5.0)));
 
         // Test comparison operations
         let gt_expr = Expression::binary(
@@ -71,12 +71,12 @@ mod tests {
             Expression::integer(5)
         );
         let result = vm.evaluate_expr(&AstNode::new_temp(gt_expr)).unwrap();
-        assert_eq!(result, Literal::Bool(true));
+        assert_eq!(result, VmValue::Literal(Literal::Bool(true)));
 
         // Test string literals
         let string_expr = Expression::string("Hello, World!".to_string());
         let result = vm.evaluate_expr(&AstNode::new_temp(string_expr)).unwrap();
-        assert_eq!(result, Literal::String("Hello, World!".to_string()));
+        assert_eq!(result, VmValue::Literal(Literal::String("Hello, World!".to_string())));
     }
 
     #[test]

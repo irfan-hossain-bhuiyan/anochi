@@ -106,7 +106,14 @@ impl<Backend: VmBackend> CodeRunner<Backend> {
         if let Ok(stmt_node) = parser.parse_expression() {
             // Step 3: Execute the statement
             let value=self.vm.evaluate_expr(&stmt_node)?;
-            return Ok(value); // Return unit type for statements
+            match value {
+                crate::vm::tree_walk::VmValue::Literal(literal) => return Ok(literal),
+                crate::vm::tree_walk::VmValue::Product(_) => {
+                    return Err(CodeRunnerError::RuntimeError(
+                        crate::vm::tree_walk::VmError::InvalidOperation("Cannot return Product type from expression evaluation".to_string())
+                    ))
+                }
+            }
         }
 
         // If both fail, return parse error
