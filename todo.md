@@ -9,8 +9,13 @@
     - Add debug statement for rust
     - Added a type system,type container
 ## Doing:
-    - Add struct based type in VmValue(also name it object value),where I can create {x=10,y=10},
-         - Chnaging Literal type to VmType 
+
+- [x] Add struct based type in VmValue(also name it object value),where I can create {x=10,y=10},
+    - [x] Changing Literal type to VmType 
+    - [x] Adding Ast for struct type
+    - [ ] Adding parser for the ast that is a expression
+    - [ ] So when evaluating the ast,it will convert it to the vm
+
 ## Todo:
     - change assignment to other than like Identifier = Identifer convert to Expression=Expression,and I can do something like a.x=10;
     - Add the orginal typedefination,other than having ref,maybe not(This decision is pending)

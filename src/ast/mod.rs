@@ -12,14 +12,17 @@
 //! - **Literal expressions**: Direct values (numbers, strings, identifiers)
 //! - **Grouping expressions**: Parenthesized expressions for precedence control
 
-use std::collections::{BTreeMap, BTreeSet};
-use std::fmt::{self, Display};
+use std::collections::HashMap;
+use std::fmt::{self};
 
 pub type Identifier = String;
-
+pub type IdentifierMap<T>=HashMap<Identifier,T>;
+pub type IdentifierToValue=IdentifierMap<VmValue>;
+pub type IdentifierToExpression<'a>=IdentifierMap<ExpressionNode<'a>>;
 use crate::token::Position;
 use crate::token::token_type::Keyword::{False, True};
 use crate::token::token_type::TokenType;
+use crate::vm::tree_walk::VmValue;
 
 /// Trait for operators that can be matched from a TokenType.
 pub trait MatchOperator: Sized {
@@ -130,6 +133,9 @@ pub enum Expression<'a> {
         /// The expression inside the parentheses
         expression: Box<ExpressionNode<'a>>,
     },
+    Product {
+        data: IdentifierToExpression<'a>,
+    }
 }
 
 impl fmt::Display for Literal {
@@ -190,7 +196,9 @@ impl<'a> Expression<'a> {
     pub fn integer(value: i64) -> Self {
         Expression::Literal(Literal::Integer(value))
     }
-
+    pub fn product(value:IdentifierToExpression<'a>)->Self{
+        Expression::Product { data: value }
+    }
     /// Creates a new literal float expression.
     ///
     /// # Arguments

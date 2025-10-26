@@ -73,7 +73,7 @@ impl<'a, 'b: 'a> Parser<'a, 'b> {
                     }
                 }
                 let _=self.match_token_or_err(&TokenType::RightParen)?;
-                return Ok(Statement::debug(expr_vec).into());
+                Ok(Statement::debug(expr_vec).into())
             }
             _ => Err(StatementParseError::NoStatement.into()),
         }
@@ -180,7 +180,10 @@ impl<'a, 'b: 'a> Parser<'a, 'b> {
         let operand = self.parse_unary()?;
         Ok(Expression::unary(operator, operand).into())
     }
-
+    fn parse_struct_value(&mut self) -> ReExpNode<'b>{
+        self.match_token_or_err(&TokenType::LeftBrace)?;
+        let identifier=self.match_token_or_err(&TokenType::Identifier(_))?;
+    }
     // Primary ::= Integer | Float | Identifier | "(" Expr ")"
     fn parse_primary(&mut self) -> ReExpNode<'b> {
         match self.peek_type().ok_or(ParserError::NO_EXPN_FOUND)? {

@@ -16,7 +16,7 @@
 //!
 
 use std::{collections::HashMap, fmt::Display};
-mod VmValueOperation;
+mod vm_value_operation;
 use crate::{
     ast::{
         BinaryOperator, Expression, ExpressionNode, Identifier, Literal, Statement, StatementNode,
@@ -62,13 +62,8 @@ impl From<Literal> for VmValue {
         Self::Literal(v)
     }
 }
-
-
-
 /// Result type for VM evaluation operations.
 pub type VmResult = Result<VmValue, VmError>;
-
-
 /// Virtual Machine for evaluating expressions.
 ///
 /// The VM provides a tree-walking interpreter that evaluates AST expressions
@@ -141,15 +136,22 @@ impl<Backend: VmBackend> Vm<Backend> {
                 let left_val = self.evaluate_expr(left)?;
                 let right_val = self.evaluate_expr(right)?;
 
-                VmValueOperation::evaluate_binary_op(&left_val, operator, &right_val)
+                vm_value_operation::evaluate_binary_op(&left_val, operator, &right_val)
             }
 
             Expression::Unary { operator, operand } => {
                 let operand_val = self.evaluate_expr(operand)?;
-                VmValueOperation::evaluate_unary_op(operator, &operand_val)
+                vm_value_operation::evaluate_unary_op(operator, &operand_val)
             }
 
             Expression::Grouping { expression } => self.evaluate_expr(expression),
+            Expression::Product { data } => {
+                let mut product=HashMap::new();
+                for (key,value) in data.iter(){
+                    product.insert(key.to_string(),self.evaluate_expr(value)?);
+                }
+                Ok(VmValue::Product(product))
+            },
         }
     }
     pub fn execute_statement(&mut self, stat_node: &StmtNode) -> Result<(), VmError> {
@@ -305,7 +307,7 @@ mod tests {
          
          // Create a debug statement with multiple expressions
          let expr1 = AstNode::new_temp(Expression::integer(100));
-         let expr2 = AstNode::new_temp(Expression::float(3.14));
+         let expr2 = AstNode::new_temp(Expression::float(3.4));
          let expr3 = AstNode::new_temp(Expression::string("hello".to_string()));
          
          let debug_stmt = AstNode::new_temp(Statement::debug(vec![expr1, expr2, expr3]));
@@ -315,7 +317,7 @@ mod tests {
          
          // Verify the debug output
          let debug_output = vm.backend.get_debug_output();
-         assert_eq!(debug_output, "100\n3.14\n\"hello\"");
+         assert_eq!(debug_output, "100\n3.4\n\"hello\"");
      }
 
      #[test]
