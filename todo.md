@@ -36,6 +36,10 @@ Add struct based type in Literal,where I can create {x=10,y=10},
         So that's why I am using third bracket
 
 ## Ideas:
+    Types are values as well,they are object in vmvalue
+    So I can add them as expresssion,and generate them from struct,
+    In expression I need to add set as expression as well,So they can be 
+    so all the variable that takes I can give it 
     Every objects are global,localization is in the name,the name is connected to a scope,or a path.
     All the type that get created,It will work like python,the typeId will be pushed to the hashmap,Now there are 2 problem,
         - How do I define type that hints to type that are not known in that time,

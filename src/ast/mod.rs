@@ -144,6 +144,10 @@ pub enum Expression<'a> {
 
     Product {
         data: IdentifierToExpression<'a>,
+    },
+
+    Sum {
+        data: Vec<ExpressionNode<'a>>,
     }
 }
 
@@ -207,6 +211,9 @@ impl<'a> Expression<'a> {
     }
     pub fn product(value:IdentifierToExpression<'a>)->Self{
         Expression::Product { data: value }
+    }
+    pub fn sum(value:Vec<ExpressionNode<'a>>)->Self{
+        Expression::Sum { data: value }
     }
     /// Creates a new literal float expression.
     ///
@@ -344,6 +351,7 @@ impl<'a> Expression<'a> {
 pub enum Statement<'a> {
     Assignment {
         target: ExpressionNode<'a>,
+        r#type: Option<ExpressionNode<'a>>,
         value: ExpressionNode<'a>,
     },
     StatementBlock {
@@ -392,9 +400,13 @@ impl<'a, T: AstElement> From<T> for AstNode<'a, T> {
     }
 }
 impl<'a> Statement<'a> {
-    pub fn assignment(target: impl Into<ExpressionNode<'a>>, value: impl Into<ExpressionNode<'a>>) -> Self {
+    pub fn assignment(target: impl Into<ExpressionNode<'a>>, value: impl Into<ExpressionNode<'a>>,r#type:impl Into<ExpressionNode<'a>>)->Self{
+        Statement::Assignment { target: target.into(), r#type: Some(r#type.into()),value: value.into() }
+    }
+    pub fn assignment_unknowntype(target: impl Into<ExpressionNode<'a>>, value: impl Into<ExpressionNode<'a>>) -> Self {
         Statement::Assignment {
             target: target.into(),
+            r#type: None,
             value: value.into(),
         }
     }
@@ -402,6 +414,7 @@ impl<'a> Statement<'a> {
     pub fn assignment_from_identifier(identifier: impl Into<String>, value: impl Into<ExpressionNode<'a>>) -> Self {
         Statement::Assignment {
             target: Expression::identifier(identifier.into()).into(),
+            r#type:None,
             value: value.into(),
         }
     }

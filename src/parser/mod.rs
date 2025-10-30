@@ -58,7 +58,7 @@ impl<'a, 'b: 'a> Parser<'a, 'b> {
                 let _ = match_token_or_err!(self, TokenType::Equal)?;
                 let expr = self.parse_expression()?;
                 let _ = match_token_or_err!(self, TokenType::Semicolon)?;
-                Ok(Statement::assignment(x, expr).into())
+                Ok(Statement::assignment_unknowntype(x, expr).into())
             }
             TokenType::LeftBrace => {
                 self.advance();
