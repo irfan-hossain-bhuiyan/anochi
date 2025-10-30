@@ -118,40 +118,38 @@ impl<Backend: VmBackend> Vm<Backend> {
         let expression = &expression_node.node;
         match expression {
             Expression::Literal(literal) => match literal {
-                Literal::Identifier(x) => self
-                    .variable
-                    .get(x)
-                    .cloned()
-                    .ok_or(VmError::UndefinedIdentifier(format!("{x} doesn't exist."))),
-                Literal::Bool(_) | Literal::Float(_) | Literal::String(_) | Literal::Integer(_) => {
-                    Ok(literal.clone().into())
-                }
-            },
-
+                        Literal::Identifier(x) => self
+                            .variable
+                            .get(x)
+                            .cloned()
+                            .ok_or(VmError::UndefinedIdentifier(format!("{x} doesn't exist."))),
+                        Literal::Bool(_) | Literal::Float(_) | Literal::String(_) | Literal::Integer(_) => {
+                            Ok(literal.clone().into())
+                        }
+                    },
             Expression::Binary {
-                left,
-                operator,
-                right,
-            } => {
-                let left_val = self.evaluate_expr(left)?;
-                let right_val = self.evaluate_expr(right)?;
+                        left,
+                        operator,
+                        right,
+                    } => {
+                        let left_val = self.evaluate_expr(left)?;
+                        let right_val = self.evaluate_expr(right)?;
 
-                vm_value_operation::evaluate_binary_op(&left_val, operator, &right_val)
-            }
-
+                        vm_value_operation::evaluate_binary_op(&left_val, operator, &right_val)
+                    }
             Expression::Unary { operator, operand } => {
-                let operand_val = self.evaluate_expr(operand)?;
-                vm_value_operation::evaluate_unary_op(operator, &operand_val)
-            }
-
+                        let operand_val = self.evaluate_expr(operand)?;
+                        vm_value_operation::evaluate_unary_op(operator, &operand_val)
+                    }
             Expression::Grouping { expression } => self.evaluate_expr(expression),
             Expression::Product { data } => {
-                let mut product=HashMap::new();
-                for (key,value) in data.iter(){
-                    product.insert(key.to_string(),self.evaluate_expr(value)?);
-                }
-                Ok(VmValue::Product(product))
-            },
+                        let mut product=HashMap::new();
+                        for (key,value) in data.iter(){
+                            product.insert(key.to_string(),self.evaluate_expr(value)?);
+                        }
+                        Ok(VmValue::Product(product))
+                    },
+            Expression::MemberAccess { object, member } => todo!(),
         }
     }
     pub fn execute_statement(&mut self, stat_node: &StmtNode) -> Result<(), VmError> {

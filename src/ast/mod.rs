@@ -133,6 +133,15 @@ pub enum Expression<'a> {
         /// The expression inside the parentheses
         expression: Box<ExpressionNode<'a>>,
     },
+    
+    /// A member access expression (e.g., `a.x`, `{x=10}.y`)
+    MemberAccess {
+        /// The object being accessed (left side of the dot)
+        object: Box<ExpressionNode<'a>>,
+        /// The member being accessed (right side of the dot)
+        member: Identifier,
+    },
+
     Product {
         data: IdentifierToExpression<'a>,
     }
@@ -294,6 +303,24 @@ impl<'a> Expression<'a> {
             expression: Box::new(expression.into()),
         }
     }
+
+    /// Creates a new member access expression.
+    ///
+    /// # Arguments
+    ///
+    /// * `object` - The object being accessed
+    /// * `member` - The member identifier to access
+    ///
+    /// # Returns
+    ///
+    /// An `Expression::MemberAccess` representing the member access operation.
+    pub fn member_access(object: impl Into<ExpressionNode<'a>>, member: Identifier) -> Self {
+        Expression::MemberAccess {
+            object: Box::new(object.into()),
+            member,
+        }
+    }
+
     /// Converts a Literal token into an Expression::Literal.
     pub fn from_literal(literal: Literal) -> Self {
         Expression::Literal(literal)
