@@ -202,6 +202,9 @@ impl<'a, 'b: 'a> Parser<'a, 'b> {
     // Primary ::= Integer | Float | Identifier | "(" Expr ")"
     fn parse_primary(&mut self) -> ReExpNode<'b> {
         match self.peek_type().ok_or(ParserError::NO_EXPN_FOUND)? {
+            TokenType::LeftBrace => {
+                self.parse_struct()
+            }
             TokenType::LeftParen => {
                 self.advance(); // consume '('
                 let expr = self.parse_expression()?;
@@ -231,6 +234,45 @@ impl<'a, 'b: 'a> Parser<'a, 'b> {
 
     fn check(&self, tt: &TokenType) -> bool {
         Some(tt) == self.peek_type()
+    }
+
+    // Struct ::= "{" (Identifier "=" Expression ("," Identifier "=" Expression)*)? "}"
+    fn parse_struct(&mut self) -> ReExpNode<'b> {
+        self.advance(); // consume '{'
+        
+        let mut fields = std::collections::HashMap::new();
+        
+        // Handle empty struct case
+        if match_token!(self, TokenType::RightBrace).is_ok() {
+            return Ok(Expression::product(fields).into());
+        }
+        
+        loop {
+            // Parse field name (identifier)
+            let field_name = match match_token_or_err!(self, TokenType::Identifier(_))? {
+                TokenType::Identifier(name) => name.clone(),
+                _ => unreachable!(),
+            };
+            
+            // Expect '='
+            let _ = match_token_or_err!(self, TokenType::Equal)?;
+            
+            // Parse field value (expression)
+            let field_value = self.parse_expression()?;
+            
+            // Add field to struct
+            fields.insert(field_name, field_value);
+            
+            // Check for continuation or end
+            match match_token!(self, TokenType::Comma | TokenType::RightBrace) {
+                Ok(TokenType::Comma) => continue, // More fields to parse
+                Ok(TokenType::RightBrace) => break, // End of struct
+                Ok(_) => unreachable!(), // Should never happen due to pattern
+                Err(_) => return Err(ParserError::expected_token_in_expression(TokenType::RightBrace)),
+            }
+        }
+        
+        Ok(Expression::product(fields).into())
     }
 
     fn advance(&mut self) -> &Token {
@@ -288,6 +330,91 @@ mod tests {
         assert_eq!(parsed, expected);
     }
 
+    #[test]
+    fn test_parse_empty_struct() {
+        // {}
+        let source = "{}";
+        let tokenizer = Tokenizer::new(source);
+        let tokens = tokenizer.tokenize();
+        let mut parser = Parser::new(&tokens);
+        let parsed = parser.parse_expression().unwrap();
+        let expected = Expression::product(std::collections::HashMap::new()).into();
+        assert_eq!(parsed, expected);
+    }
+
+    #[test]
+    fn test_parse_simple_struct() {
+        // {a=10}
+        let source = "{a=10}";
+        let tokenizer = Tokenizer::new(source);
+        let tokens = tokenizer.tokenize();
+        let mut parser = Parser::new(&tokens);
+        let parsed = parser.parse_expression().unwrap();
+        
+        let mut expected_fields = std::collections::HashMap::new();
+        expected_fields.insert("a".to_string(), Expression::integer(10).into());
+        let expected = Expression::product(expected_fields).into();
+        assert_eq!(parsed, expected);
+    }
+
+    #[test]
+    fn test_parse_multi_field_struct() {
+        // {a=10,b=20,c="hello"}
+        let source = r#"{a=10,b=20,c="hello"}"#;
+        let tokenizer = Tokenizer::new(source);
+        let tokens = tokenizer.tokenize();
+        let mut parser = Parser::new(&tokens);
+        let parsed = parser.parse_expression().unwrap();
+        
+        let mut expected_fields = std::collections::HashMap::new();
+        expected_fields.insert("a".to_string(), Expression::integer(10).into());
+        expected_fields.insert("b".to_string(), Expression::integer(20).into());
+        expected_fields.insert("c".to_string(), Expression::string("hello".to_string()).into());
+        let expected = Expression::product(expected_fields).into();
+        assert_eq!(parsed, expected);
+    }
+
+    #[test]
+    fn test_parse_struct_with_expressions() {
+        // {a=1+2,b=3*4}
+        let source = "{a=1+2,b=3*4}";
+        let tokenizer = Tokenizer::new(source);
+        let tokens = tokenizer.tokenize();
+        let mut parser = Parser::new(&tokens);
+        let parsed = parser.parse_expression().unwrap();
+        
+        let mut expected_fields = std::collections::HashMap::new();
+        expected_fields.insert("a".to_string(), Expression::binary(
+            Expression::integer(1),
+            BinaryOperator::Plus,
+            Expression::integer(2),
+        ).into());
+        expected_fields.insert("b".to_string(), Expression::binary(
+            Expression::integer(3),
+            BinaryOperator::Multiply,
+            Expression::integer(4),
+        ).into());
+        let expected = Expression::product(expected_fields).into();
+        assert_eq!(parsed, expected);
+    }
+
+    #[test]
+    fn test_parse_nested_struct() {
+        // {a={x=1}}
+        let source = "{a={x=1}}";
+        let tokenizer = Tokenizer::new(source);
+        let tokens = tokenizer.tokenize();
+        let mut parser = Parser::new(&tokens);
+        let parsed = parser.parse_expression().unwrap();
+        
+        let mut inner_fields = std::collections::HashMap::new();
+        inner_fields.insert("x".to_string(), Expression::integer(1).into());
+        
+        let mut expected_fields = std::collections::HashMap::new();
+        expected_fields.insert("a".to_string(), Expression::product(inner_fields).into());
+        let expected = Expression::product(expected_fields).into();
+        assert_eq!(parsed, expected);
+    }
     #[test]
     fn test_parse_if_comparison_block() {
         // if (2 > 1) { x = 42; }
