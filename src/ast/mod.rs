@@ -343,7 +343,7 @@ impl<'a> Expression<'a> {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Statement<'a> {
     Assignment {
-        identifier: Identifier,
+        target: ExpressionNode<'a>,
         value: ExpressionNode<'a>,
     },
     StatementBlock {
@@ -392,13 +392,20 @@ impl<'a, T: AstElement> From<T> for AstNode<'a, T> {
     }
 }
 impl<'a> Statement<'a> {
-    pub fn assignment(identifier: Identifier, value: impl Into<ExpressionNode<'a>>) -> Self {
+    pub fn assignment(target: impl Into<ExpressionNode<'a>>, value: impl Into<ExpressionNode<'a>>) -> Self {
         Statement::Assignment {
-            identifier,
+            target: target.into(),
             value: value.into(),
         }
     }
-
+    
+    pub fn assignment_from_identifier(identifier: impl Into<String>, value: impl Into<ExpressionNode<'a>>) -> Self {
+        Statement::Assignment {
+            target: Expression::identifier(identifier.into()).into(),
+            value: value.into(),
+        }
+    }
+    
     pub fn statement_block(statements: Vec<StatementNode<'a>>) -> Self {
         Statement::StatementBlock { statements }
     }
@@ -422,6 +429,6 @@ impl<'a> Statement<'a> {
         }
     }
     pub fn debug(expr_vec:Vec<ExpressionNode<'a>>)->Self{
-        Self::Debug { expr_vec: expr_vec }
+        Self::Debug { expr_vec }
     }
 }

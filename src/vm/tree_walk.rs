@@ -42,6 +42,8 @@ pub enum VmError {
     /// Invalid operation error
     #[error("Invalid operation: {0}")]
     InvalidOperation(String),
+    #[error("Unsupproted Operation {0:?}")]
+    UnsupportedOperation(String)
 }
 #[derive(Debug,Clone,PartialEq)]
 pub enum VmValue{
@@ -155,10 +157,21 @@ impl<Backend: VmBackend> Vm<Backend> {
     pub fn execute_statement(&mut self, stat_node: &StmtNode) -> Result<(), VmError> {
         let stmt = &stat_node.node;
         match stmt {
-            Statement::Assignment { identifier, value } => {
-                self.variable
-                    .insert(identifier.clone(), self.evaluate_expr(value)?);
-                Ok(())
+            Statement::Assignment { target, value } => {
+                // For now, only handle simple identifier assignments
+                // TODO: Add support for member access assignments later
+                match &target.node {
+                    Expression::Literal(Literal::Identifier(identifier)) => {
+                        self.variable
+                            .insert(identifier.clone(), self.evaluate_expr(value)?);
+                        Ok(())
+                    }
+                    _ => {
+                        // For member access and other complex assignments, 
+                        // return an error for now until type system is implemented
+                        Err(VmError::UnsupportedOperation("Complex assignment not yet supported".to_string()))
+                    }
+                }
             }
             Statement::StatementBlock { statements } => {
                 for stmt in statements.iter() {
@@ -344,8 +357,8 @@ mod tests {
          let mut vm: Vm<TestBackend> = Vm::new(backend);
          
          // First, assign a value to a variable
-         let assign_stmt = AstNode::new_temp(Statement::assignment(
-             "x".to_string(),
+         let assign_stmt = AstNode::new_temp(Statement::assignment_from_identifier(
+             "x",
              Expression::integer(42),
          ));
          vm.execute_statement(&assign_stmt).unwrap();

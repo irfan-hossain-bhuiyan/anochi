@@ -53,12 +53,12 @@ impl<'a, 'b: 'a> Parser<'a, 'b> {
     pub fn parse_statement(&mut self) -> ReStatNode<'b> {
         // Assignment: identifier = expression
         match self.peek_type().unwrap().clone() {
-            TokenType::Identifier(x) => {
-                self.advance();
+            TokenType::Identifier(_) => {
+                let x=self.parse_expression()?;
                 let _ = match_token_or_err!(self, TokenType::Equal)?;
                 let expr = self.parse_expression()?;
                 let _ = match_token_or_err!(self, TokenType::Semicolon)?;
-                Ok(Statement::assignment(x.to_string(), expr).into())
+                Ok(Statement::assignment(x, expr).into())
             }
             TokenType::LeftBrace => {
                 self.advance();
@@ -310,7 +310,7 @@ mod tests {
         let tokens = tokenizer.tokenize();
         let mut parser = Parser::new(&tokens);
         let parsed = parser.parse_statement().unwrap();
-        let expected = Statement::assignment("x".to_string(), Expression::integer(42)).into();
+        let expected = Statement::assignment_from_identifier("x", Expression::integer(42)).into();
         assert_eq!(parsed, expected);
     }
 
@@ -323,8 +323,8 @@ mod tests {
         let mut parser = Parser::new(&tokens);
         let parsed = parser.parse_statement().unwrap();
         let expected = Statement::statement_block(vec![
-            Statement::assignment("x".to_string(), Expression::integer(1)).into(),
-            Statement::assignment("y".to_string(), Expression::integer(2)).into(),
+            Statement::assignment_from_identifier("x", Expression::integer(1)).into(),
+            Statement::assignment_from_identifier("y", Expression::integer(2)).into(),
         ])
         .into();
         assert_eq!(parsed, expected);
@@ -429,8 +429,8 @@ mod tests {
                 BinaryOperator::Greater,
                 Expression::integer(1),
             )),
-            Statement::statement_block(vec![Statement::assignment(
-                "x".to_string(),
+            Statement::statement_block(vec![Statement::assignment_from_identifier(
+                "x",
                 Expression::integer(42),
             )
             .into()]),
@@ -449,8 +449,8 @@ mod tests {
         let parsed = parser.parse_statement().unwrap();
         let expected = Statement::if_else(
             Expression::integer(1),
-            Statement::assignment("x".to_string(), Expression::integer(2)),
-            Statement::assignment("x".to_string(), Expression::integer(3)),
+            Statement::assignment_from_identifier("x", Expression::integer(2)),
+            Statement::assignment_from_identifier("x", Expression::integer(3)),
         )
         .into();
         assert_eq!(parsed, expected);

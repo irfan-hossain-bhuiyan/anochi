@@ -17,7 +17,7 @@ mod tests {
 
         for (name, value) in assignments {
             let assignment = Statement::Assignment {
-                identifier: name.to_string(),
+                target: AstNode::new_temp(Expression::identifier(name.to_string())),
                 value: AstNode::new_temp(Expression::integer(value)),
             };
             vm.execute_statement(&AstNode::new_temp(assignment)).unwrap();
