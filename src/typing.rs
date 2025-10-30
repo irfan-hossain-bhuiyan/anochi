@@ -33,7 +33,7 @@ type TypeId = HashPtr<TypeDefinition>;
 ///
 /// Sum types use HashSet<TypeId> to store variant types,
 /// preventing type duplication across variants.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug,Clone, PartialEq, Eq)]
 pub enum TypeDefinition {
     /// Product type: a collection of named fields (struct-like).
     /// Fields are stored as a HashMap mapping field names to their types.
