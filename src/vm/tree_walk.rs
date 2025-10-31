@@ -8,7 +8,6 @@ use crate::{
         UnaryOperator,
     },
     vm::backend::{IoBackend, VmBackend},
-    typing::TypeDefinition,
 };
 
 use thiserror::Error;
@@ -86,7 +85,9 @@ impl<Backend: VmBackend> Vm<Backend> {
        
        for (name, builtin_kind) in builtin_types {
            let type_def = TypeDefinition::Builtin(builtin_kind);
-           let type_id = self.types.store_type(type_def);
+           let unified = type_def.to_unified();
+           let optimized = unified.to_optimized(&mut self.types);
+           let type_id = self.types.store_type(optimized);
            self.variable.insert(name.to_string(), VmValue::Type(type_id));
        }
    }
@@ -159,15 +160,18 @@ impl<Backend: VmBackend> Vm<Backend> {
                // For sum types, we need to convert TypeIds back to TypeDefinitions to create the sum type
                let mut variants = BTreeSet::new();
                for type_id in type_set {
-                   if let Some(type_def) = self.types.get_type(&type_id) {
-                       variants.insert(Box::new(type_def.clone()));
+                   if let Some(_optimized_def) = self.types.get_type(&type_id) {
+                       // We just need to store the TypeId for the optimized version
+                       // Create a TypeRef::Reference for each TypeId
+                       variants.insert(crate::typing::TypeRef::Reference(type_id));
                    } else {
                        return Err(VmError::InvalidOperation("Type not found in container".to_string()));
                    }
                }
                
-               let sum_type = TypeDefinition::Sum { variants };
-               let type_id = self.types.store_type(sum_type);
+               let unified = crate::typing::UnifiedTypeDefinition::Sum { variants };
+               let optimized = unified.to_optimized(&mut self.types);
+               let type_id = self.types.store_type(optimized);
                Ok(VmValue::Type(type_id))
            },
             Expression::MemberAccess { object: _, member: _ } => todo!(),

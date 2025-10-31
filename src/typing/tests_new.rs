@@ -1,4 +1,4 @@
-use crate::typing::{TypeDefinition, BuiltinKind, TypeContainer};
+use crate::typing::{TypeDefinition, BuiltinKind, TypeContainer, UnifiedTypeDefinition, OptimizedTypeDefinition};
 use std::collections::{BTreeMap, BTreeSet};
 
 #[test]
@@ -9,8 +9,8 @@ fn test_type_definition_independence() {
     
     // Create a product type with independent TypeDefinitions
     let mut fields = BTreeMap::new();
-    fields.insert("x".to_string(), Box::new(int_type.clone()));
-    fields.insert("active".to_string(), Box::new(bool_type.clone()));
+    fields.insert("x".to_string(), int_type.clone());
+    fields.insert("active".to_string(), bool_type.clone());
     
     let product_type = TypeDefinition::product(fields);
     
@@ -32,16 +32,22 @@ fn test_type_container_optimization() {
     let int_type = TypeDefinition::builtin(BuiltinKind::I64);
     let bool_type = TypeDefinition::builtin(BuiltinKind::Bool);
     
-    // Convert to optimized and store in container
-    let int_id = container.store_type(int_type.clone());
-    let bool_id = container.store_type(bool_type.clone());
+    // Convert through the proper flow: TypeDefinition -> UnifiedTypeDefinition -> OptimizedTypeDefinition
+    let int_unified = int_type.to_unified();
+    let bool_unified = bool_type.to_unified();
     
-    // Verify we can get back the full definitions
+    let int_optimized = int_unified.to_optimized(&mut container);
+    let bool_optimized = bool_unified.to_optimized(&mut container);
+    
+    let int_id = container.store_type(int_optimized.clone());
+    let bool_id = container.store_type(bool_optimized.clone());
+    
+    // Verify we can get back the optimized definitions
     let retrieved_int = container.get_type(&int_id).expect("Type should exist").clone();
     let retrieved_bool = container.get_type(&bool_id).expect("Type should exist").clone();
     
-    assert_eq!(retrieved_int, int_type);
-    assert_eq!(retrieved_bool, bool_type);
+    assert_eq!(retrieved_int, int_optimized);
+    assert_eq!(retrieved_bool, bool_optimized);
 }
 
 #[test]
@@ -50,8 +56,8 @@ fn test_sum_type_creation() {
     let bool_type = TypeDefinition::builtin(BuiltinKind::Bool);
     
     let mut variants = BTreeSet::new();
-    variants.insert(Box::new(int_type));
-    variants.insert(Box::new(bool_type));
+    variants.insert(int_type);
+    variants.insert(bool_type);
     
     let sum_type = TypeDefinition::sum(variants);
     
