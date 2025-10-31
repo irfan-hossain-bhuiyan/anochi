@@ -19,6 +19,7 @@ mod tests {
             let assignment = Statement::Assignment {
                 target: AstNode::new_temp(Expression::identifier(name.to_string())),
                 value: AstNode::new_temp(Expression::integer(value)),
+               r#type: None,
             };
             vm.execute_statement(&AstNode::new_temp(assignment)).unwrap();
         }
@@ -44,7 +45,7 @@ mod tests {
 
     #[test]
     fn test_vm_data_types_and_operations() {
-        let vm = Vm::new(IoBackend::new());
+        let mut vm = Vm::new(IoBackend::new());
 
         // Test boolean operations
         let and_expr = Expression::binary(
@@ -81,7 +82,7 @@ mod tests {
 
     #[test]
     fn test_vm_error_handling() {
-        let vm = Vm::new(IoBackend::new());
+        let mut vm = Vm::new(IoBackend::new());
 
         // Test undefined variable error
         let undefined_expr = Expression::identifier("undefined_variable".to_string());

@@ -446,6 +446,14 @@ impl<'a> Tokenizer<'a> {
                         Position::new(start_line, start_column, slice).unwrap(),
                     )
                 }
+               ':' => {
+                   self.advance();
+                   let slice = &self.source[start_pos..self.current];
+                   Token::new(
+                       TokenType::Colon,
+                       Position::new(start_line, start_column, slice).unwrap(),
+                   )
+               }
                 '-' => {
                     self.advance();
                     let slice = &self.source[start_pos..self.current];
@@ -486,6 +494,14 @@ impl<'a> Tokenizer<'a> {
                         Position::new(start_line, start_column, slice).unwrap(),
                     )
                 }
+               '|' => {
+                   self.advance();
+                   let slice = &self.source[start_pos..self.current];
+                   Token::new(
+                       TokenType::Pipe,
+                       Position::new(start_line, start_column, slice).unwrap(),
+                   )
+               }
                 '\n' => {
                     self.advance();
                     let slice = &self.source[start_pos..self.current];

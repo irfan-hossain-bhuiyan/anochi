@@ -50,15 +50,39 @@ impl<'a, 'b: 'a> Parser<'a, 'b> {
         }
         Ok(node)
     }
+   
+   // Type Union: type | type
+   fn parse_type_union(&mut self) -> ReExpNode<'b> {
+       let mut types = vec![self.parse_logical_or()?];
+       while match_token!(self, TokenType::Pipe).is_ok() {
+           types.push(self.parse_logical_or()?);
+       }
+       if types.len() == 1 {
+           Ok(types.into_iter().next().unwrap())
+       } else {
+           Ok(Expression::sum(types).into())
+       }
+   }
+
     pub fn parse_statement(&mut self) -> ReStatNode<'b> {
         // Assignment: identifier = expression
         match self.peek_type().unwrap().clone() {
             TokenType::Identifier(_) => {
                 let x=self.parse_expression()?;
-                let _ = match_token_or_err!(self, TokenType::Equal)?;
-                let expr = self.parse_expression()?;
-                let _ = match_token_or_err!(self, TokenType::Semicolon)?;
-                Ok(Statement::assignment_unknowntype(x, expr).into())
+                // Check for typed assignment: identifier : type = value
+                if match_token!(self, TokenType::Colon).is_ok() {
+                    let type_expr = self.parse_expression()?;
+                    let _ = match_token_or_err!(self, TokenType::Equal)?;
+                    let value_expr = self.parse_expression()?;
+                    let _ = match_token_or_err!(self, TokenType::Semicolon)?;
+                    Ok(Statement::assignment(x, value_expr, type_expr).into())
+                } else {
+                    // Regular assignment: identifier = value
+                    let _ = match_token_or_err!(self, TokenType::Equal)?;
+                    let expr = self.parse_expression()?;
+                    let _ = match_token_or_err!(self, TokenType::Semicolon)?;
+                    Ok(Statement::assignment_unknowntype(x, expr).into())
+                }
             }
             TokenType::LeftBrace => {
                 self.advance();
@@ -153,7 +177,7 @@ impl<'a, 'b: 'a> Parser<'a, 'b> {
     }
 
     pub fn parse_expression(&mut self) -> ReExpNode<'b> {
-        self.parse_logical_or()
+        self.parse_type_union()
     }
 
     // Expr ::= Term (("+" | "-") Term)*

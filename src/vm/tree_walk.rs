@@ -1,19 +1,4 @@
-//! Virtual Machine module for the Anochi programming language.
-//!
-//! This module provides the tree-walking interpreter implementation that evaluates
-//! AST expressions. The VM walks through the abstract syntax tree and computes
-//! the results of expressions using a simple tree-walking approach.
-//!
-//! # Design
-//!
-//! The VM is designed to be stateless and simple:
-//! - Takes an `Expression` and evaluates it recursively
-//! - Handles arithmetic, comparison, and logical operations
-//! - Supports type coercion between integers and floats
-//! - Provides structured error handling for runtime errors
-//!
-//! # Example
-//!
+//! Virtual Machine for the Anochi programming language.
 
 use std::{collections::HashMap, fmt::Display};
 mod vm_value_operation;
@@ -23,6 +8,7 @@ use crate::{
         UnaryOperator,
     },
     vm::backend::{IoBackend, VmBackend},
+    typing::TypeDefinition,
 };
 
 use thiserror::Error;
@@ -49,12 +35,14 @@ pub enum VmError {
 pub enum VmValue{
     Literal(Literal),
     Product(HashMap<Identifier,VmValue>),
+   Type(crate::typing::TypeId),
 }
 impl Display for VmValue{
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self{
             Self::Literal(x)=>Display::fmt(x, f),
             Self::Product(x)=>write!(f,"Product{x:?}"),
+           Self::Type(_)=>write!(f,"Type"),
         }
     }
 }
@@ -66,18 +54,10 @@ impl From<Literal> for VmValue {
 }
 /// Result type for VM evaluation operations.
 pub type VmResult = Result<VmValue, VmError>;
-/// Virtual Machine for evaluating expressions.
-///
-/// The VM provides a tree-walking interpreter that evaluates AST expressions
-/// by recursively traversing the tree and computing results. It's designed to
-/// be simple and stateless for basic expression evaluation.
-///
-/// # Example
-///
-///
 #[derive(Debug, Default)]
 pub struct Vm<Backend= IoBackend> {
     variable: HashMap<Identifier, VmValue>,
+   types: crate::typing::TypeContainer,
     backend: Backend,
 }
 type ExpNode<'a> = ExpressionNode<'a>;
@@ -85,20 +65,32 @@ type StmtNode<'a> = StatementNode<'a>;
 
 impl<Backend: VmBackend> Vm<Backend> {
     pub fn new(backend: Backend) -> Self {
-        Self {
+        let mut vm = Self {
             variable: HashMap::new(),
+           types: crate::typing::TypeContainer::new(),
             backend,
-        }
+        };
+        vm.load_builtin_types();
+        vm
     }
-    /// Creates a new Virtual Machine instance.
-    ///
-    /// # Returns
-    ///
-    /// A new `Vm` instance ready to evaluate expressions.
-    ///
-    /// # Example
-    ///
-    ///
+   
+   fn load_builtin_types(&mut self) {
+       use crate::typing::{TypeDefinition, BuiltinKind};
+       
+       let builtin_types = [
+           ("i64", BuiltinKind::I64),
+           ("f64", BuiltinKind::F64),
+           ("bool", BuiltinKind::Bool),
+           ("usize", BuiltinKind::Usize),
+       ];
+       
+       for (name, builtin_kind) in builtin_types {
+           let type_def = TypeDefinition::Builtin(builtin_kind);
+           let type_id = self.types.store_type(type_def);
+           self.variable.insert(name.to_string(), VmValue::Type(type_id));
+       }
+   }
+
     /// Evaluates an expression using tree walking.
     ///
     /// This method recursively walks through the AST and evaluates expressions.
@@ -116,7 +108,7 @@ impl<Backend: VmBackend> Vm<Backend> {
     ///
     ///
     ///
-    pub fn evaluate_expr(&self, expression_node: &ExpNode) -> VmResult {
+    pub fn evaluate_expr(&mut self, expression_node: &ExpNode) -> VmResult {
         let expression = &expression_node.node;
         match expression {
             Expression::Literal(literal) => match literal {
@@ -151,19 +143,46 @@ impl<Backend: VmBackend> Vm<Backend> {
                         }
                         Ok(VmValue::Product(product))
                     },
-            Expression::MemberAccess { object, member } => todo!(),
+           Expression::Sum { data } => {
+               use std::collections::BTreeSet;
+               
+               let mut type_set = BTreeSet::new();
+               for expr in data.iter() {
+                   match self.evaluate_expr(expr)? {
+                       VmValue::Type(type_id) => {
+                           type_set.insert(type_id);
+                       }
+                       _ => return Err(VmError::InvalidOperation("Sum types can only contain type values".to_string())),
+                   }
+               }
+               
+               // For sum types, we need to convert TypeIds back to TypeDefinitions to create the sum type
+               let mut variants = BTreeSet::new();
+               for type_id in type_set {
+                   if let Some(type_def) = self.types.get_type(&type_id) {
+                       variants.insert(Box::new(type_def.clone()));
+                   } else {
+                       return Err(VmError::InvalidOperation("Type not found in container".to_string()));
+                   }
+               }
+               
+               let sum_type = TypeDefinition::Sum { variants };
+               let type_id = self.types.store_type(sum_type);
+               Ok(VmValue::Type(type_id))
+           },
+            Expression::MemberAccess { object: _, member: _ } => todo!(),
         }
     }
     pub fn execute_statement(&mut self, stat_node: &StmtNode) -> Result<(), VmError> {
         let stmt = &stat_node.node;
         match stmt {
-            Statement::Assignment { target, value } => {
+            Statement::Assignment { target, value, r#type: _ } => {
                 // For now, only handle simple identifier assignments
                 // TODO: Add support for member access assignments later
                 match &target.node {
                     Expression::Literal(Literal::Identifier(identifier)) => {
-                        self.variable
-                            .insert(identifier.clone(), self.evaluate_expr(value)?);
+                        let evaluated_value = self.evaluate_expr(value)?;
+                        self.variable.insert(identifier.clone(), evaluated_value);
                         Ok(())
                     }
                     _ => {
@@ -222,7 +241,7 @@ mod tests {
 
     #[test]
     fn test_vm_comprehensive_operations() {
-        let vm: Vm = Vm::default();
+        let mut vm: Vm = Vm::default();
 
         // Test integer literal
         let integer = AstNode::new_temp(Expression::integer(42));
@@ -271,7 +290,7 @@ mod tests {
 
     #[test]
     fn test_vm_error_handling() {
-        let vm: Vm = Vm::default();
+        let mut vm: Vm = Vm::default();
 
         // Test division by zero
         let expr = Expression::binary(Expression::integer(5), BinaryOperator::Divide, Expression::integer(0));

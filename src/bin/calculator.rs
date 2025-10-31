@@ -18,7 +18,7 @@ fn main() {
         let tokenizer = Tokenizer::new(input);
         let tokens = tokenizer.tokenize();
         let mut parser = Parser::new(&tokens);
-        let vm:Vm = Vm::default();
+        let mut vm: Vm = Vm::default();
         match parser.parse_expression() {
             Ok(expr_node) => match vm.evaluate_expr(&expr_node) {
                 Ok(result) => println!("= {result:?}"),

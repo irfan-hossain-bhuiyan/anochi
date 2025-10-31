@@ -23,7 +23,7 @@ fn slice_index_from_vec<T>(vec: &[T], slice: &[T]) -> Option<usize> {
 /// to store objects and detect duplicates. Each push operation returns a hash that
 /// serves as a pointer to the object, enabling O(1) access and deduplication.
 /// Type-safe hash pointer for HashCons
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct HashPtr<T> {
     hash: HashValue,
     _marker: std::marker::PhantomData<T>,

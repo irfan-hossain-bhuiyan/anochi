@@ -113,6 +113,11 @@ impl<Backend: VmBackend> CodeRunner<Backend> {
                         crate::vm::tree_walk::VmError::InvalidOperation("Cannot return Product type from expression evaluation".to_string())
                     ))
                 }
+                crate::vm::tree_walk::VmValue::Type(_) => {
+                    return Err(CodeRunnerError::RuntimeError(
+                        crate::vm::tree_walk::VmError::InvalidOperation("Cannot return Type from expression evaluation".to_string())
+                    ))
+                }
             }
         }
 
