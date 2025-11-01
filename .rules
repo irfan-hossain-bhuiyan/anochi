@@ -5,3 +5,16 @@
 4. Keep the code as modular as possible.
 5. Always ask on what I wanna do,then do it,other than jumping around writing test.
 6. When giving diff,give the line before and after it,so the diff tool can verify the changes.
+7. Always prefer move semantics,No clone(or avoid as much as necessary),If there is a clone inside a funcition,Change the funciton signature to own the value,and remove the clone.
+So I don't prefer this
+```rust
+	fn push(&mut self,str:&str){
+		self[index]=str.clone()
+	}
+```
+rather this
+```rust
+	fn push(&mut self,str:String){
+		self[index]=str
+	}
+```

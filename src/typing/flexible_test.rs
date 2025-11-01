@@ -56,7 +56,8 @@ fn test_flexible_type_system_with_mixed_references() {
     }
     
     // Test conversion back to TypeDefinition (expanding all references)
-    let expanded_b = retrieved_b.to_type_definition(&container);
+    // retrieved_b is already a TypeDefinition (expanded), so we can use it directly
+    let expanded_b = retrieved_b;
     if let Some(expanded_fields) = expanded_b.as_product() {
         assert_eq!(expanded_fields.len(), 2);
         

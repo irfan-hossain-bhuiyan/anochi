@@ -97,7 +97,7 @@ impl TypeContainer {
     pub fn get_type(&self, type_id: &TypeId) -> Option<TypeDefinition> {
         self.storage
             .get(type_id)
-            .map(|x| x.to_type_definition(&self))
+            .map(|x| x.clone().to_type_definition(self))
     }
 }
 
@@ -108,13 +108,13 @@ impl Default for TypeContainer {
 }
 
 #[cfg(test)]
-mod tests_new;
+mod tests;
 
 #[cfg(test)]
-mod architecture_test_new;
+mod architecture_test;
 
 #[cfg(test)]
-mod container_test_new;
+mod container_test;
 
 #[cfg(test)]
 mod flexible_test;
@@ -135,6 +135,34 @@ impl TypeDefinition {
         TypeDefinition::Builtin(kind)
     }
 
+   /// Check if this type is compatible with another type
+   pub fn is_compatible_with(&self, other: &Self) -> bool {
+       self == other
+   }
+
+   /// Get builtin kind if this is a builtin type
+   pub fn as_builtin(&self) -> Option<BuiltinKind> {
+       match self {
+           TypeDefinition::Builtin(kind) => Some(*kind),
+           _ => None,
+       }
+   }
+
+   /// Get product fields if this is a product type
+   pub fn as_product(&self) -> Option<&BTreeMap<Identifier, TypeDefinition>> {
+       match self {
+           TypeDefinition::Product { fields } => Some(fields),
+           _ => None,
+       }
+   }
+
+   /// Get sum variants if this is a sum type
+   pub fn as_sum(&self) -> Option<&BTreeSet<TypeDefinition>> {
+       match self {
+           TypeDefinition::Sum { variants } => Some(variants),
+           _ => None,
+       }
+   }
     /// Convert TypeDefinition to UnifiedTypeDefinition
     pub fn to_unified(self) -> UnifiedTypeDefinition {
         match self {
@@ -257,15 +285,14 @@ impl UnifiedTypeDefinition {
                                 unified_def.to_type_definition_expanded(container)
                             }
                             TypeRef::Reference(type_id) => {
-                                if let Some(opt_def) = container.get_type(type_id) {
-                                    let unified =   
-                                    unified.to_type_definition_expanded(container)
+                                if let Some(opt_def) = container.get_type(&type_id) {
+                                    opt_def
                                 } else {
                                     panic!("TypeId not found in container")
                                 }
                             }
                         };
-                        (id.clone(), type_def)
+                        (id, type_def)
                     })
                     .collect();
                 TypeDefinition::Product {
@@ -274,16 +301,14 @@ impl UnifiedTypeDefinition {
             }
             UnifiedTypeDefinition::Sum { variants } => {
                 let type_def_variants = variants
-                    .iter()
+                    .into_iter()
                     .map(|type_ref| match type_ref {
                         TypeRef::Direct(unified_def) => {
                             unified_def.to_type_definition_expanded(container)
                         }
                         TypeRef::Reference(type_id) => {
-                            if let Some(opt_def) = container.get_type(type_id) {
-                                let unified =
-                                    UnifiedTypeDefinition::from_optimized(opt_def, container);
-                                unified.to_type_definition_expanded(container)
+                            if let Some(opt_def) = container.get_type(&type_id) {
+                                opt_def
                             } else {
                                 panic!("TypeId not found in container")
                             }
@@ -294,7 +319,7 @@ impl UnifiedTypeDefinition {
                     variants: type_def_variants,
                 }
             }
-            UnifiedTypeDefinition::Builtin(kind) => TypeDefinition::Builtin(*kind),
+            UnifiedTypeDefinition::Builtin(kind) => TypeDefinition::Builtin(kind),
         }
     }
 }
@@ -332,10 +357,39 @@ impl OptimizedTypeDefinition {
             _ => None,
         }
     }
-
-    /// Convert OptimizedTypeDefinition back to TypeDefinition via UnifiedTypeDefinition
-    pub fn to_type_definition(&self, container: &TypeContainer) -> TypeDefinition {
-        let unified = UnifiedTypeDefinition::from_optimized(self, container);
-        unified.to_type_definition_expanded(container)
+    pub fn to_type_definition(self, container: &TypeContainer) -> TypeDefinition {
+        match self {
+            OptimizedTypeDefinition::Product { fields } => {
+                let type_def_fields = fields
+                    .into_iter()
+                    .map(|(id, type_id)| {
+                        if let Some(opt_def) = container.get_type(&type_id) {
+                            (id, opt_def)
+                        } else {
+                            panic!("TypeId not found in container")
+                        }
+                    })
+                    .collect();
+                TypeDefinition::Product {
+                    fields: type_def_fields,
+                }
+            }
+            OptimizedTypeDefinition::Sum { variants } => {
+                let type_def_variants = variants
+                    .into_iter()
+                    .map(|type_id| {
+                        if let Some(opt_def) = container.get_type(&type_id) {
+                            opt_def
+                        } else {
+                            panic!("TypeId not found in container")
+                        }
+                    })
+                    .collect();
+                TypeDefinition::Sum {
+                    variants: type_def_variants,
+                }
+            }
+            OptimizedTypeDefinition::Builtin(kind) => TypeDefinition::Builtin(kind),
+        }
     }
 }

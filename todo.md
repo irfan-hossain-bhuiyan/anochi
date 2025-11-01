@@ -21,7 +21,7 @@
     - change assignment to other than like Identifier = Identifer convert to Expression=Expression,
 
 ## Todo:
-    - supprt for a.x operation,and I can do something like a.x=10;
+    - support for a.x operation,and I can do something like a.x=10;
 
     - Change the assignment to have comptime,let,None
         - It will check for keyword first before the assignment.

@@ -1,4 +1,4 @@
-use crate::typing::{TypeDefinition, BuiltinKind, TypeContainer, UnifiedTypeDefinition, OptimizedTypeDefinition};
+use crate::typing::{BuiltinKind, TypeContainer, TypeDefinition, UnifiedTypeDefinition};
 use std::collections::{BTreeMap, BTreeSet};
 
 #[test]
@@ -46,8 +46,14 @@ fn test_type_container_optimization() {
     let retrieved_int = container.get_type(&int_id).expect("Type should exist").clone();
     let retrieved_bool = container.get_type(&bool_id).expect("Type should exist").clone();
     
-    assert_eq!(retrieved_int, int_optimized);
-    assert_eq!(retrieved_bool, bool_optimized);
+    // Compare by converting both to unified format for comparison
+    let retrieved_int_unified = retrieved_int.to_unified();
+    let retrieved_bool_unified = retrieved_bool.to_unified();
+    let int_optimized_unified = UnifiedTypeDefinition::from_optimized(int_optimized);
+    let bool_optimized_unified = UnifiedTypeDefinition::from_optimized(bool_optimized);
+    
+    assert_eq!(retrieved_int_unified, int_optimized_unified);
+    assert_eq!(retrieved_bool_unified, bool_optimized_unified);
 }
 
 #[test]
