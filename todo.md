@@ -15,11 +15,11 @@
     - [x] Adding parser for the ast that is a expression
     - [x] So when evaluating the ast,it will convert it to the vm
 
+- [x] change assignment to other than like Identifier = Identifer convert to Expression=Expression,
 
 ## Doing:
-
-    - change assignment to other than like Identifier = Identifer convert to Expression=Expression,
-
+    - [ ] Now change the vmvalue implementation in anochi,It use Lietral as well,which need to be changed for bigint,bigfloat etc,
+    String implmentation will be handled later,also automatically generate type for the vmvalue,type will be the builtin value type.
 ## Todo:
     - support for a.x operation,and I can do something like a.x=10;
 

@@ -1,4 +1,7 @@
 use super::*;
+use num_bigint::BigInt;
+use num_rational::BigRational;
+
 /// Evaluates a unary operation on a VmValue.
 ///
 /// This is a standalone function that handles negation and logical NOT operations 
@@ -14,9 +17,15 @@ use super::*;
 /// A `VmResult` containing the computed result or an error.
 pub fn evaluate_unary_op(operator: &UnaryOperator, operand: &VmValue) -> VmResult {
     match (operator, operand) {
-        (UnaryOperator::Minus, VmValue::Literal(Literal::Integer(i))) => Ok(Literal::Integer(-i).into()),
-        (UnaryOperator::Minus, VmValue::Literal(Literal::Float(f))) => Ok(Literal::Float(-f).into()),
-        (UnaryOperator::Not, VmValue::Literal(Literal::Bool(b))) => Ok(Literal::Bool(!b).into()),
+        (UnaryOperator::Minus, VmValue::ValuePrimitive(ValuePrimitive::Integer(i))) => {
+            Ok(VmValue::ValuePrimitive(ValuePrimitive::Integer(-i)))
+        },
+        (UnaryOperator::Minus, VmValue::ValuePrimitive(ValuePrimitive::Float(f))) => {
+            Ok(VmValue::ValuePrimitive(ValuePrimitive::Float(-f)))
+        },
+        (UnaryOperator::Not, VmValue::ValuePrimitive(ValuePrimitive::Bool(b))) => {
+            Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(!b)))
+        },
         (_, VmValue::Product(_)) => Err(VmError::InvalidOperation("Product operations not yet implemented".to_string())),
         _ => Err(VmError::InvalidOperation(format!(
             "Cannot apply {operator:?} to {operand:?}",
@@ -46,73 +55,73 @@ pub fn evaluate_binary_op(
 ) -> VmResult {
     match (left, right) {
         // Bool operations
-        (VmValue::Literal(Literal::Bool(l)), VmValue::Literal(Literal::Bool(r))) => match operator {
-            BinaryOperator::Equal => Ok(Literal::Bool(l == r).into()),
-            BinaryOperator::NotEqual => Ok(Literal::Bool(l != r).into()),
-            BinaryOperator::And => Ok(Literal::Bool(*l && *r).into()),
-            BinaryOperator::Or => Ok(Literal::Bool(*l || *r).into()),
-            BinaryOperator::Less => Ok(Literal::Bool(!*l && *r).into()), // false < true
-            BinaryOperator::LessEqual => Ok(Literal::Bool(!*l || *r).into()), // false <= true, true <= true
-            BinaryOperator::Greater => Ok(Literal::Bool(*l && !*r).into()),   // true > false
-            BinaryOperator::GreaterEqual => Ok(Literal::Bool(*l || !*r).into()), // true >= false, true >= true
+        (VmValue::ValuePrimitive(ValuePrimitive::Bool(l)), VmValue::ValuePrimitive(ValuePrimitive::Bool(r))) => match operator {
+            BinaryOperator::Equal => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(l == r))),
+            BinaryOperator::NotEqual => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(l != r))),
+            BinaryOperator::And => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(*l && *r))),
+            BinaryOperator::Or => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(*l || *r))),
+            BinaryOperator::Less => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(!*l && *r))), // false < true
+            BinaryOperator::LessEqual => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(!*l || *r))), // false <= true, true <= true
+            BinaryOperator::Greater => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(*l && !*r))),   // true > false
+            BinaryOperator::GreaterEqual => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(*l || !*r))), // true >= false, true >= true
             _ => Err(VmError::InvalidOperation(format!(
                 "Cannot apply {operator:?} to Bool"
             ))),
         },
         // Integer operations
-        (VmValue::Literal(Literal::Integer(l)), VmValue::Literal(Literal::Integer(r))) => match operator {
-            BinaryOperator::Plus => Ok(Literal::Integer(l + r).into()),
-            BinaryOperator::Minus => Ok(Literal::Integer(l - r).into()),
-            BinaryOperator::Multiply => Ok(Literal::Integer(l * r).into()),
+        (VmValue::ValuePrimitive(ValuePrimitive::Integer(l)), VmValue::ValuePrimitive(ValuePrimitive::Integer(r))) => match operator {
+            BinaryOperator::Plus => Ok(VmValue::ValuePrimitive(ValuePrimitive::Integer(l + r))),
+            BinaryOperator::Minus => Ok(VmValue::ValuePrimitive(ValuePrimitive::Integer(l - r))),
+            BinaryOperator::Multiply => Ok(VmValue::ValuePrimitive(ValuePrimitive::Integer(l * r))),
             BinaryOperator::Divide => {
-                if *r == 0 {
+                if *r == BigInt::from(0) {
                     Err(VmError::DivisionByZero)
                 } else {
-                    Ok(Literal::Integer(l / r).into())
+                    Ok(VmValue::ValuePrimitive(ValuePrimitive::Integer(l / r)))
                 }
             }
             BinaryOperator::Modulo => {
-                if *r == 0 {
+                if *r == BigInt::from(0) {
                     Err(VmError::DivisionByZero)
                 } else {
-                    Ok(Literal::Integer(l % r).into())
+                    Ok(VmValue::ValuePrimitive(ValuePrimitive::Integer(l % r)))
                 }
             }
-            BinaryOperator::Equal => Ok(Literal::Bool(l == r).into()),
-            BinaryOperator::NotEqual => Ok(Literal::Bool(l != r).into()),
-            BinaryOperator::Less => Ok(Literal::Bool(l < r).into()),
-            BinaryOperator::LessEqual => Ok(Literal::Bool(l <= r).into()),
-            BinaryOperator::Greater => Ok(Literal::Bool(l > r).into()),
-            BinaryOperator::GreaterEqual => Ok(Literal::Bool(l >= r).into()),
+            BinaryOperator::Equal => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(l == r))),
+            BinaryOperator::NotEqual => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(l != r))),
+            BinaryOperator::Less => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(l < r))),
+            BinaryOperator::LessEqual => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(l <= r))),
+            BinaryOperator::Greater => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(l > r))),
+            BinaryOperator::GreaterEqual => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(l >= r))),
             _ => Err(VmError::InvalidOperation(format!(
                 "Cannot apply {operator:?} to integer"
             ))),
         },
         // Float operations
-        (VmValue::Literal(Literal::Float(l)), VmValue::Literal(Literal::Float(r))) => match operator {
-            BinaryOperator::Plus => Ok(Literal::Float(l + r).into()),
-            BinaryOperator::Minus => Ok(Literal::Float(l - r).into()),
-            BinaryOperator::Multiply => Ok(Literal::Float(l * r).into()),
+        (VmValue::ValuePrimitive(ValuePrimitive::Float(l)), VmValue::ValuePrimitive(ValuePrimitive::Float(r))) => match operator {
+            BinaryOperator::Plus => Ok(VmValue::ValuePrimitive(ValuePrimitive::Float(l + r))),
+            BinaryOperator::Minus => Ok(VmValue::ValuePrimitive(ValuePrimitive::Float(l - r))),
+            BinaryOperator::Multiply => Ok(VmValue::ValuePrimitive(ValuePrimitive::Float(l * r))),
             BinaryOperator::Divide => {
-                if *r == 0.0 {
+                if *r == BigRational::from(BigInt::from(0)) {
                     Err(VmError::DivisionByZero)
                 } else {
-                    Ok(Literal::Float(l / r).into())
+                    Ok(VmValue::ValuePrimitive(ValuePrimitive::Float(l / r)))
                 }
             }
             BinaryOperator::Modulo => {
-                if *r == 0.0 {
+                if *r == BigRational::from(BigInt::from(0)) {
                     Err(VmError::DivisionByZero)
                 } else {
-                    Ok(Literal::Float(l % r).into())
+                    Ok(VmValue::ValuePrimitive(ValuePrimitive::Float(l % r)))
                 }
             }
-            BinaryOperator::Equal => Ok(Literal::Bool((l - r).abs() < f64::EPSILON).into()),
-            BinaryOperator::NotEqual => Ok(Literal::Bool((l - r).abs() >= f64::EPSILON).into()),
-            BinaryOperator::Less => Ok(Literal::Bool(l < r).into()),
-            BinaryOperator::LessEqual => Ok(Literal::Bool(l <= r).into()),
-            BinaryOperator::Greater => Ok(Literal::Bool(l > r).into()),
-            BinaryOperator::GreaterEqual => Ok(Literal::Bool(l >= r).into()),
+            BinaryOperator::Equal => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(l == r))),
+            BinaryOperator::NotEqual => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(l != r))),
+            BinaryOperator::Less => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(l < r))),
+            BinaryOperator::LessEqual => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(l <= r))),
+            BinaryOperator::Greater => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(l > r))),
+            BinaryOperator::GreaterEqual => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(l >= r))),
             _ => Err(VmError::InvalidOperation(format!(
                 "Cannot apply {operator:?} to float"
             ))),

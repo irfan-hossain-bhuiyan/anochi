@@ -18,3 +18,5 @@ rather this
 		self[index]=str
 	}
 ```
+8. If you need to edit some file,but the edit is not working,just halt,ask me to give access,then access it.
+9. It is early in the project,Don't make many test,When adding new test,check if it also test previos test,then remove previous test.

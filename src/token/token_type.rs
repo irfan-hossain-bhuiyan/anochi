@@ -1,10 +1,12 @@
 use thiserror::Error;
+use num_bigint::BigInt;
+use num_rational::BigRational;
 // Token types for the Anochi language.
 #[derive(Debug, Clone, PartialEq)]
 pub enum TokenType {
     Identifier(String),
-    Integer(i64),
-    Float(f64),
+    Integer(BigInt),
+    Float(BigRational),
     String(String),
     Keyword(Keyword),
     LeftParen,

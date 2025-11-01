@@ -1,8 +1,12 @@
 //! Token module for the Anochi programming language lexer.
 //! Token module for the Anochi programming language lexer.
 pub mod token_type;
+#[cfg(test)]
+mod tests;
 pub use token_type::TokenType;
 
+use num_bigint::BigInt;
+use num_rational::BigRational;
 use std::num::NonZeroUsize;
 
 use crate::token::token_type::{Keyword, TokenizerError};
@@ -215,7 +219,7 @@ impl<'a> Tokenizer<'a> {
         }
 
         if is_float {
-            match number.parse::<f64>() {
+            match number.parse::<num_rational::BigRational>() {
                 Ok(value) => Token::new(
                     TokenType::Float(value),
                     Position::new(start_line, start_column, slice).unwrap(),
@@ -227,7 +231,7 @@ impl<'a> Tokenizer<'a> {
                 ),
             }
         } else {
-            match number.parse::<i64>() {
+            match number.parse::<num_bigint::BigInt>() {
                 Ok(value) => Token::new(
                     TokenType::Integer(value),
                     Position::new(start_line, start_column, slice).unwrap(),

@@ -19,6 +19,9 @@ pub type Identifier = String;
 pub type IdentifierMap<T>=HashMap<Identifier,T>;
 pub type IdentifierToValue=IdentifierMap<VmValue>;
 pub type IdentifierToExpression<'a>=IdentifierMap<ExpressionNode<'a>>;
+use num_bigint::BigInt;
+use num_rational::BigRational;
+
 use crate::token::Position;
 use crate::token::token_type::Keyword::{False, True};
 use crate::token::token_type::TokenType;
@@ -41,9 +44,9 @@ pub trait MatchOperator: Sized {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Literal {
     /// Integer literal (e.g., `42`, `-123`)
-    Integer(i64),
+    Integer(num_bigint::BigInt),
     /// Floating-point literal (e.g., `3.14`, `-2.5`)
-    Float(f64),
+    Float(num_rational::BigRational),
     /// String literal (e.g., "hello", "world")
     String(String),
     /// Identifier (variable name, function name, etc.)
@@ -206,7 +209,13 @@ impl<'a> Expression<'a> {
     /// # Returns
     ///
     /// An `Expression::Literal` containing the integer value.
-    pub fn integer(value: i64) -> Self {
+    pub fn from_i64(value: i64) -> Self {
+        Expression::Literal(Literal::Integer(value.into()))
+    }
+    pub fn from_f64(value: f64) -> Self {
+        Expression::Literal(Literal::Float(BigRational::from_float(value).unwrap()))
+    }
+    pub fn integer(value:BigInt) -> Self{
         Expression::Literal(Literal::Integer(value))
     }
     pub fn product(value:IdentifierToExpression<'a>)->Self{
@@ -224,7 +233,10 @@ impl<'a> Expression<'a> {
     /// # Returns
     ///
     /// An `Expression::Literal` containing the float value.
-    pub fn float(value: f64) -> Self {
+   // pub fn float(value: num_rational::BigRational) -> Self {
+   //     Expression::Literal(Literal::Float(value))
+   // }
+    pub fn float(value:BigRational) ->Self{
         Expression::Literal(Literal::Float(value))
     }
     pub fn bool(value: bool) -> Self {

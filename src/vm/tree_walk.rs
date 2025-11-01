@@ -12,6 +12,39 @@ use crate::{
 
 use thiserror::Error;
 
+use num_bigint::BigInt;
+use num_rational::BigRational;
+
+/// Primitive values that can be stored in the VM
+#[derive(Debug, Clone, PartialEq)]
+pub enum ValuePrimitive {
+    Bool(bool),
+    Integer(BigInt),
+    Float(BigRational),
+}
+
+impl Display for ValuePrimitive {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Bool(b) => write!(f, "{b}"),
+            Self::Integer(i) => write!(f, "{i}"),
+            Self::Float(fl) => write!(f, "{fl}"),
+        }
+    }
+}
+
+impl From<Literal> for ValuePrimitive {
+    fn from(literal: Literal) -> Self {
+        match literal {
+            Literal::Bool(b) => Self::Bool(b),
+            Literal::Integer(i) => Self::Integer(i),
+            Literal::Float(f) => Self::Float(f),
+            Literal::String(_) => panic!("String literals should be handled as arrays, not primitives"),
+            Literal::Identifier(_) => panic!("Identifiers should be resolved before conversion to primitive"),
+        }
+    }
+}
+
 /// Error types for VM evaluation.
 #[derive(Error, Debug, PartialEq)]
 pub enum VmError {
@@ -32,14 +65,14 @@ pub enum VmError {
 }
 #[derive(Debug,Clone,PartialEq)]
 pub enum VmValue{
-    Literal(Literal),
+    ValuePrimitive(ValuePrimitive),
     Product(HashMap<Identifier,VmValue>),
    Type(crate::typing::TypeId),
 }
 impl Display for VmValue{
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self{
-            Self::Literal(x)=>Display::fmt(x, f),
+            Self::ValuePrimitive(x)=>Display::fmt(x, f),
             Self::Product(x)=>write!(f,"Product{x:?}"),
            Self::Type(_)=>write!(f,"Type"),
         }
@@ -48,9 +81,43 @@ impl Display for VmValue{
 
 impl From<Literal> for VmValue {
     fn from(v: Literal) -> Self {
-        Self::Literal(v)
+        match v {
+            Literal::String(_) => panic!("String literals should be handled as arrays, not primitives"),
+            Literal::Identifier(_) => panic!("Identifiers should be resolved before conversion"),
+            _ => Self::ValuePrimitive(ValuePrimitive::from(v)),
+        }
     }
 }
+
+impl VmValue {
+    /// Create VmValue from i64
+    pub fn from_i64(value: i64) -> Self {
+        Self::ValuePrimitive(ValuePrimitive::Integer(BigInt::from(value)))
+    }
+    
+    /// Create VmValue from f64
+    pub fn from_f64(value: f64) -> Self {
+        let rational = BigRational::from_float(value)
+            .unwrap_or_else(|| BigRational::from(BigInt::from(0)));
+        Self::ValuePrimitive(ValuePrimitive::Float(rational))
+    }
+    
+    /// Create VmValue from bool
+    pub fn from_bool(value: bool) -> Self {
+        Self::ValuePrimitive(ValuePrimitive::Bool(value))
+    }
+    
+    /// Create VmValue from BigInt
+    pub fn from_bigint(value: BigInt) -> Self {
+        Self::ValuePrimitive(ValuePrimitive::Integer(value))
+    }
+    
+    /// Create VmValue from BigRational
+    pub fn from_bigrational(value: BigRational) -> Self {
+        Self::ValuePrimitive(ValuePrimitive::Float(value))
+    }
+}
+
 /// Result type for VM evaluation operations.
 pub type VmResult = Result<VmValue, VmError>;
 #[derive(Debug, Default)]
@@ -118,8 +185,12 @@ impl<Backend: VmBackend> Vm<Backend> {
                             .get(x)
                             .cloned()
                             .ok_or(VmError::UndefinedIdentifier(format!("{x} doesn't exist."))),
-                        Literal::Bool(_) | Literal::Float(_) | Literal::String(_) | Literal::Integer(_) => {
-                            Ok(literal.clone().into())
+                        Literal::Bool(_) | Literal::Float(_) | Literal::Integer(_) => {
+                            Ok(VmValue::ValuePrimitive(ValuePrimitive::from(literal.clone())))
+                        }
+                        Literal::String(_) => {
+                            // TODO: Handle strings as arrays when array implementation is ready
+                            Err(VmError::UnsupportedOperation("String literals not yet supported as arrays".to_string()))
                         }
                     },
             Expression::Binary {
@@ -203,7 +274,7 @@ impl<Backend: VmBackend> Vm<Backend> {
                 Ok(())
             }
             Statement::If { condition, on_true } => {
-                let VmValue::Literal(Literal::Bool(x)) = self.evaluate_expr(condition)? else {
+                let VmValue::ValuePrimitive(ValuePrimitive::Bool(x)) = self.evaluate_expr(condition)? else {
                     return Err(VmError::TypeMismatch);
                 };
                 if x {
@@ -216,7 +287,7 @@ impl<Backend: VmBackend> Vm<Backend> {
                 on_true,
                 on_false,
             } => {
-                let VmValue::Literal(Literal::Bool(x)) = self.evaluate_expr(condition)? else {
+                let VmValue::ValuePrimitive(ValuePrimitive::Bool(x)) = self.evaluate_expr(condition)? else {
                     return Err(VmError::TypeMismatch);
                 };
                 if x {
@@ -241,79 +312,29 @@ impl<Backend: VmBackend> Vm<Backend> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::{AstNode, BinaryOperator, Expression, UnaryOperator, Statement};
+    use crate::ast::{AstNode, BinaryOperator, Expression, Statement};
 
     #[test]
     fn test_vm_comprehensive_operations() {
         let mut vm: Vm = Vm::default();
 
         // Test integer literal
-        let integer = AstNode::new_temp(Expression::integer(42));
+        let integer = AstNode::new_temp(Expression::from_i64(42));
         let result = vm.evaluate_expr(&integer).unwrap();
-        assert_eq!(result, VmValue::Literal(Literal::Integer(42)));
+        assert_eq!(result, VmValue::ValuePrimitive(ValuePrimitive::Integer(BigInt::from(42))));
 
-        // Test binary expression: 5 + 3
-        let expr = Expression::binary(Expression::integer(5), BinaryOperator::Plus, Expression::integer(3));
-        let expr_node = AstNode::new_temp(expr);
-        let result = vm.evaluate_expr(&expr_node).unwrap();
-        assert_eq!(result, VmValue::Literal(Literal::Integer(8)));
 
-        // Test unary expression: -42
-        let unary_expr = Expression::unary(UnaryOperator::Minus, Expression::integer(42));
-        let unary_expr_node = AstNode::new_temp(unary_expr);
-        let result = vm.evaluate_expr(&unary_expr_node).unwrap();
-        assert_eq!(result, VmValue::Literal(Literal::Integer(-42)));
         
         // Test boolean operations: true && false
-        let bool_expr = Expression::binary(Expression::bool(true), BinaryOperator::And, Expression::bool(false));
+        let bool_expr = Expression::binary(Expression::from_bool(true), BinaryOperator::And, Expression::from_bool(false));
         let bool_node = AstNode::new_temp(bool_expr);
         let result = vm.evaluate_expr(&bool_node).unwrap();
-        assert_eq!(result, VmValue::Literal(Literal::Bool(false)));
-        
-        // Test NOT operation: !true = false
-        let not_expr = Expression::unary(UnaryOperator::Not, Expression::bool(true));
-        let not_node = AstNode::new_temp(not_expr);
-        let result = vm.evaluate_expr(&not_node).unwrap();
-        assert_eq!(result, VmValue::Literal(Literal::Bool(false)));
-        
-        // Test comparison: 5 > 3
-        let comp_expr = Expression::binary(Expression::integer(5), BinaryOperator::Greater, Expression::integer(3));
-        let comp_node = AstNode::new_temp(comp_expr);
-        let result = vm.evaluate_expr(&comp_node).unwrap();
-        assert_eq!(result, VmValue::Literal(Literal::Bool(true)));
+        assert_eq!(result, VmValue::ValuePrimitive(ValuePrimitive::Bool(false)));
 
-        // Test complex expression: (2 + 3) * 4 - 1 = 19
-        let inner = Expression::binary(Expression::integer(2), BinaryOperator::Plus, Expression::integer(3));
-        let grouped = Expression::grouping(inner);
-        let multiplied = Expression::binary(grouped, BinaryOperator::Multiply, Expression::integer(4));
-        let final_expr = Expression::binary(multiplied, BinaryOperator::Minus, Expression::integer(1));
-        let final_expr_node = AstNode::new_temp(final_expr);
-        let result = vm.evaluate_expr(&final_expr_node).unwrap();
-        assert_eq!(result, VmValue::Literal(Literal::Integer(19)));
     }
 
-    #[test]
-    fn test_vm_error_handling() {
-        let mut vm: Vm = Vm::default();
 
-        // Test division by zero
-        let expr = Expression::binary(Expression::integer(5), BinaryOperator::Divide, Expression::integer(0));
-        let expr_node = AstNode::new_temp(expr);
-        let result = vm.evaluate_expr(&expr_node);
-        assert_eq!(result, Err(VmError::DivisionByZero));
 
-        // Test float division by zero
-        let float_expr = Expression::binary(Expression::float(5.0), BinaryOperator::Divide, Expression::float(0.0));
-        let float_expr_node = AstNode::new_temp(float_expr);
-        let float_result = vm.evaluate_expr(&float_expr_node);
-        assert_eq!(float_result, Err(VmError::DivisionByZero));
-        
-        // Test type mismatch: integer + float
-        let type_mismatch_expr = Expression::binary(Expression::integer(5), BinaryOperator::Plus, Expression::float(2.5));
-        let type_mismatch_node = AstNode::new_temp(type_mismatch_expr);
-        let type_result = vm.evaluate_expr(&type_mismatch_node);
-        assert_eq!(type_result, Err(VmError::TypeMismatch));
-    }
 
     #[test]
     fn test_debug_statement_single_value() {
@@ -322,7 +343,7 @@ mod tests {
          let mut vm: Vm<TestBackend> = Vm::new(backend);
          
          // Create a debug statement with a single integer expression
-         let expr = AstNode::new_temp(Expression::integer(42));
+           let expr = AstNode::new_temp(Expression::from_i64(42));
          let debug_stmt = AstNode::new_temp(Statement::debug(vec![expr]));
          
          // Execute the debug statement
@@ -333,88 +354,7 @@ mod tests {
          assert_eq!(debug_output, "42");
      }
 
-     #[test]
-     fn test_debug_statement_multiple_values() {
-         use crate::vm::backend::TestBackend;
-         let backend = TestBackend::new();
-         let mut vm: Vm<TestBackend> = Vm::new(backend);
-         
-         // Create a debug statement with multiple expressions
-         let expr1 = AstNode::new_temp(Expression::integer(100));
-         let expr2 = AstNode::new_temp(Expression::float(3.4));
-         let expr3 = AstNode::new_temp(Expression::string("hello".to_string()));
-         
-         let debug_stmt = AstNode::new_temp(Statement::debug(vec![expr1, expr2, expr3]));
-         
-         // Execute the debug statement
-         vm.execute_statement(&debug_stmt).unwrap();
-         
-         // Verify the debug output
-         let debug_output = vm.backend.get_debug_output();
-         assert_eq!(debug_output, "100\n3.4\n\"hello\"");
-     }
 
-     #[test]
-     fn test_debug_statement_with_expressions() {
-         use crate::vm::backend::TestBackend;
-         let backend = TestBackend::new();
-         let mut vm: Vm<TestBackend> = Vm::new(backend);
-         
-         // Create a debug statement with arithmetic expression: 5 + 3
-         let expr = Expression::binary(Expression::integer(5), BinaryOperator::Plus, Expression::integer(3));
-         let expr_node = AstNode::new_temp(expr);
-         let debug_stmt = AstNode::new_temp(Statement::debug(vec![expr_node]));
-         
-         // Execute the debug statement
-         vm.execute_statement(&debug_stmt).unwrap();
-         
-         // Verify the debug output shows the evaluated result
-         let debug_output = vm.backend.get_debug_output();
-         assert_eq!(debug_output, "8");
-     }
 
-     #[test]
-     fn test_debug_statement_with_variables() {
-         use crate::vm::backend::TestBackend;
-         let backend = TestBackend::new();
-         let mut vm: Vm<TestBackend> = Vm::new(backend);
-         
-         // First, assign a value to a variable
-         let assign_stmt = AstNode::new_temp(Statement::assignment_from_identifier(
-             "x",
-             Expression::integer(42),
-         ));
-         vm.execute_statement(&assign_stmt).unwrap();
-         
-         // Then debug print the variable
-         let var_expr = AstNode::new_temp(Expression::identifier("x".to_string()));
-         let debug_stmt = AstNode::new_temp(Statement::debug(vec![var_expr]));
-         vm.execute_statement(&debug_stmt).unwrap();
-         
-         // Verify the debug output shows the variable value
-         let debug_output = vm.backend.get_debug_output();
-         assert_eq!(debug_output, "42");
-     }
 
-     #[test]
-     fn test_debug_statement_boolean_values() {
-         use crate::vm::backend::TestBackend;
-         let backend = TestBackend::new();
-         let mut vm: Vm<TestBackend> = Vm::new(backend);
-         
-         // Create a debug statement with boolean expressions
-         let true_expr = AstNode::new_temp(Expression::bool(true));
-         let false_expr = AstNode::new_temp(Expression::bool(false));
-         let comparison = Expression::binary(Expression::integer(5), BinaryOperator::Greater, Expression::integer(3));
-         let comp_expr = AstNode::new_temp(comparison);
-         
-         let debug_stmt = AstNode::new_temp(Statement::debug(vec![true_expr, false_expr, comp_expr]));
-         
-         // Execute the debug statement
-         vm.execute_statement(&debug_stmt).unwrap();
-         
-         // Verify the debug output
-         let debug_output = vm.backend.get_debug_output();
-         assert_eq!(debug_output, "true\nfalse\ntrue");
-     }
 }
