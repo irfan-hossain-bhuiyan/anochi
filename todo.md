@@ -17,10 +17,12 @@
 
 
 ## Doing:
-- Adding type as a builtin as well.
+
+    - change assignment to other than like Identifier = Identifer convert to Expression=Expression,
+
 ## Todo:
-    - change assignment to other than like Identifier = Identifer convert to Expression=Expression,and I can do something like a.x=10;
-    - Add the orginal typedefination,other than having ref,maybe not(This decision is pending)
+    - supprt for a.x operation,and I can do something like a.x=10;
+
     - Change the assignment to have comptime,let,None
         - It will check for keyword first before the assignment.
     - Change the ast to encompass it,to know what kind of assignment is this 
@@ -37,6 +39,8 @@ Add struct based type in Literal,where I can create {x=10,y=10},
             take expression as input,Which I not doing,Let's think about it later.
         So that's why I am using third bracket
 
+> Why the duplication like TypeDefinition,OptimizedTypeDefinition,UnifiedTypeDefinition?
+D
 ## Ideas:
     Types are values as well,they are object in vmvalue
     So I can add them as expresssion,and generate them from struct,
