@@ -18,7 +18,7 @@ macro_rules! match_token {
                     Err(NoTokenFound::new(current_token_type.clone()))
                 }
             }
-            None => Err(NoTokenFound::NoneToken),
+            None => Err(NoTokenFound::NONE_TOKEN),
         }
     }};
 }
@@ -26,7 +26,7 @@ macro_rules! match_token {
 /// Macro for token matching with error conversion to ParserError
 macro_rules! match_token_or_err {
     ($self:expr, $pattern:pat) => {{
-        match_token!($self, $pattern).map_err(|x| x.to_parser_error())
+        match_token!($self, $pattern).map_err(|x| x.into_parser_error())
     }};
 }
 

@@ -10,20 +10,20 @@ impl NoTokenFound {
     pub fn new(token_found: TokenType) -> Self {
         Self { token_found:Some(token_found) }
     }
-    pub const NoneToken:Self=NoTokenFound{token_found:None};
+    pub const NONE_TOKEN:Self=NoTokenFound{token_found:None};
 
     /// Fast conversion to StatementParseError::NotFound
-    pub fn to_statement_error(self) -> StatementParseError {
+    pub fn into_statement_error(self) -> StatementParseError {
         StatementParseError::TokenNotFound(self)
     }
 
     /// Fast direct conversion to ParserError, bypassing StatementParseError
-    pub fn to_parser_error(self) -> ParserError {
-        ParserError::Stat(self.to_statement_error())
+    pub fn into_parser_error(self) -> ParserError {
+        ParserError::Stat(self.into_statement_error())
     }
 
     /// Fast conversion to ExpressionParseError::TokenNotFound
-    pub fn to_expression_error(self) -> ExpressionParseError {
+    pub fn into_expression_error(self) -> ExpressionParseError {
         ExpressionParseError::TokenNotFound(self)
     }
 }
@@ -39,7 +39,7 @@ pub enum ExpressionParseError {
 
 impl ExpressionParseError {
     /// Fast conversion to ParserError::Expr
-    pub fn to_parser_error(self) -> ParserError {
+    pub fn into_parser_error(self) -> ParserError {
         ParserError::Expr(self)
     }
 }
@@ -52,7 +52,7 @@ pub enum StatementParseError {
 }
 impl StatementParseError {
     /// Fast conversion to ParserError::Stat
-    pub fn to_parser_error(self) -> ParserError {
+    pub fn into_parser_error(self) -> ParserError {
         ParserError::Stat(self)
     }
 }
