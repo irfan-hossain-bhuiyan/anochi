@@ -215,6 +215,9 @@ impl<'a> Expression<'a> {
     pub fn from_f64(value: f64) -> Self {
         Expression::Literal(Literal::Float(BigRational::from_float(value).unwrap()))
     }
+    pub fn from_bool(value:bool) ->Self{
+        Expression::Literal(Literal::Bool(value))
+    }
     pub fn integer(value:BigInt) -> Self{
         Expression::Literal(Literal::Integer(value))
     }
