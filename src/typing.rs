@@ -246,11 +246,11 @@ impl UnifiedTypeDefinition {
     }
 
     /// Convert UnifiedTypeDefinition to TypeDefinition with reference expansion
-    pub fn to_type_definition_expanded(&self, container: &TypeContainer) -> TypeDefinition {
+    pub fn to_type_definition_expanded(self, container: &TypeContainer) -> TypeDefinition {
         match self {
             UnifiedTypeDefinition::Product { fields } => {
                 let type_def_fields = fields
-                    .iter()
+                    .into_iter()
                     .map(|(id, type_ref)| {
                         let type_def = match type_ref {
                             TypeRef::Direct(unified_def) => {
@@ -258,8 +258,7 @@ impl UnifiedTypeDefinition {
                             }
                             TypeRef::Reference(type_id) => {
                                 if let Some(opt_def) = container.get_type(type_id) {
-                                    let unified =
-                                        UnifiedTypeDefinition::from_optimized(opt_def, container);
+                                    let unified =   
                                     unified.to_type_definition_expanded(container)
                                 } else {
                                     panic!("TypeId not found in container")
