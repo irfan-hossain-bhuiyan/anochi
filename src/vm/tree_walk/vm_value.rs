@@ -1,7 +1,96 @@
-use super::*;
+use std::{collections::HashMap, fmt::Display};
+use crate::ast::{Identifier, Literal};
 use num_bigint::BigInt;
 use num_rational::BigRational;
 
+/// Primitive values that can be stored in the VM
+#[derive(Debug, Clone, PartialEq)]
+pub enum ValuePrimitive {
+    Bool(bool),
+    Integer(BigInt),
+    Float(BigRational),
+}
+
+impl Display for ValuePrimitive {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Bool(b) => write!(f, "{b}"),
+            Self::Integer(i) => write!(f, "{i}"),
+            Self::Float(fl) => write!(f, "{fl}"),
+        }
+    }
+}
+
+impl From<Literal> for ValuePrimitive {
+    fn from(literal: Literal) -> Self {
+        match literal {
+            Literal::Bool(b) => Self::Bool(b),
+            Literal::Integer(i) => Self::Integer(i),
+            Literal::Float(f) => Self::Float(f),
+            Literal::String(_) => panic!("String literals should be handled as arrays, not primitives"),
+            Literal::Identifier(_) => panic!("Identifiers should be resolved before conversion to primitive"),
+        }
+    }
+}
+
+/// The main value type used in the VM
+#[derive(Debug, Clone, PartialEq)]
+pub enum VmValue {
+    ValuePrimitive(ValuePrimitive),
+    Product(HashMap<Identifier, VmValue>),
+    Type(crate::typing::TypeId),
+}
+
+impl Display for VmValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::ValuePrimitive(x) => Display::fmt(x, f),
+            Self::Product(x) => write!(f, "Product{x:?}"),
+            Self::Type(_) => write!(f, "Type"),
+        }
+    }
+}
+
+impl From<Literal> for VmValue {
+    fn from(v: Literal) -> Self {
+        match v {
+            Literal::String(_) => panic!("String literals should be handled as arrays, not primitives"),
+            Literal::Identifier(_) => panic!("Identifiers should be resolved before conversion"),
+            _ => Self::ValuePrimitive(ValuePrimitive::from(v)),
+        }
+    }
+}
+
+impl VmValue {
+    /// Create VmValue from i64
+    pub fn from_i64(value: i64) -> Self {
+        Self::ValuePrimitive(ValuePrimitive::Integer(BigInt::from(value)))
+    }
+    
+    /// Create VmValue from f64
+    pub fn from_f64(value: f64) -> Self {
+        let rational = BigRational::from_float(value)
+            .unwrap_or_else(|| BigRational::from(BigInt::from(0)));
+        Self::ValuePrimitive(ValuePrimitive::Float(rational))
+    }
+    
+    /// Create VmValue from bool
+    pub fn from_bool(value: bool) -> Self {
+        Self::ValuePrimitive(ValuePrimitive::Bool(value))
+    }
+    
+    /// Create VmValue from BigInt
+    pub fn from_bigint(value: BigInt) -> Self {
+        Self::ValuePrimitive(ValuePrimitive::Integer(value))
+    }
+    
+    /// Create VmValue from BigRational
+    pub fn from_bigrational(value: BigRational) -> Self {
+        Self::ValuePrimitive(ValuePrimitive::Float(value))
+    }
+}
+
+use super::*;
 /// Evaluates a unary operation on a VmValue.
 ///
 /// This is a standalone function that handles negation and logical NOT operations 

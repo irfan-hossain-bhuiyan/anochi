@@ -18,7 +18,7 @@
 - [x] change assignment to other than like Identifier = Identifer convert to Expression=Expression,
 
 ## Doing:
-    - [ ] Now change the vmvalue implementation in anochi,It use Lietral as well,which need to be changed for bigint,bigfloat etc,
+    - [ ] Now change the vmvalue implementation in anochi,It use Literal as well,which need to be changed for bigint,bigfloat etc,
     String implmentation will be handled later,also automatically generate type for the vmvalue,type will be the builtin value type.
 ## Todo:
     - support for a.x operation,and I can do something like a.x=10;

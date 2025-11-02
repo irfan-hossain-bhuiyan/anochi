@@ -22,6 +22,8 @@ pub enum BuiltinKind {
     Bool,
     /// Machine-sized unsigned integer (pointer size)
     Usize,
+    /// Type of types (meta-type)
+    Type,
 }
 pub type TypeId = HashPtr<OptimizedTypeDefinition>;
 

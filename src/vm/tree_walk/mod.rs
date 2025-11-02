@@ -1,7 +1,9 @@
 //! Virtual Machine for the Anochi programming language.
 
-use std::{collections::HashMap, fmt::Display};
-mod vm_value_operation;
+use std::collections::HashMap;
+mod vm_value;
+pub use vm_value::{VmValue, ValuePrimitive};
+
 use crate::{
     ast::{
         BinaryOperator, Expression, ExpressionNode, Identifier, Literal, Statement, StatementNode,
@@ -12,38 +14,9 @@ use crate::{
 
 use thiserror::Error;
 
-use num_bigint::BigInt;
-use num_rational::BigRational;
 
-/// Primitive values that can be stored in the VM
-#[derive(Debug, Clone, PartialEq)]
-pub enum ValuePrimitive {
-    Bool(bool),
-    Integer(BigInt),
-    Float(BigRational),
-}
 
-impl Display for ValuePrimitive {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Bool(b) => write!(f, "{b}"),
-            Self::Integer(i) => write!(f, "{i}"),
-            Self::Float(fl) => write!(f, "{fl}"),
-        }
-    }
-}
 
-impl From<Literal> for ValuePrimitive {
-    fn from(literal: Literal) -> Self {
-        match literal {
-            Literal::Bool(b) => Self::Bool(b),
-            Literal::Integer(i) => Self::Integer(i),
-            Literal::Float(f) => Self::Float(f),
-            Literal::String(_) => panic!("String literals should be handled as arrays, not primitives"),
-            Literal::Identifier(_) => panic!("Identifiers should be resolved before conversion to primitive"),
-        }
-    }
-}
 
 /// Error types for VM evaluation.
 #[derive(Error, Debug, PartialEq)]
@@ -63,60 +36,8 @@ pub enum VmError {
     #[error("Unsupproted Operation {0:?}")]
     UnsupportedOperation(String)
 }
-#[derive(Debug,Clone,PartialEq)]
-pub enum VmValue{
-    ValuePrimitive(ValuePrimitive),
-    Product(HashMap<Identifier,VmValue>),
-   Type(crate::typing::TypeId),
-}
-impl Display for VmValue{
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self{
-            Self::ValuePrimitive(x)=>Display::fmt(x, f),
-            Self::Product(x)=>write!(f,"Product{x:?}"),
-           Self::Type(_)=>write!(f,"Type"),
-        }
-    }
-}
 
-impl From<Literal> for VmValue {
-    fn from(v: Literal) -> Self {
-        match v {
-            Literal::String(_) => panic!("String literals should be handled as arrays, not primitives"),
-            Literal::Identifier(_) => panic!("Identifiers should be resolved before conversion"),
-            _ => Self::ValuePrimitive(ValuePrimitive::from(v)),
-        }
-    }
-}
 
-impl VmValue {
-    /// Create VmValue from i64
-    pub fn from_i64(value: i64) -> Self {
-        Self::ValuePrimitive(ValuePrimitive::Integer(BigInt::from(value)))
-    }
-    
-    /// Create VmValue from f64
-    pub fn from_f64(value: f64) -> Self {
-        let rational = BigRational::from_float(value)
-            .unwrap_or_else(|| BigRational::from(BigInt::from(0)));
-        Self::ValuePrimitive(ValuePrimitive::Float(rational))
-    }
-    
-    /// Create VmValue from bool
-    pub fn from_bool(value: bool) -> Self {
-        Self::ValuePrimitive(ValuePrimitive::Bool(value))
-    }
-    
-    /// Create VmValue from BigInt
-    pub fn from_bigint(value: BigInt) -> Self {
-        Self::ValuePrimitive(ValuePrimitive::Integer(value))
-    }
-    
-    /// Create VmValue from BigRational
-    pub fn from_bigrational(value: BigRational) -> Self {
-        Self::ValuePrimitive(ValuePrimitive::Float(value))
-    }
-}
 
 /// Result type for VM evaluation operations.
 pub type VmResult = Result<VmValue, VmError>;
@@ -201,11 +122,11 @@ impl<Backend: VmBackend> Vm<Backend> {
                         let left_val = self.evaluate_expr(left)?;
                         let right_val = self.evaluate_expr(right)?;
 
-                        vm_value_operation::evaluate_binary_op(&left_val, operator, &right_val)
+                        vm_value::evaluate_binary_op(&left_val, operator, &right_val)
                     }
             Expression::Unary { operator, operand } => {
                         let operand_val = self.evaluate_expr(operand)?;
-                        vm_value_operation::evaluate_unary_op(operator, &operand_val)
+                        vm_value::evaluate_unary_op(operator, &operand_val)
                     }
             Expression::Grouping { expression } => self.evaluate_expr(expression),
             Expression::Product { data } => {
@@ -313,6 +234,7 @@ impl<Backend: VmBackend> Vm<Backend> {
 mod tests {
     use super::*;
     use crate::ast::{AstNode, BinaryOperator, Expression, Statement};
+    use num_bigint::BigInt;
 
     #[test]
     fn test_vm_comprehensive_operations() {
