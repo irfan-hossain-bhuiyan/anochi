@@ -1,4 +1,4 @@
-use crate::typing::{BuiltinKind, TypeContainer, TypeDefinition, UnifiedTypeDefinition};
+use crate::{typing::{BuiltinKind, TypeContainer, TypeDefinition, UnifiedTypeDefinition}, token::token_type::Identifier};
 use std::collections::{BTreeMap, BTreeSet};
 
 #[test]
@@ -9,8 +9,8 @@ fn test_type_definition_independence() {
     
     // Create a product type with independent TypeDefinitions
     let mut fields = BTreeMap::new();
-    fields.insert("x".to_string(), int_type.clone());
-    fields.insert("active".to_string(), bool_type.clone());
+    fields.insert(Identifier::new("x".to_string()), int_type.clone());
+    fields.insert(Identifier::new("active".to_owned()), bool_type.clone());
     
     let product_type = TypeDefinition::product(fields);
     

@@ -1,4 +1,4 @@
-use crate::typing::{TypeDefinition, TypeContainer, BuiltinKind, UnifiedTypeDefinition, TypeRef};
+use crate::{typing::{TypeDefinition, TypeContainer, BuiltinKind, UnifiedTypeDefinition, TypeRef}, token::token_type::Identifier};
 use std::collections::BTreeMap;
 
 #[test]
@@ -11,20 +11,20 @@ fn test_type_container_complex_nested_deduplication() {
     
     // Create inner type: {a: i64, b: bool}
     let mut inner_fields = BTreeMap::new();
-    inner_fields.insert("a".to_string(), i64_type.clone());
-    inner_fields.insert("b".to_string(), bool_type.clone());
+    inner_fields.insert(Identifier::new("a".to_string()), i64_type.clone());
+    inner_fields.insert(Identifier::new("b".to_string()), bool_type.clone());
     let inner_type = TypeDefinition::product(inner_fields);
     
     // Create first outer type: {a: i64, b: {a: i64, b: bool}}
     let mut outer_fields_1 = BTreeMap::new();
-    outer_fields_1.insert("a".to_string(), i64_type.clone());
-    outer_fields_1.insert("b".to_string(), inner_type.clone());
+    outer_fields_1.insert(Identifier::new("a".to_string()), i64_type.clone());
+    outer_fields_1.insert(Identifier::new("b".to_string()), inner_type.clone());
     let outer_type_1 = TypeDefinition::product(outer_fields_1);
     
     // Create second outer type: {a: i64, b: {a: i64, b: bool}} (identical structure)
     let mut outer_fields_2 = BTreeMap::new();
-    outer_fields_2.insert("a".to_string(), i64_type.clone());
-    outer_fields_2.insert("b".to_string(), inner_type.clone());
+    outer_fields_2.insert(Identifier::new("a".to_string()), i64_type.clone());
+    outer_fields_2.insert(Identifier::new("b".to_string()), inner_type.clone());
     let outer_type_2 = TypeDefinition::product(outer_fields_2);
     
     // Convert through proper flow and store
@@ -63,24 +63,24 @@ fn test_type_container_different_complex_types() {
     
     // Create type 1: {a: i64, b: {a: i64, b: bool}}
     let mut inner_fields_1 = BTreeMap::new();
-    inner_fields_1.insert("a".to_string(), i64_type.clone());
-    inner_fields_1.insert("b".to_string(), bool_type.clone());
+    inner_fields_1.insert(Identifier::new("a".to_string()), i64_type.clone());
+    inner_fields_1.insert(Identifier::new("b".to_string()), bool_type.clone());
     let inner_type_1 = TypeDefinition::product(inner_fields_1);
     
     let mut outer_fields_1 = BTreeMap::new();
-    outer_fields_1.insert("a".to_string(), i64_type.clone());
-    outer_fields_1.insert("b".to_string(), inner_type_1);
+    outer_fields_1.insert(Identifier::new("a".to_string()), i64_type.clone());
+    outer_fields_1.insert(Identifier::new("b".to_string()), inner_type_1);
     let outer_type_1 = TypeDefinition::product(outer_fields_1);
     
     // Create type 2: {a: i64, b: {a: i64, b: f64}} (different inner type)
     let mut inner_fields_2 = BTreeMap::new();
-    inner_fields_2.insert("a".to_string(), i64_type.clone());
-    inner_fields_2.insert("b".to_string(), f64_type.clone()); // Different: f64 instead of bool
+    inner_fields_2.insert(Identifier::new("a".to_string()), i64_type.clone());
+    inner_fields_2.insert(Identifier::new("b".to_string()), f64_type.clone()); // Different: f64 instead of bool
     let inner_type_2 = TypeDefinition::product(inner_fields_2);
     
     let mut outer_fields_2 = BTreeMap::new();
-    outer_fields_2.insert("a".to_string(), i64_type.clone());
-    outer_fields_2.insert("b".to_string(), inner_type_2);
+    outer_fields_2.insert(Identifier::new("a".to_string()), i64_type.clone());
+    outer_fields_2.insert(Identifier::new("b".to_string()), inner_type_2);
     let outer_type_2 = TypeDefinition::product(outer_fields_2);
     
     // Convert and store both types

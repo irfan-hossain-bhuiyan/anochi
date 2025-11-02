@@ -14,10 +14,6 @@ use crate::{
 
 use thiserror::Error;
 
-
-
-
-
 /// Error types for VM evaluation.
 #[derive(Error, Debug, PartialEq)]
 pub enum VmError {
@@ -69,14 +65,14 @@ impl<Backend: VmBackend> Vm<Backend> {
            ("f64", BuiltinKind::F64),
            ("bool", BuiltinKind::Bool),
            ("usize", BuiltinKind::Usize),
+           ("type", BuiltinKind::Type)
        ];
        
        for (name, builtin_kind) in builtin_types {
            let type_def = TypeDefinition::Builtin(builtin_kind);
            let unified = type_def.to_unified();
-           let optimized = unified.to_optimized(&mut self.types);
-           let type_id = self.types.store_type(optimized);
-           self.variable.insert(name.to_string(), VmValue::Type(type_id));
+           let type_id = self.types.store_unified_type(unified);
+           self.variable.insert(Identifier::new(name.to_string()), VmValue::Type(type_id));
        }
    }
 
@@ -132,7 +128,7 @@ impl<Backend: VmBackend> Vm<Backend> {
             Expression::Product { data } => {
                         let mut product=HashMap::new();
                         for (key,value) in data.iter(){
-                            product.insert(key.to_string(),self.evaluate_expr(value)?);
+                            product.insert(key.clone(),self.evaluate_expr(value)?);
                         }
                         Ok(VmValue::Product(product))
                     },
@@ -162,8 +158,7 @@ impl<Backend: VmBackend> Vm<Backend> {
                }
                
                let unified = crate::typing::UnifiedTypeDefinition::Sum { variants };
-               let optimized = unified.to_optimized(&mut self.types);
-               let type_id = self.types.store_type(optimized);
+               let type_id = self.types.store_unified_type(unified);
                Ok(VmValue::Type(type_id))
            },
             Expression::MemberAccess { object: _, member: _ } => todo!(),
@@ -228,6 +223,69 @@ impl<Backend: VmBackend> Vm<Backend> {
         }
     }
 
+    /// Maps a VmValue to its corresponding TypeId
+    ///
+    /// # Arguments
+    /// * `value` - The VmValue to get the type for
+    ///
+    /// # Returns
+    /// * `Ok(TypeId)` - The TypeId representing the type of the value
+    /// * `Err(VmError)` - If the operation fails (e.g., mixed type/value products)
+    ///
+    /// # Behavior
+    /// - If value is `Type(type_id)` → returns "type of type" TypeId 
+    /// - If value is `ValuePrimitive` → creates corresponding builtin TypeId
+    /// - If value is `Product` with all values → creates product type TypeId
+    /// - If product contains mixed types/values → returns error (future implementation)
+    pub fn value_to_type(&mut self, value: &VmValue) -> Result<crate::typing::TypeId, VmError> {
+        use crate::typing::{UnifiedTypeDefinition, BuiltinKind, TypeRef};
+        use std::collections::BTreeMap;
+        
+        match value {
+            VmValue::Type(_) => {
+                // Return "type of type" TypeId (meta-type)
+                let type_def = UnifiedTypeDefinition::Builtin(BuiltinKind::Type);
+                Ok(self.types.store_unified_type(type_def))
+            }
+            VmValue::ValuePrimitive(primitive) => {
+                let builtin_kind = match primitive {
+                    ValuePrimitive::Bool(_) => BuiltinKind::Bool,
+                    ValuePrimitive::Integer(_) => BuiltinKind::I64,
+                    ValuePrimitive::Float(_) => BuiltinKind::F64,
+                };
+                let type_def = UnifiedTypeDefinition::Builtin(builtin_kind);
+                Ok(self.types.store_unified_type(type_def))
+            }
+            VmValue::Product(fields) => {
+                // Check if product contains mixed types and values
+                let mut has_types = false;
+                let mut has_values = false;
+                
+                for field_value in fields.values() {
+                    match field_value {
+                        VmValue::Type(_) => has_types = true,
+                        VmValue::ValuePrimitive(_) | VmValue::Product(_) => has_values = true,
+                    }
+                }
+                
+                if has_types && has_values {
+                    return Err(VmError::InvalidOperation(
+                        "Mixed type/value products not yet implemented".to_string()
+                    ));
+                }
+                
+                // Create product type from field types
+                let mut type_fields = BTreeMap::new();
+                for (field_name, field_value) in fields {
+                    let field_type_id = self.value_to_type(field_value)?;
+                    type_fields.insert(field_name.clone(), TypeRef::Reference(field_type_id));
+                }
+                
+                let product_type = UnifiedTypeDefinition::Product { fields: type_fields };
+                Ok(self.types.store_unified_type(product_type))
+            }
+        }
+    }
 }
 
 #[cfg(test)]

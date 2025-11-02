@@ -1,4 +1,4 @@
-use crate::typing::{TypeDefinition, TypeContainer, BuiltinKind, UnifiedTypeDefinition, TypeRef};
+use crate::{typing::{BuiltinKind, TypeContainer, TypeDefinition, TypeRef, UnifiedTypeDefinition}, token::token_type::Identifier};
 use std::collections::BTreeMap;
 
 #[test]
@@ -11,8 +11,8 @@ fn test_flexible_type_system_with_mixed_references() {
     
     // Create type 'a' = {x: i64, y: i64}
     let mut a_fields = BTreeMap::new();
-    a_fields.insert("x".to_string(), i64_type.clone());
-    a_fields.insert("y".to_string(), i64_type.clone());
+    a_fields.insert(Identifier::new("x".to_string()), i64_type.clone());
+    a_fields.insert(Identifier::new("y".to_string()), i64_type.clone());
     let type_a = TypeDefinition::product(a_fields);
     
     // Store 'a' and get its TypeId
@@ -25,14 +25,14 @@ fn test_flexible_type_system_with_mixed_references() {
     
     // Inner type: {r: a, x: a} (using references to 'a')
     let mut inner_fields = BTreeMap::new();
-    inner_fields.insert("r".to_string(), TypeRef::Reference(id_a));  // Reference to 'a'
-    inner_fields.insert("x".to_string(), TypeRef::Reference(id_a));  // Reference to 'a'
+    inner_fields.insert(Identifier::new("r".to_string()), TypeRef::Reference(id_a));  // Reference to 'a'
+    inner_fields.insert(Identifier::new("x".to_string()), TypeRef::Reference(id_a));  // Reference to 'a'
     let inner_unified = UnifiedTypeDefinition::product(inner_fields);
     
     // Outer type: {x: inner_type, y: bool} (mixing direct and references)
     let mut outer_fields = BTreeMap::new();
-    outer_fields.insert("x".to_string(), TypeRef::Direct(inner_unified));  // Direct nested type
-    outer_fields.insert("y".to_string(), TypeRef::Direct(
+    outer_fields.insert(Identifier::new("x".to_string()), TypeRef::Direct(inner_unified));  // Direct nested type
+    outer_fields.insert(Identifier::new("y".to_string()), TypeRef::Direct(
         UnifiedTypeDefinition::Builtin(BuiltinKind::Bool)  // Direct builtin
     ));
     let type_b = UnifiedTypeDefinition::product(outer_fields);
@@ -49,8 +49,8 @@ fn test_flexible_type_system_with_mixed_references() {
     let retrieved_b = container.get_type(&id_b).unwrap();
     if let Some(fields) = retrieved_b.as_product() {
         assert_eq!(fields.len(), 2, "Type 'b' should have 2 fields");
-        assert!(fields.contains_key("x"), "Should have field 'x'");
-        assert!(fields.contains_key("y"), "Should have field 'y'");
+        assert!(fields.contains_key(&Identifier::new("x".to_string())), "Should have field 'x'");
+        assert!(fields.contains_key(&Identifier::new("y".to_string())), "Should have field 'y'");
     } else {
         panic!("Type 'b' should be a product type");
     }
@@ -62,14 +62,14 @@ fn test_flexible_type_system_with_mixed_references() {
         assert_eq!(expanded_fields.len(), 2);
         
         // Check that 'x' field is a product type (the expanded inner type)
-        if let Some(x_field) = expanded_fields.get("x") {
+        if let Some(x_field) = expanded_fields.get(&Identifier::new("x".to_string())) {
             if let Some(x_inner_fields) = x_field.as_product() {
                 assert_eq!(x_inner_fields.len(), 2, "Inner type should have 2 fields");
-                assert!(x_inner_fields.contains_key("r"), "Should have field 'r'");
-                assert!(x_inner_fields.contains_key("x"), "Should have field 'x'");
+                assert!(x_inner_fields.contains_key(&Identifier::new("r".to_string())), "Should have field 'r'");
+                assert!(x_inner_fields.contains_key(&Identifier::new("x".to_string())), "Should have field 'x'");
                 
                 // Both 'r' and 'x' should be i64 product types (expanded from reference to 'a')
-                if let Some(r_field) = x_inner_fields.get("r") {
+                if let Some(r_field) = x_inner_fields.get(&Identifier::new("r".to_string())) {
                     assert!(r_field.as_product().is_some(), "Field 'r' should be expanded to product type");
                 }
             } else {
@@ -80,7 +80,7 @@ fn test_flexible_type_system_with_mixed_references() {
         }
         
         // Check that 'y' field is a boolean
-        if let Some(y_field) = expanded_fields.get("y") {
+        if let Some(y_field) = expanded_fields.get(&Identifier::new("y".to_string())) {
             assert_eq!(y_field.as_builtin(), Some(BuiltinKind::Bool));
         } else {
             panic!("Should have field 'y'");
@@ -97,13 +97,13 @@ fn test_type_deduplication_with_mixed_structure() {
     // Create type with direct definition: {vx: {x: i64, y: i64}, vy: {x: i64, y: i64}}
     let i64_type = TypeDefinition::builtin(BuiltinKind::I64);
     let mut inner_fields_1 = BTreeMap::new();
-    inner_fields_1.insert("x".to_string(), i64_type.clone());
-    inner_fields_1.insert("y".to_string(), i64_type.clone());
+    inner_fields_1.insert(Identifier::new("x".to_string()), i64_type.clone());
+    inner_fields_1.insert(Identifier::new("y".to_string()), i64_type.clone());
     let inner_type_1 = TypeDefinition::product(inner_fields_1);
     
     let mut outer_fields_1 = BTreeMap::new();
-    outer_fields_1.insert("vx".to_string(), inner_type_1.clone());
-    outer_fields_1.insert("vy".to_string(), inner_type_1.clone());
+    outer_fields_1.insert(Identifier::new("vx".to_string()), inner_type_1.clone());
+    outer_fields_1.insert(Identifier::new("vy".to_string()), inner_type_1.clone());
     let type_direct = TypeDefinition::product(outer_fields_1);
     
     // Create equivalent type using references
@@ -114,8 +114,8 @@ fn test_type_deduplication_with_mixed_structure() {
     
     // Then create: {vx: a, vy: a} using references
     let mut outer_fields_2 = BTreeMap::new();
-    outer_fields_2.insert("vx".to_string(), TypeRef::Reference(inner_id));
-    outer_fields_2.insert("vy".to_string(), TypeRef::Reference(inner_id));
+    outer_fields_2.insert(Identifier::new("vx".to_string()), TypeRef::Reference(inner_id));
+    outer_fields_2.insert(Identifier::new("vy".to_string()), TypeRef::Reference(inner_id));
     let type_ref = UnifiedTypeDefinition::product(outer_fields_2);
     
     // Both should result in the same optimized TypeId

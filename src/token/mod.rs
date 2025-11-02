@@ -3,7 +3,7 @@
 pub mod token_type;
 #[cfg(test)]
 mod tests;
-pub use token_type::TokenType;
+pub use token_type::{TokenType, Identifier};
 
 use num_bigint::BigInt;
 use num_rational::BigRational;
@@ -177,7 +177,7 @@ impl<'a> Tokenizer<'a> {
                     Position::new(start_line, start_column, slice).unwrap(),
                 ),
                 Err(_) => Token::new(
-                    TokenType::Identifier(identifier),
+                    TokenType::Identifier(Identifier::new(identifier)),
                     Position::new(start_line, start_column, slice).unwrap(),
                 ),
             }

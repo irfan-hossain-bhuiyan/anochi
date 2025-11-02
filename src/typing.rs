@@ -90,9 +90,20 @@ impl TypeContainer {
         }
     }
 
-    /// Store a TypeDefinition and return its TypeId
-    pub fn store_type(&mut self, type_def: OptimizedTypeDefinition) -> TypeId {
+    /// Store an OptimizedTypeDefinition and return its TypeId (private)
+    fn store_type(&mut self, type_def: OptimizedTypeDefinition) -> TypeId {
         self.storage.push(type_def)
+    }
+
+    /// Internal helper for storing a UnifiedTypeDefinition during optimization
+    fn store_optimized(&mut self, unified_def: UnifiedTypeDefinition) -> TypeId {
+        let optimized = unified_def.to_optimized(self);
+        self.store_type(optimized)
+    }
+
+    /// Store a UnifiedTypeDefinition by converting to optimized form and return its TypeId
+    pub fn store_unified_type(&mut self, unified_def: UnifiedTypeDefinition) -> TypeId {
+        self.store_optimized(unified_def)
     }
 
     /// Retrieve a TypeDefinition by its TypeId
@@ -219,8 +230,7 @@ impl UnifiedTypeDefinition {
                     .map(|(id, type_ref)| {
                         let type_id = match type_ref {
                             TypeRef::Direct(type_def) => {
-                                let optimized = type_def.to_optimized(container);
-                                container.store_type(optimized)
+                                container.store_optimized(type_def)
                             }
                             TypeRef::Reference(type_id) => type_id,
                         };
@@ -236,8 +246,7 @@ impl UnifiedTypeDefinition {
                     .into_iter()
                     .map(|type_ref| match type_ref {
                         TypeRef::Direct(type_def) => {
-                            let optimized = type_def.to_optimized(container);
-                            container.store_type(optimized)
+                            container.store_optimized(type_def)
                         }
                         TypeRef::Reference(type_id) => type_id,
                     })
