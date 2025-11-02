@@ -15,7 +15,85 @@
 use std::collections::HashMap;
 use std::fmt::{self};
 
-pub type Identifier = String;
+/// A validated identifier following C-style naming rules.
+/// Must start with a letter or underscore, and contain only alphanumeric characters and underscores.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct Identifier(String);
+
+impl Identifier {
+    /// Create a new Identifier from a string with validation.
+    /// 
+    /// # Panics
+    /// Panics if the string doesn't follow C-style identifier rules:
+    /// - Must start with a letter or underscore
+    /// - Must contain only alphanumeric characters and underscores
+    pub fn new(s: String) -> Self {
+        Self::try_from(s).expect("Invalid identifier")
+    }
+    
+    /// Get the inner string value.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+    
+    /// Get the inner string value as a string reference.
+    pub fn as_ref(&self) -> &str {
+        &self.0
+    }
+    
+    /// Convert to the inner string.
+    pub fn into_string(self) -> String {
+        self.0
+    }
+}
+
+impl std::fmt::Display for Identifier {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl std::convert::TryFrom<String> for Identifier {
+    type Error = String;
+    
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        if value.is_empty() {
+            return Err("Identifier cannot be empty".to_string());
+        }
+        
+        let mut chars = value.chars();
+        let first_char = chars.next().unwrap();
+        
+        // First character must be a letter or underscore
+        if !first_char.is_ascii_alphabetic() && first_char != '_' {
+            return Err(format!(
+                "Identifier '{}' must start with a letter or underscore, not '{}'",
+                value, first_char
+            ));
+        }
+        
+        // Remaining characters must be alphanumeric or underscore
+        for ch in chars {
+            if !ch.is_ascii_alphanumeric() && ch != '_' {
+                return Err(format!(
+                    "Identifier '{}' contains invalid character '{}'. Only letters, digits, and underscores are allowed",
+                    value, ch
+                ));
+            }
+        }
+        
+        Ok(Identifier(value))
+    }
+}
+
+impl std::convert::TryFrom<&str> for Identifier {
+    type Error = String;
+    
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        Self::try_from(value.to_string())
+    }
+}
+
 pub type IdentifierMap<T>=HashMap<Identifier,T>;
 pub type IdentifierToValue=IdentifierMap<VmValue>;
 pub type IdentifierToExpression<'a>=IdentifierMap<ExpressionNode<'a>>;
@@ -426,9 +504,9 @@ impl<'a> Statement<'a> {
         }
     }
     
-    pub fn assignment_from_identifier(identifier: impl Into<String>, value: impl Into<ExpressionNode<'a>>) -> Self {
+    pub fn assignment_from_identifier(identifier: Identifier, value: impl Into<ExpressionNode<'a>>) -> Self {
         Statement::Assignment {
-            target: Expression::identifier(identifier.into()).into(),
+            target: Expression::identifier(identifier).into(),
             r#type:None,
             value: value.into(),
         }
