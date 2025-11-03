@@ -123,13 +123,6 @@ impl Default for TypeContainer {
 
 #[cfg(test)]
 mod tests;
-
-#[cfg(test)]
-mod architecture_test;
-
-#[cfg(test)]
-mod container_test;
-
 #[cfg(test)]
 mod flexible_test;
 

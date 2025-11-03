@@ -10,7 +10,7 @@ fn test_basic_tokenization() {
     // Test basic tokenization with combined input
     let source = "42;\ntrue\nx = 1;";
    use Keyword::True; 
-    let expected = vec![
+    let expected_type = vec![
         TokenType::Integer(BigInt::from(42)),
         TokenType::Semicolon,
         TokenType::Newline,
@@ -25,5 +25,5 @@ fn test_basic_tokenization() {
     let tokens = Tokenizer::new(source).tokenize();
     let actual: Vec<TokenType> = tokens.into_iter().map(|t| t.token_type).collect();
     
-    assert_eq!(actual, expected);
+    assert_eq!(actual, expected_type);
 }

@@ -24,6 +24,9 @@
     - [x] checks token test
     - [ ] checks parser test
     - [ ] vm_test
+    - [ ] typing test
+        - [ ] make it simplfy
+        - [ ] make it 
 ## Todo:
     - support for a.x operation,and I can do something like a.x=10;
     - Change the assignment to have comptime,let,None

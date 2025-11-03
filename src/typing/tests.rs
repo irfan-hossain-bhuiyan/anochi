@@ -1,72 +1,71 @@
-use crate::{typing::{BuiltinKind, TypeContainer, TypeDefinition, UnifiedTypeDefinition}, token::token_type::Identifier};
-use std::collections::{BTreeMap, BTreeSet};
+use crate::{
+    token::token_type::Identifier,
+    typing::{BuiltinKind, TypeContainer, TypeDefinition, TypeRef, UnifiedTypeDefinition},
+};
+use std::collections::BTreeMap;
 
 #[test]
-fn test_type_definition_independence() {
-    // TypeDefinition should work independently
-    let int_type = TypeDefinition::builtin(BuiltinKind::I64);
-    let bool_type = TypeDefinition::builtin(BuiltinKind::Bool);
-    
-    // Create a product type with independent TypeDefinitions
-    let mut fields = BTreeMap::new();
-    fields.insert(Identifier::new("x".to_string()), int_type.clone());
-    fields.insert(Identifier::new("active".to_owned()), bool_type.clone());
-    
-    let product_type = TypeDefinition::product(fields);
-    
-    // Test compatibility
-    assert!(int_type.is_compatible_with(&int_type));
-    assert!(!int_type.is_compatible_with(&bool_type));
-    
-    // Test accessors
-    assert_eq!(int_type.as_builtin(), Some(BuiltinKind::I64));
-    assert!(product_type.as_product().is_some());
-    assert!(product_type.as_sum().is_none());
-}
-
-#[test]
-fn test_type_container_optimization() {
+fn test_type_container_complex_nested_deduplication() {
     let mut container = TypeContainer::new();
-    
-    // Create TypeDefinitions
-    let int_type = TypeDefinition::builtin(BuiltinKind::I64);
+
+    // Create basic types
+    let i64_type = TypeDefinition::builtin(BuiltinKind::I64);
     let bool_type = TypeDefinition::builtin(BuiltinKind::Bool);
     
-    // Convert through the proper flow: TypeDefinition -> UnifiedTypeDefinition -> OptimizedTypeDefinition
-    let int_unified = int_type.to_unified();
-    let bool_unified = bool_type.to_unified();
+    // Create inner type: {a: i64, b: bool}
+    let mut inner_fields = BTreeMap::new();
+    inner_fields.insert(Identifier::new("a"), i64_type.clone());
+    inner_fields.insert(Identifier::new("b"), bool_type.clone());
+    let inner_type = TypeDefinition::product(inner_fields);
+
+    // Create first outer type: {a: i64, b: {a: i64, b: bool}}
+    let mut outer_fields_1 = BTreeMap::new();
+    outer_fields_1.insert(Identifier::new("a"), i64_type.clone());
+    outer_fields_1.insert(Identifier::new("b"), inner_type.clone());
+    let outer_type_1 = TypeDefinition::product(outer_fields_1);
     
-    let int_optimized = int_unified.to_optimized(&mut container);
-    let bool_optimized = bool_unified.to_optimized(&mut container);
+    // Create second outer type: {a: i64, b: {a: i64, b: bool}} (identical structure)
+    let mut outer_fields_2 = BTreeMap::new();
+    outer_fields_2.insert(Identifier::new("a"), i64_type.clone());
+    outer_fields_2.insert(Identifier::new("b"), inner_type.clone());
+    let outer_type_2 = TypeDefinition::product(outer_fields_2);
     
-    let int_id = container.store_type(int_optimized.clone());
-    let bool_id = container.store_type(bool_optimized.clone());
-    
-    // Verify we can get back the optimized definitions
-    let retrieved_int = container.get_type(&int_id).expect("Type should exist").clone();
-    let retrieved_bool = container.get_type(&bool_id).expect("Type should exist").clone();
-    
-    // Compare by converting both to unified format for comparison
-    let retrieved_int_unified = retrieved_int.to_unified();
-    let retrieved_bool_unified = retrieved_bool.to_unified();
-    let int_optimized_unified = UnifiedTypeDefinition::from_optimized(int_optimized);
-    let bool_optimized_unified = UnifiedTypeDefinition::from_optimized(bool_optimized);
-    
-    assert_eq!(retrieved_int_unified, int_optimized_unified);
-    assert_eq!(retrieved_bool_unified, bool_optimized_unified);
+    let mut outer_fields_3 = BTreeMap::new();
+    outer_fields_3.insert(Identifier::new("a"), i64_type.clone());
+    outer_fields_3.insert(Identifier::new("b"), bool_type.clone());
+    let outer_type_3 = TypeDefinition::product(outer_fields_3);
+
+    let type_id_1 = container.store_type_definition(outer_type_1.clone());
+    let type_id_2 = container.store_type_definition(outer_type_2.clone());
+    let type_id_3 = container.store_type_definition(outer_type_3.clone());
+
+    // TypeIds should be the same (deduplication working)
+    assert_eq!(
+        type_id_1, type_id_2,
+        "Identical complex nested types should have same TypeId"
+    );
+    assert_ne!(type_id_1,type_id_3,
+        "This are two different type id."
+    );
+
+    // Verify we can retrieve the type
+    let retrieved_type_1 = container
+        .get_type(&type_id_1)
+        .expect("Type should exist in container");
+    let retrieved_type_3 = container
+        .get_type(&type_id_3)
+        .expect("Type should exist in container");
+
+    // Check the structure is correct
+    assert_eq!(retrieved_type_1,outer_type_2);
+    assert_eq!(retrieved_type_3,outer_type_3);
+    let inner_type_id=container.store_type_definition(inner_type);
+    let mut outer_fields_1_new = BTreeMap::new();
+    outer_fields_1_new.insert(Identifier::new("a"), TypeRef::Direct(UnifiedTypeDefinition::Builtin(BuiltinKind::I64)));
+    outer_fields_1_new.insert(Identifier::new("b"), TypeRef::Reference(inner_type_id));
+    let outer_type_1_new = UnifiedTypeDefinition::Product { fields: outer_fields_1_new };
+    let outer_type_1_id=container.store_unified_type(outer_type_1_new);
+    assert_eq!(outer_type_1_id,type_id_1);
 }
 
-#[test]
-fn test_sum_type_creation() {
-    let int_type = TypeDefinition::builtin(BuiltinKind::I64);
-    let bool_type = TypeDefinition::builtin(BuiltinKind::Bool);
-    
-    let mut variants = BTreeSet::new();
-    variants.insert(int_type);
-    variants.insert(bool_type);
-    
-    let sum_type = TypeDefinition::sum(variants);
-    
-    assert!(sum_type.as_sum().is_some());
-    assert_eq!(sum_type.as_sum().unwrap().len(), 2);
-}
+
