@@ -10,8 +10,8 @@ impl Identifier {
     /// Panics if the string doesn't follow C-style identifier rules:
     /// - Must start with a letter or underscore
     /// - Must contain only alphanumeric characters and underscores
-    pub fn new(s: String) -> Self {
-        Self::try_from(s).expect("Invalid identifier")
+    pub fn new(s: impl ToString) -> Self {
+        Self::try_from(s.to_string()).expect("Invalid identifier")
     }
     
     /// Get the inner string value.
@@ -20,7 +20,7 @@ impl Identifier {
     }
     
     /// Get the inner string value as a string reference.
-    pub fn as_ref(&self) -> &str {
+    pub fn to_str_ref(&self) -> &str {
         &self.0
     }
     

@@ -1,36 +1,29 @@
 // Tests for token parsing and keyword detection
 
+use crate::ast::Identifier;
 use crate::token::Tokenizer;
-use crate::token::token_type::TokenType;
+use crate::token::token_type::{Keyword, TokenType};
 use num_bigint::BigInt;
 
 #[test]
 fn test_basic_tokenization() {
-    // Just test that basic tokenization works with BigInt
-    let test_cases = vec![
-        "42",           // integer
-        "true",         // keyword
-        "x = 1;",       // simple statement
+    // Test basic tokenization with combined input
+    let source = "42;\ntrue\nx = 1;";
+   use Keyword::True; 
+    let expected = vec![
+        TokenType::Integer(BigInt::from(42)),
+        TokenType::Semicolon,
+        TokenType::Newline,
+        TokenType::Keyword(True),
+        TokenType::Newline,
+        TokenType::Identifier(Identifier::new("x")),
+        TokenType::Equal,
+        TokenType::Integer(BigInt::from(1)),
+        TokenType::Semicolon,
     ];
-
-    for source in test_cases {
-        let tokens = Tokenizer::new(source).tokenize();
-        // Just verify it tokenizes without error (no Error tokens)
-        for token in &tokens {
-            if let TokenType::Error(_) = token.token_type {
-                panic!("Tokenization failed for: {source}");
-            }
-        }
-        
-        // Verify we get some tokens
-        assert!(!tokens.is_empty(), "No tokens generated for: {source}");
-    }
-
-    // Test that big integers work
-    let tokens = Tokenizer::new("42").tokenize();
-    if let TokenType::Integer(big_int) = &tokens[0].token_type {
-        assert_eq!(*big_int, BigInt::from(42));
-    } else {
-        panic!("Expected integer token");
-    }
+    
+    let tokens = Tokenizer::new(source).tokenize();
+    let actual: Vec<TokenType> = tokens.into_iter().map(|t| t.token_type).collect();
+    
+    assert_eq!(actual, expected);
 }

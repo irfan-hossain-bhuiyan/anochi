@@ -18,12 +18,14 @@
 - [x] change assignment to other than like Identifier = Identifer convert to Expression=Expression,
 
 ## Doing:
-    - [ ] Changing the Identifier to actual Identifier,
-    - [ ] Now change the vmvalue implementation in anochi,It use Literal as well,which need to be changed for bigint,bigfloat etc,
-    String implmentation will be handled later,also automatically generate type for the vmvalue,type will be the builtin value type.
+- [ ] Changing the Identifier to actual Identifier,
+- [ ] Now change the vmvalue implementation in anochi,It use Literal as well,which need to be changed for bigint,bigfloat etc,String implmentation will be handled later,also automatically generate type for the vmvalue,type will be the builtin value type.
+- [ ] checks if the test are right
+    - [x] checks token test
+    - [ ] checks parser test
+    - [ ] vm_test
 ## Todo:
     - support for a.x operation,and I can do something like a.x=10;
-
     - Change the assignment to have comptime,let,None
         - It will check for keyword first before the assignment.
     - Change the ast to encompass it,to know what kind of assignment is this 
@@ -51,4 +53,5 @@ D
     All the type that get created,It will work like python,the typeId will be pushed to the hashmap,Now there are 2 problem,
         - How do I define type that hints to type that are not known in that time,
         - One example is to create a new type for that
-
+## Design Problem:
+    Problem with type as expression and it's optimization,Now the 

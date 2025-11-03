@@ -94,16 +94,17 @@ impl TypeContainer {
     fn store_type(&mut self, type_def: OptimizedTypeDefinition) -> TypeId {
         self.storage.push(type_def)
     }
-
-    /// Internal helper for storing a UnifiedTypeDefinition during optimization
-    fn store_optimized(&mut self, unified_def: UnifiedTypeDefinition) -> TypeId {
-        let optimized = unified_def.to_optimized(self);
-        self.store_type(optimized)
+    pub fn store_optimized(&mut self, optimized_type:OptimizedTypeDefinition) ->TypeId{
+        self.store_type(optimized_type)
     }
-
     /// Store a UnifiedTypeDefinition by converting to optimized form and return its TypeId
     pub fn store_unified_type(&mut self, unified_def: UnifiedTypeDefinition) -> TypeId {
-        self.store_optimized(unified_def)
+        let optimized=unified_def.to_optimized(self);
+        self.store_type(optimized)
+    }
+    pub fn store_type_definition(&mut self,type_def:TypeDefinition)->TypeId{
+        let optimized=type_def.to_optimized(self);
+        self.store_type(optimized)
     }
 
     /// Retrieve a TypeDefinition by its TypeId
@@ -230,7 +231,7 @@ impl UnifiedTypeDefinition {
                     .map(|(id, type_ref)| {
                         let type_id = match type_ref {
                             TypeRef::Direct(type_def) => {
-                                container.store_optimized(type_def)
+                                container.store_unified_type(type_def)
                             }
                             TypeRef::Reference(type_id) => type_id,
                         };
@@ -246,7 +247,7 @@ impl UnifiedTypeDefinition {
                     .into_iter()
                     .map(|type_ref| match type_ref {
                         TypeRef::Direct(type_def) => {
-                            container.store_optimized(type_def)
+                            container.store_unified_type(type_def)
                         }
                         TypeRef::Reference(type_id) => type_id,
                     })
@@ -274,7 +275,7 @@ impl UnifiedTypeDefinition {
             OptimizedTypeDefinition::Sum { variants } => {
                 let unified_variants = variants
                     .into_iter()
-                    .map(|type_id| TypeRef::Reference(type_id))
+                    .map(TypeRef::Reference)
                     .collect();
                 UnifiedTypeDefinition::Sum {
                     variants: unified_variants,
