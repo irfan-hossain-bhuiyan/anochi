@@ -16,10 +16,11 @@
     - [x] So when evaluating the ast,it will convert it to the vm
 
 - [x] change assignment to other than like Identifier = Identifer convert to Expression=Expression,
-
-## Doing:
 - [x] Changing the Identifier to actual Identifier,
-- [ ] Now change the vmvalue implementation in anochi,It use Literal as well,which need to be changed for bigint,bigfloat etc,String implmentation will be handled later,also automatically generate type for the vmvalue,type will be the builtin value type.
+- [x] Now change the vmvalue implementation in anochi,It use Literal as well,which need to be changed for bigint,bigfloat etc,String implmentation will be handled later,also automatically generate type for the vmvalue,type will be the builtin value type.
+## Doing:
+- [ ] Currently I have assignment ast that use expression on the right hand side,for say x.a=10; etc,but that is only used 
+    for when the object is already created,I am returning the expression from that,not when I am creating a new variable.
 - [ ] checks if the test are right
     - [x] checks token test
     - [ ] checks parser test

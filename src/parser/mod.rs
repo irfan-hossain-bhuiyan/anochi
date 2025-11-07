@@ -25,9 +25,7 @@ macro_rules! match_token {
 
 /// Macro for token matching with error conversion to ParserError
 macro_rules! match_token_or_err {
-    ($self:expr, $pattern:pat) => {{
-        match_token!($self, $pattern).map_err(|x| x.into_parser_error())
-    }};
+    ($self:expr, $pattern:pat) => {{ match_token!($self, $pattern).map_err(|x| x.into_parser_error()) }};
 }
 
 pub struct Parser<'a, 'b: 'a> {
@@ -50,39 +48,41 @@ impl<'a, 'b: 'a> Parser<'a, 'b> {
         }
         Ok(node)
     }
-   
-   // Type Union: type | type
-   fn parse_type_union(&mut self) -> ReExpNode<'b> {
-       let mut types = vec![self.parse_logical_or()?];
-       while match_token!(self, TokenType::Pipe).is_ok() {
-           types.push(self.parse_logical_or()?);
-       }
-       if types.len() == 1 {
-           Ok(types.into_iter().next().unwrap())
-       } else {
-           Ok(Expression::sum(types).into())
-       }
-   }
+
+    // Type Union: type | type
+    fn parse_type_union(&mut self) -> ReExpNode<'b> {
+        let mut types = vec![self.parse_logical_or()?];
+        while match_token!(self, TokenType::Pipe).is_ok() {
+            types.push(self.parse_logical_or()?);
+        }
+        if types.len() == 1 {
+            Ok(types.into_iter().next().unwrap())
+        } else {
+            Ok(Expression::sum(types).into())
+        }
+    }
 
     pub fn parse_statement(&mut self) -> ReStatNode<'b> {
         // Assignment: identifier = expression
         match self.peek_type().unwrap().clone() {
+            TokenType::Keyword(Keyword::Let) => {
+                self.advance();
+                let TokenType::Identifier(x)=match_token_or_err!(self,TokenType::Identifier(_))? else{unreachable!()};
+                let x=x.clone();
+                let _ = match_token_or_err!(self,TokenType::Equal)?;
+                let expr=self.parse_expression()?;
+                let _=match_token_or_err!(self,TokenType::Semicolon)?;
+                Ok(Statement::assignment(x, expr).into())
+            }
             TokenType::Identifier(_) => {
-                let x=self.parse_expression()?;
+                let x = self.parse_expression()?;
                 // Check for typed assignment: identifier : type = value
-                if match_token!(self, TokenType::Colon).is_ok() {
-                    let type_expr = self.parse_expression()?;
-                    let _ = match_token_or_err!(self, TokenType::Equal)?;
-                    let value_expr = self.parse_expression()?;
-                    let _ = match_token_or_err!(self, TokenType::Semicolon)?;
-                    Ok(Statement::assignment(x, value_expr, type_expr).into())
-                } else {
-                    // Regular assignment: identifier = value
-                    let _ = match_token_or_err!(self, TokenType::Equal)?;
-                    let expr = self.parse_expression()?;
-                    let _ = match_token_or_err!(self, TokenType::Semicolon)?;
-                    Ok(Statement::assignment_unknowntype(x, expr).into())
-                }
+
+                // Regular assignment: identifier = value
+                let _ = match_token_or_err!(self, TokenType::Equal)?;
+                let expr = self.parse_expression()?;
+                let _ = match_token_or_err!(self, TokenType::Semicolon)?;
+                Ok(Statement::mutable_assignment(x, expr).into())
             }
             TokenType::LeftBrace => {
                 self.advance();
@@ -112,15 +112,15 @@ impl<'a, 'b: 'a> Parser<'a, 'b> {
             }
             TokenType::Keyword(Keyword::Debug) => {
                 self.advance();
-                let _=match_token_or_err!(self, TokenType::LeftParen)?;
-                let mut expr_vec=Vec::new();
-                while let Ok(x)=self.parse_expr(){
+                let _ = match_token_or_err!(self, TokenType::LeftParen)?;
+                let mut expr_vec = Vec::new();
+                while let Ok(x) = self.parse_expr() {
                     expr_vec.push(x);
-                    if match_token!(self, TokenType::Comma).is_err(){
+                    if match_token!(self, TokenType::Comma).is_err() {
                         break;
                     }
                 }
-                let _=match_token_or_err!(self, TokenType::RightParen)?;
+                let _ = match_token_or_err!(self, TokenType::RightParen)?;
                 Ok(Statement::debug(expr_vec).into())
             }
             _ => Err(StatementParseError::NoStatement.into()),
@@ -155,7 +155,10 @@ impl<'a, 'b: 'a> Parser<'a, 'b> {
     // Comparison: < > <= >=
     fn parse_comparison(&mut self) -> ReExpNode<'b> {
         let mut node = self.parse_expr()?;
-        while let Ok(op) = match_token!(self, TokenType::Less | TokenType::LessEqual | TokenType::Greater | TokenType::GreaterEqual) {
+        while let Ok(op) = match_token!(
+            self,
+            TokenType::Less | TokenType::LessEqual | TokenType::Greater | TokenType::GreaterEqual
+        ) {
             let operator = match op {
                 TokenType::Less => BinaryOperator::Less,
                 TokenType::LessEqual => BinaryOperator::LessEqual,
@@ -226,9 +229,7 @@ impl<'a, 'b: 'a> Parser<'a, 'b> {
     // Primary ::= Integer | Float | Identifier | "(" Expr ")"
     fn parse_primary(&mut self) -> ReExpNode<'b> {
         match self.peek_type().ok_or(ParserError::NO_EXPN_FOUND)? {
-            TokenType::LeftBrace => {
-                self.parse_struct()
-            }
+            TokenType::LeftBrace => self.parse_struct(),
             TokenType::LeftParen => {
                 self.advance(); // consume '('
                 let expr = self.parse_expression()?;
@@ -255,7 +256,6 @@ impl<'a, 'b: 'a> Parser<'a, 'b> {
         self.peek().map(|x| &x.token_type)
     }
 
-
     fn check(&self, tt: &TokenType) -> bool {
         Some(tt) == self.peek_type()
     }
@@ -263,39 +263,43 @@ impl<'a, 'b: 'a> Parser<'a, 'b> {
     // Struct ::= "{" (Identifier "=" Expression ("," Identifier "=" Expression)*)? "}"
     fn parse_struct(&mut self) -> ReExpNode<'b> {
         self.advance(); // consume '{'
-        
+
         let mut fields = std::collections::HashMap::new();
-        
+
         // Handle empty struct case
         if match_token!(self, TokenType::RightBrace).is_ok() {
             return Ok(Expression::product(fields).into());
         }
-        
+
         loop {
             // Parse field name (identifier)
             let field_name = match match_token_or_err!(self, TokenType::Identifier(_))? {
                 TokenType::Identifier(name) => name.clone(),
                 _ => unreachable!(),
             };
-            
+
             // Expect '='
             let _ = match_token_or_err!(self, TokenType::Equal)?;
-            
+
             // Parse field value (expression)
             let field_value = self.parse_expression()?;
-            
+
             // Add field to struct
             fields.insert(field_name, field_value);
-            
+
             // Check for continuation or end
             match match_token!(self, TokenType::Comma | TokenType::RightBrace) {
-                Ok(TokenType::Comma) => continue, // More fields to parse
+                Ok(TokenType::Comma) => continue,   // More fields to parse
                 Ok(TokenType::RightBrace) => break, // End of struct
-                Ok(_) => unreachable!(), // Should never happen due to pattern
-                Err(_) => return Err(ParserError::expected_token_in_expression(TokenType::RightBrace)),
+                Ok(_) => unreachable!(),            // Should never happen due to pattern
+                Err(_) => {
+                    return Err(ParserError::expected_token_in_expression(
+                        TokenType::RightBrace,
+                    ));
+                }
             }
         }
-        
+
         Ok(Expression::product(fields).into())
     }
 
@@ -318,4 +322,3 @@ impl<'a, 'b: 'a> Parser<'a, 'b> {
         &self.tokens[self.current - 1]
     }
 }
-

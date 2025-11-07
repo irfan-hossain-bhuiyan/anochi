@@ -364,9 +364,15 @@ impl<'a> Expression<'a> {
 }
 #[derive(Debug, Clone, PartialEq)]
 pub enum Statement<'a> {
+    /// Assignment for creating new variables with `let` keyword
     Assignment {
-        target: ExpressionNode<'a>,
+        target: Identifier,
         r#type: Option<ExpressionNode<'a>>,
+        value: ExpressionNode<'a>,
+    },
+    /// Assignment for modifying existing objects/members
+    MutableAssignment {
+        target: ExpressionNode<'a>,
         value: ExpressionNode<'a>,
     },
     StatementBlock {
@@ -415,22 +421,35 @@ impl<'a, T: AstElement> From<T> for AstNode<'a, T> {
     }
 }
 impl<'a> Statement<'a> {
-    pub fn assignment(target: impl Into<ExpressionNode<'a>>, value: impl Into<ExpressionNode<'a>>,r#type:impl Into<ExpressionNode<'a>>)->Self{
-        Statement::Assignment { target: target.into(), r#type: Some(r#type.into()),value: value.into() }
-    }
-    pub fn assignment_unknowntype(target: impl Into<ExpressionNode<'a>>, value: impl Into<ExpressionNode<'a>>) -> Self {
+    /// Creates a new variable assignment with let keyword (literal value)
+    //pub fn assignment(target: Identifier, value: Literal) -> Self {
+    //    Statement::Assignment {
+    //        target,
+    //        r#type: None,
+    //        value,
+    //    }
+    //}
+    /// Creates a new variable assignment with explicit type
+    pub fn assignment_with_type(target: Identifier, r#type: impl Into<ExpressionNode<'a>>, value: impl Into<ExpressionNode<'a>>) -> Self {
         Statement::Assignment {
+            target,
+            r#type: Some(r#type.into()),
+            value:value.into(),
+        }
+    }
+    
+    pub fn mutable_assignment(target: impl Into<ExpressionNode<'a>>, value: impl Into<ExpressionNode<'a>>) -> Self {
+        Statement::MutableAssignment {
             target: target.into(),
-            r#type: None,
             value: value.into(),
         }
     }
     
-    pub fn assignment_from_identifier(identifier: Identifier, value: impl Into<ExpressionNode<'a>>) -> Self {
+    pub fn assignment(identifier: Identifier, value: impl Into<ExpressionNode<'a>>) -> Self {
         Statement::Assignment {
-            target: Expression::identifier(identifier).into(),
+            target: identifier,
             r#type:None,
-            value: value.into(),
+            value:value.into()
         }
     }
     

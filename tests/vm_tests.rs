@@ -10,7 +10,7 @@ mod tests {
         let mut vm = Vm::new(IoBackend::new());
 
         // Test assignment and variable lookup
-        let assignment = Statement::assignment_unknowntype(
+        let assignment = Statement::mutable_assignment_unknowntype(
             Expression::identifier(Identifier::new("x".to_string())),
             Expression::from_i64(42)
         );
