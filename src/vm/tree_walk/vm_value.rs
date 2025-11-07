@@ -222,6 +222,6 @@ pub fn evaluate_binary_op(
         }
         
         // Type mismatch for other combinations
-        _ => Err(VmError::TypeMismatch),
+        _ => Err(VmError::InvalidOperation("The operation is not implemented yet".into())),
     }
 }

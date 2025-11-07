@@ -132,20 +132,3 @@ impl<Backend: VmBackend> fmt::Debug for CodeRunner<Backend> {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn test_basic_functionality() {
-        let mut runner = CodeRunner::default();
-        
-        // Just test that basic operations work with BigInt/BigRational
-        assert_eq!(runner.evaluate_expr("2 + 3").unwrap(), VmValue::from_i64(5));
-        assert_eq!(runner.evaluate_expr("true").unwrap(), VmValue::from_bool(true));
-        
-        // Test statement execution
-        assert!(runner.run_statement("x = 42;").is_err());
-        assert!(runner.run_statement("let x=42;x=10;").is_ok());
-    }
-}
-

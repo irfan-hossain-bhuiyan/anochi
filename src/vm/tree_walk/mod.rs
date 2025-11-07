@@ -21,8 +21,8 @@ pub enum VmError {
     #[error("Division by zero")]
     DivisionByZero,
     /// Type mismatch error
-    #[error("Type mismatch: cannot perform operation on different types")]
-    TypeMismatch,
+    #[error("Type is mismatched,{0:?}")]
+    TypeMismatch(&'static str),
     /// Undefined identifier error
     #[error("Undefined identifier: {0}")]
     UndefinedIdentifier(Identifier),
@@ -30,7 +30,7 @@ pub enum VmError {
     #[error("Invalid operation: {0}")]
     InvalidOperation(String),
     #[error("Unsupproted Operation {0:?}")]
-    UnsupportedOperation(String),
+    Unsupported(String),
 
 }
 
@@ -59,9 +59,10 @@ impl ScopeStack {
     
     /// Removes current scope (pops from stack)
     pub fn drop_scope(&mut self) {
-        if self.scopes.len() > 1 { // Keep at least global scope
-            self.scopes.pop_back();
+        if self.scopes.len() <= 1 { // Keep at least global scope
+            unreachable!("scope shouldn't get called when there is already 1 scope")
         }
+        self.scopes.pop_back();
     }
     
     /// Sets a variable in current scope
@@ -179,7 +180,7 @@ impl<Backend: VmBackend> Vm<Backend> {
                 ),
                 Literal::String(_) => {
                     // TODO: Handle strings as arrays when array implementation is ready
-                    Err(VmError::UnsupportedOperation(
+                    Err(VmError::Unsupported(
                         "String literals not yet supported as arrays".to_string(),
                     ))
                 }
@@ -268,23 +269,25 @@ impl<Backend: VmBackend> Vm<Backend> {
                     _ => {
                         // For member access and other complex assignments,
                         // return an error for now until type system is implemented
-                        Err(VmError::UnsupportedOperation(
+                        Err(VmError::InvalidOperation(
                             "Complex assignment not yet supported".to_string(),
                         ))
                     }
                 }
             }
             Statement::StatementBlock { statements } => {
+                self.variables.create_scope();
                 for stmt in statements.iter() {
                     self.execute_statement(stmt)?;
                 }
+                self.variables.drop_scope();
                 Ok(())
             }
             Statement::If { condition, on_true } => {
                 let VmValue::ValuePrimitive(ValuePrimitive::Bool(x)) =
                     self.evaluate_expr(condition)?
                 else {
-                    return Err(VmError::TypeMismatch);
+                    return Err(VmError::TypeMismatch("The expression in if should be boolean"));
                 };
                 if x {
                     self.execute_statement(on_true)?;
@@ -299,7 +302,7 @@ impl<Backend: VmBackend> Vm<Backend> {
                 let VmValue::ValuePrimitive(ValuePrimitive::Bool(x)) =
                     self.evaluate_expr(condition)?
                 else {
-                    return Err(VmError::TypeMismatch);
+                    return Err(VmError::TypeMismatch("The expression on ifelse should be bool"));
                 };
                 if x {
                     self.execute_statement(on_true)?;
@@ -384,6 +387,9 @@ impl<Backend: VmBackend> Vm<Backend> {
         }
     }
 }
+
+#[cfg(test)]
+mod scope_stack_tests;
 
 #[cfg(test)]
 mod tests {
