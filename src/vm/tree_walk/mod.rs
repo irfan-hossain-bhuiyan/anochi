@@ -390,51 +390,6 @@ impl<Backend: VmBackend> Vm<Backend> {
 
 #[cfg(test)]
 mod scope_stack_tests;
-
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::ast::{AstNode, BinaryOperator, Expression, Statement};
-    use num_bigint::BigInt;
+mod vm_tests;
 
-    #[test]
-    fn test_vm_comprehensive_operations() {
-        let mut vm: Vm = Vm::default();
-
-        // Test integer literal
-        let integer = AstNode::new_temp(Expression::from_i64(42));
-        let result = vm.evaluate_expr(&integer).unwrap();
-        assert_eq!(
-            result,
-            VmValue::ValuePrimitive(ValuePrimitive::Integer(BigInt::from(42)))
-        );
-
-        // Test boolean operations: true && false
-        let bool_expr = Expression::binary(
-            Expression::from_bool(true),
-            BinaryOperator::And,
-            Expression::from_bool(false),
-        );
-        let bool_node = AstNode::new_temp(bool_expr);
-        let result = vm.evaluate_expr(&bool_node).unwrap();
-        assert_eq!(result, VmValue::ValuePrimitive(ValuePrimitive::Bool(false)));
-    }
-
-    #[test]
-    fn test_debug_statement_single_value() {
-        use crate::vm::backend::TestBackend;
-        let backend = TestBackend::new();
-        let mut vm: Vm<TestBackend> = Vm::new(backend);
-
-        // Create a debug statement with a single integer expression
-        let expr = AstNode::new_temp(Expression::from_i64(42));
-        let debug_stmt = AstNode::new_temp(Statement::debug(vec![expr]));
-
-        // Execute the debug statement
-        vm.execute_statement(&debug_stmt).unwrap();
-
-        // Verify the debug output
-        let debug_output = vm.backend.get_debug_output();
-        assert_eq!(debug_output, "42");
-    }
-}
