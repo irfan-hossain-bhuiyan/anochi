@@ -144,7 +144,8 @@ mod tests {
         assert_eq!(runner.evaluate_expr("true").unwrap(), VmValue::from_bool(true));
         
         // Test statement execution
-        assert!(runner.run_statement("x = 42;").is_ok());
+        assert!(runner.run_statement("x = 42;").is_err());
+        assert!(runner.run_statement("let x=42;x=10;").is_ok());
     }
 }
 

@@ -25,22 +25,24 @@ pub enum VmError {
     TypeMismatch,
     /// Undefined identifier error
     #[error("Undefined identifier: {0}")]
-    UndefinedIdentifier(String),
+    UndefinedIdentifier(Identifier),
     /// Invalid operation error
     #[error("Invalid operation: {0}")]
     InvalidOperation(String),
     #[error("Unsupproted Operation {0:?}")]
     UnsupportedOperation(String),
+
 }
 
 /// Result type for VM evaluation operations.
 pub type VmResult = Result<VmValue, VmError>;
-
+pub type VmResultMut<'a>= Result<&'a mut VmValue,VmError>;
 /// Stack-based scope management for variables
 #[derive(Debug)]
 pub struct ScopeStack {
     scopes: VecDeque<HashMap<Identifier, VmValue>>,
 }
+
 
 impl ScopeStack {
     /// Creates a new scope stack with global scope
@@ -78,6 +80,9 @@ impl ScopeStack {
         }
         None
     }
+    pub fn get_variable_or_err(&self,identifier: &Identifier)->VmResult{
+        self.get_variable(identifier).cloned().ok_or(VmError::UndefinedIdentifier(identifier.clone()))
+    }
     
     /// Gets mutable reference to variable by searching from current scope to global
     pub fn get_variable_mut(&mut self, identifier: &Identifier) -> Option<&mut VmValue> {
@@ -87,6 +92,9 @@ impl ScopeStack {
             }
         }
         None
+    }
+    pub fn get_variable_mut_or_err(&mut self,identifier: &Identifier) ->VmResultMut {
+        self.get_variable_mut(identifier).ok_or(VmError::UndefinedIdentifier(identifier.clone()))
     }
     
     /// Checks if variable exists in any scope
@@ -164,10 +172,8 @@ impl<Backend: VmBackend> Vm<Backend> {
         match expression {
             Expression::Literal(literal) => match literal {
                 Literal::Identifier(x) => self
-                    .variable
-                    .get(x)
-                    .cloned()
-                    .ok_or(VmError::UndefinedIdentifier(format!("{x} doesn't exist."))),
+                    .variables
+                    .get_variable_or_err(x),
                 Literal::Bool(_) | Literal::Float(_) | Literal::Integer(_) => Ok(
                     VmValue::ValuePrimitive(ValuePrimitive::from(literal.clone())),
                 ),
@@ -244,16 +250,19 @@ impl<Backend: VmBackend> Vm<Backend> {
     pub fn execute_statement(&mut self, stat_node: &StmtNode) -> Result<(), VmError> {
         let stmt = &stat_node.node;
         match stmt {
+            Statement::Assignment { target, r#type, value } =>{
+                let value=self.evaluate_expr(value)?;
+                self.variables.set_variable(target.clone(), value);
+                Ok(())
+            }
             Statement::MutableAssignment {
                 target,
                 value,
             } => {
-                // For now, only handle simple identifier assignments
-                // TODO: Add support for member access assignments later
                 match &target.node {
                     Expression::Literal(Literal::Identifier(identifier)) => {
                         let evaluated_value = self.evaluate_expr(value)?;
-                        *self.variable.get_mut(identifier)= evaluated_value;
+                        *self.variables.get_variable_mut_or_err(identifier)?= evaluated_value;
                         Ok(())
                     }
                     _ => {
