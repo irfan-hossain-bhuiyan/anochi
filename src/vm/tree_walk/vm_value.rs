@@ -1,5 +1,6 @@
 use std::{collections::HashMap, fmt::Display};
 use crate::ast::{Identifier, Literal};
+use crate::typing::{BuiltinKind, TypeContainer, TypeId, UnifiedTypeDefinition};
 use num_bigint::BigInt;
 use num_rational::BigRational;
 
@@ -87,6 +88,101 @@ impl VmValue {
     /// Create VmValue from BigRational
     pub fn from_bigrational(value: BigRational) -> Self {
         Self::ValuePrimitive(ValuePrimitive::Float(value))
+    }
+
+    /// Convert VmValue to UnifiedTypeDefinition for type expressions only
+    /// 
+    /// This function only works on type expressions, not value expressions.
+    /// Type expressions can be:
+    /// - Type(id) - direct type reference
+    /// - {a=Type(i64), b=Type(i64)} - product of types
+    /// - {a={x=Type(i64),y=Type(i64)}, b=Type(i64)} - nested type expressions
+    /// Returns None if the value is not a valid type expression.
+    pub fn into_unified_type_definition(self) -> Option<UnifiedTypeDefinition> {
+        match self {
+            VmValue::ValuePrimitive(_) => {
+                // Primitive values are not type expressions
+                None
+            }
+            VmValue::Product(fields) => {
+                // Check if all fields are valid type expressions (recursive)
+                let mut type_fields = std::collections::BTreeMap::new();
+                
+                for (identifier, value) in fields {
+                    let field_type = value.into_unified_type_definition()?;
+                    type_fields.insert(identifier, field_type);
+                }
+                
+                Some(UnifiedTypeDefinition::Product { fields: type_fields })
+            }
+            VmValue::Type(type_id) => {
+                // A Type value represents a type expression
+                Some(UnifiedTypeDefinition::TypeId(type_id))
+            }
+        }
+    }
+    pub fn into_type_id(self, type_container: &mut TypeContainer) -> Option<TypeId> {
+        self.into_unified_type_definition().map(|x| type_container.store_unified_type(x))
+    }
+
+    /// Get the type of this VmValue as UnifiedTypeDefinition
+    /// 
+    /// Returns the type information for this value without requiring a TypeContainer.
+    /// Returns None for mixed type/value products (not yet implemented).
+    pub fn get_type_id_of_value(&self,container:&mut TypeContainer)->Option<TypeId>{
+        self.get_type_of_value().map(|x|container.store_unified_type(x))
+    }
+    pub fn get_type_of_value(&self) -> Option<UnifiedTypeDefinition> {
+        match self {
+            VmValue::Type(_) => {
+                // Return "type of type" (meta-type)
+                Some(UnifiedTypeDefinition::Builtin(BuiltinKind::Type))
+            }
+            VmValue::ValuePrimitive(primitive) => {
+                let builtin_kind = match primitive {
+                    ValuePrimitive::Bool(_) => BuiltinKind::Bool,
+                    ValuePrimitive::Integer(_) => BuiltinKind::I64,
+                    ValuePrimitive::Float(_) => BuiltinKind::F64,
+                };
+                Some(UnifiedTypeDefinition::Builtin(builtin_kind))
+            }
+            VmValue::Product(fields) => {
+                // Check if product contains mixed types and values
+                let mut has_types = false;
+                let mut has_values = false;
+
+                for field_value in fields.values() {
+                    match field_value {
+                        VmValue::Type(_) => has_types = true,
+                        VmValue::ValuePrimitive(_) | VmValue::Product(_) => has_values = true,
+                    }
+                }
+
+                if has_types && has_values {
+                    // Mixed type/value products not yet implemented
+                    return None;
+                }
+
+                // Create product type from field types
+                let mut type_fields = std::collections::BTreeMap::new();
+                for (field_name, field_value) in fields {
+                    if let Some(field_type) = field_value.get_type_of_value() {
+                        type_fields.insert(field_name.clone(), field_type);
+                    } else {
+                        // If any field type cannot be determined, return None
+                        return None;
+                    }
+                }
+
+                Some(UnifiedTypeDefinition::Product {
+                    fields: type_fields,
+                })
+            }
+        }
+    }
+
+    pub fn of_type(&self, expected_type_id: TypeId,type_container: &mut TypeContainer) -> bool {
+        self.get_type_id_of_value(type_container).unwrap()==expected_type_id
     }
 }
 

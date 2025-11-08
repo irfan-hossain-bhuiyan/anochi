@@ -1,4 +1,4 @@
-use crate::{typing::{BuiltinKind, TypeContainer, TypeDefinition, TypeRef, UnifiedTypeDefinition}, token::token_type::Identifier};
+use crate::{typing::{BuiltinKind, TypeContainer, TypeDefinition, UnifiedTypeDefinition}, token::token_type::Identifier};
 use std::collections::BTreeMap;
 
 #[test]
@@ -25,16 +25,16 @@ fn test_flexible_type_system_with_mixed_references() {
     
     // Inner type: {r: a, x: a} (using references to 'a')
     let mut inner_fields = BTreeMap::new();
-    inner_fields.insert(Identifier::new("r".to_string()), TypeRef::Reference(id_a));  // Reference to 'a'
-    inner_fields.insert(Identifier::new("x".to_string()), TypeRef::Reference(id_a));  // Reference to 'a'
+    inner_fields.insert(Identifier::new("r".to_string()), UnifiedTypeDefinition::TypeId(id_a));  // Reference to 'a'
+    inner_fields.insert(Identifier::new("x".to_string()), UnifiedTypeDefinition::TypeId(id_a));  // Reference to 'a'
     let inner_unified = UnifiedTypeDefinition::product(inner_fields);
     
     // Outer type: {x: inner_type, y: bool} (mixing direct and references)
     let mut outer_fields = BTreeMap::new();
-    outer_fields.insert(Identifier::new("x".to_string()), TypeRef::Direct(inner_unified));  // Direct nested type
-    outer_fields.insert(Identifier::new("y".to_string()), TypeRef::Direct(
+    outer_fields.insert(Identifier::new("x".to_string()), inner_unified);  // Direct nested type
+    outer_fields.insert(Identifier::new("y".to_string()),
         UnifiedTypeDefinition::Builtin(BuiltinKind::Bool)  // Direct builtin
-    ));
+    );
     let type_b = UnifiedTypeDefinition::product(outer_fields);
     
     // Store 'b' and get its TypeId
@@ -114,8 +114,8 @@ fn test_type_deduplication_with_mixed_structure() {
     
     // Then create: {vx: a, vy: a} using references
     let mut outer_fields_2 = BTreeMap::new();
-    outer_fields_2.insert(Identifier::new("vx".to_string()), TypeRef::Reference(inner_id));
-    outer_fields_2.insert(Identifier::new("vy".to_string()), TypeRef::Reference(inner_id));
+    outer_fields_2.insert(Identifier::new("vx".to_string()), UnifiedTypeDefinition::TypeId(inner_id));
+    outer_fields_2.insert(Identifier::new("vy".to_string()), UnifiedTypeDefinition::TypeId(inner_id));
     let type_ref = UnifiedTypeDefinition::product(outer_fields_2);
     
     // Both should result in the same optimized TypeId

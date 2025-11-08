@@ -9,6 +9,7 @@ use crate::{
         BinaryOperator, Expression, ExpressionNode, Identifier, Literal, Statement, StatementNode,
         UnaryOperator,
     },
+    typing::{TypeId, UnifiedTypeDefinition},
     vm::backend::{IoBackend, VmBackend},
 };
 
@@ -31,18 +32,25 @@ pub enum VmError {
     InvalidOperation(String),
     #[error("Unsupproted Operation {0:?}")]
     Unsupported(String),
-
+    #[error("Invalid type defination")]
+    InvalidTypeDefination,
 }
 
 /// Result type for VM evaluation operations.
 pub type VmResult = Result<VmValue, VmError>;
-pub type VmResultMut<'a>= Result<&'a mut VmValue,VmError>;
+pub type VmResultMut<'a> = Result<&'a mut VmValue, VmError>;
+/// Variable entry storing both value and type information
+#[derive(Debug, Clone)]
+pub struct VariableEntry {
+    pub value: VmValue,
+    pub type_id: crate::typing::TypeId,
+}
+
 /// Stack-based scope management for variables
 #[derive(Debug)]
 pub struct ScopeStack {
-    scopes: VecDeque<HashMap<Identifier, VmValue>>,
+    scopes: VecDeque<HashMap<Identifier, VariableEntry>>,
 }
-
 
 impl ScopeStack {
     /// Creates a new scope stack with global scope
@@ -51,53 +59,127 @@ impl ScopeStack {
         scopes.push_back(HashMap::new()); // Global scope
         Self { scopes }
     }
-    
+
     /// Creates a new scope (pushes new HashMap to stack)
     pub fn create_scope(&mut self) {
         self.scopes.push_back(HashMap::new());
     }
-    
+
     /// Removes current scope (pops from stack)
     pub fn drop_scope(&mut self) {
-        if self.scopes.len() <= 1 { // Keep at least global scope
+        if self.scopes.len() <= 1 {
+            // Keep at least global scope
             unreachable!("scope shouldn't get called when there is already 1 scope")
         }
         self.scopes.pop_back();
     }
-    
-    /// Sets a variable in current scope
-    pub fn set_variable(&mut self, identifier: Identifier, value: VmValue) {
-        if let Some(current_scope) = self.scopes.back_mut() {
-            current_scope.insert(identifier, value);
+
+    /// Inserts a variable in current scope, automatically inferring its type
+    pub fn insert_variable(
+        &mut self,
+        identifier: Identifier,
+        value: VmValue,
+        type_container: &mut crate::typing::TypeContainer,
+    ) {
+        if let Some(type_def) = value.get_type_of_value() {
+            let type_id = type_container.store_unified_type(type_def);
+            if let Some(current_scope) = self.scopes.back_mut() {
+                current_scope.insert(identifier, VariableEntry { value, type_id });
+            }
+        }
+        // Note: If type cannot be inferred, we could panic or handle this case differently
+    }
+
+    /// Inserts a variable with type checking against expected type
+    pub fn insert_variable_check(
+        &mut self,
+        identifier: Identifier,
+        value: VmValue,
+        expected_type_id: crate::typing::TypeId,
+        type_container: &mut crate::typing::TypeContainer,
+    ) -> Result<(), VmError> {
+        if let Some(value_type_def) = value.get_type_of_value() {
+            let value_type_id = type_container.store_unified_type(value_type_def);
+
+            if value_type_id == expected_type_id {
+                if let Some(current_scope) = self.scopes.back_mut() {
+                    current_scope.insert(
+                        identifier,
+                        VariableEntry {
+                            value,
+                            type_id: expected_type_id,
+                        },
+                    );
+                }
+                Ok(())
+            } else {
+                Err(VmError::TypeMismatch(
+                    "Value type does not match expected type",
+                ))
+            }
+        } else {
+            Err(VmError::TypeMismatch("Cannot infer type of value"))
         }
     }
-    
+
+    /// Sets/updates an existing variable with type checking
+    pub fn set_variable(
+        &mut self,
+        identifier: &Identifier,
+        value: VmValue,
+        type_container: &mut crate::typing::TypeContainer,
+    ) -> Result<(), VmError> {
+        // First, find the existing variable to get its expected type
+        let Some(existing_entry) = self.get_variable_entry(identifier) else {
+            return Err(VmError::UndefinedIdentifier(identifier.clone()));
+        };
+        let expected_type_id = existing_entry.type_id;
+
+        // Check if the new value matches the expected type
+        let Some(value_type_id) = value.get_type_id_of_value(type_container) else {
+            return Err(VmError::TypeMismatch("Cannot infer type of value"));
+        };
+        if value_type_id != expected_type_id {
+            return Err(VmError::TypeMismatch(
+                "Value type does not match variable type",
+            ));
+        }
+
+        // Find and update the variable
+        for scope in self.scopes.iter_mut().rev() {
+            if let Some(entry) = scope.get_mut(identifier) {
+                entry.value = value;
+                return Ok(());
+            }
+        }
+        Err(VmError::UndefinedIdentifier(identifier.clone()))
+    }
+
     /// Gets a variable by searching from current scope to global
     pub fn get_variable(&self, identifier: &Identifier) -> Option<&VmValue> {
         for scope in self.scopes.iter().rev() {
-            if let Some(value) = scope.get(identifier) {
-                return Some(value);
+            if let Some(entry) = scope.get(identifier) {
+                return Some(&entry.value);
             }
         }
         None
     }
-    pub fn get_variable_or_err(&self,identifier: &Identifier)->VmResult{
-        self.get_variable(identifier).cloned().ok_or(VmError::UndefinedIdentifier(identifier.clone()))
-    }
-    
-    /// Gets mutable reference to variable by searching from current scope to global
-    pub fn get_variable_mut(&mut self, identifier: &Identifier) -> Option<&mut VmValue> {
-        for scope in self.scopes.iter_mut().rev() {
-            if let Some(value) = scope.get_mut(identifier) {
-                return Some(value);
+
+    /// Gets a variable entry (with type) by searching from current scope to global
+    pub fn get_variable_entry(&self, identifier: &Identifier) -> Option<&VariableEntry> {
+        for scope in self.scopes.iter().rev() {
+            if let Some(entry) = scope.get(identifier) {
+                return Some(entry);
             }
         }
         None
     }
-    pub fn get_variable_mut_or_err(&mut self,identifier: &Identifier) ->VmResultMut {
-        self.get_variable_mut(identifier).ok_or(VmError::UndefinedIdentifier(identifier.clone()))
+    pub fn get_variable_or_err(&self, identifier: &Identifier) -> VmResult {
+        self.get_variable(identifier)
+            .cloned()
+            .ok_or(VmError::UndefinedIdentifier(identifier.clone()))
     }
-    
+
     /// Checks if variable exists in any scope
     pub fn has_variable(&self, identifier: &Identifier) -> bool {
         self.get_variable(identifier).is_some()
@@ -147,7 +229,7 @@ impl<Backend: VmBackend> Vm<Backend> {
             let unified = type_def.to_unified();
             let type_id = self.types.store_unified_type(unified);
             self.variables
-                .set_variable(Identifier::new(name.to_string()), VmValue::Type(type_id));
+                .insert_variable(Identifier::new(name.to_string()), VmValue::Type(type_id), &mut self.types);
         }
     }
 
@@ -155,9 +237,7 @@ impl<Backend: VmBackend> Vm<Backend> {
         let expression = &expression_node.node;
         match expression {
             Expression::Literal(literal) => match literal {
-                Literal::Identifier(x) => self
-                    .variables
-                    .get_variable_or_err(x),
+                Literal::Identifier(x) => self.variables.get_variable_or_err(x),
                 Literal::Bool(_) | Literal::Float(_) | Literal::Integer(_) => Ok(
                     VmValue::ValuePrimitive(ValuePrimitive::from(literal.clone())),
                 ),
@@ -211,9 +291,8 @@ impl<Backend: VmBackend> Vm<Backend> {
                 let mut variants = BTreeSet::new();
                 for type_id in type_set {
                     if let Some(_optimized_def) = self.types.get_type(&type_id) {
-                        // We just need to store the TypeId for the optimized version
-                        // Create a TypeRef::Reference for each TypeId
-                        variants.insert(crate::typing::TypeRef::Reference(type_id));
+                        // Store the TypeId directly as UnifiedTypeDefinition::TypeId
+                        variants.insert(UnifiedTypeDefinition::TypeId(type_id));
                     } else {
                         return Err(VmError::InvalidOperation(
                             "Type not found in container".to_string(),
@@ -231,25 +310,37 @@ impl<Backend: VmBackend> Vm<Backend> {
             } => todo!(),
         }
     }
-    pub fn execute_statement(&mut self, stat_node: &StmtNode) -> Result<(), VmError> {
+    fn to_type(&mut self, value: VmValue) -> Result<TypeId, VmError> {
+        value
+            .into_type_id(&mut self.types)
+            .ok_or(VmError::InvalidTypeDefination)
+    }
+    pub fn execute_statement(&mut self, stat_node:& StmtNode) -> Result<(), VmError> {
         let stmt = &stat_node.node;
         match stmt {
-            Statement::Assignment { target, r#type, value } =>{
-                let value=self.evaluate_expr(value)?;
-                let generated_type=self.value_to_type(&value);
-                //let intended_type = self.value_to_type(&r#type);
-                //if (generated_type!=r#type){return Err(VmError::TypeMismatch("Type is mismatched"));}
-                self.variables.set_variable(target.clone(), value);
-                Ok(())
-            }
-            Statement::MutableAssignment {
+            Statement::Assignment {
                 target,
+                r#type,
                 value,
             } => {
+                let value = self.evaluate_expr(value)?;
+                if let Some(type_expr) = r#type {
+                    let type_value = self.evaluate_expr(type_expr)?;
+                    let expected_type_id = type_value
+                        .into_type_id(&mut self.types)
+                        .ok_or(VmError::InvalidTypeDefination)?;
+                    if !value.of_type(expected_type_id,&mut self.types){return Err(VmError::TypeMismatch(""));}
+                    // Use insert_variable_check for type verification
+                }
+                    self.variables.insert_variable(target.clone(), value, &mut self.types);
+                    // Use insert_variable for automatic type inference
+                Ok(())
+            }
+            Statement::MutableAssignment { target, value } => {
                 match &target.node {
                     Expression::Literal(Literal::Identifier(identifier)) => {
                         let evaluated_value = self.evaluate_expr(value)?;
-                        *self.variables.get_variable_mut_or_err(identifier)?= evaluated_value;
+                        self.variables.set_variable(identifier, evaluated_value, &mut self.types)?;
                         Ok(())
                     }
                     _ => {
@@ -273,7 +364,9 @@ impl<Backend: VmBackend> Vm<Backend> {
                 let VmValue::ValuePrimitive(ValuePrimitive::Bool(x)) =
                     self.evaluate_expr(condition)?
                 else {
-                    return Err(VmError::TypeMismatch("The expression in if should be boolean"));
+                    return Err(VmError::TypeMismatch(
+                        "The expression in if should be boolean",
+                    ));
                 };
                 if x {
                     self.execute_statement(on_true)?;
@@ -288,7 +381,9 @@ impl<Backend: VmBackend> Vm<Backend> {
                 let VmValue::ValuePrimitive(ValuePrimitive::Bool(x)) =
                     self.evaluate_expr(condition)?
                 else {
-                    return Err(VmError::TypeMismatch("The expression on ifelse should be bool"));
+                    return Err(VmError::TypeMismatch(
+                        "The expression on ifelse should be bool",
+                    ));
                 };
                 if x {
                     self.execute_statement(on_true)?;
@@ -306,76 +401,9 @@ impl<Backend: VmBackend> Vm<Backend> {
             }
         }
     }
-
-    /// Maps a VmValue to its corresponding TypeId
-    ///
-    /// # Arguments
-    /// * `value` - The VmValue to get the type for
-    ///
-    /// # Returns
-    /// * `Ok(TypeId)` - The TypeId representing the type of the value
-    /// * `Err(VmError)` - If the operation fails (e.g., mixed type/value products)
-    ///
-    /// # Behavior
-    /// - If value is `Type(type_id)` → returns "type of type" TypeId
-    /// - If value is `ValuePrimitive` → creates corresponding builtin TypeId
-    /// - If value is `Product` with all values → creates product type TypeId
-    /// - If product contains mixed types/values → returns error (future implementation)
-    pub fn value_to_type(&mut self, value: &VmValue) -> Result<crate::typing::TypeId, VmError> {
-        use crate::typing::{BuiltinKind, TypeRef, UnifiedTypeDefinition};
-        use std::collections::BTreeMap;
-
-        match value {
-            VmValue::Type(_) => {
-                // Return "type of type" TypeId (meta-type)
-                let type_def = UnifiedTypeDefinition::Builtin(BuiltinKind::Type);
-                Ok(self.types.store_unified_type(type_def))
-            }
-            VmValue::ValuePrimitive(primitive) => {
-                let builtin_kind = match primitive {
-                    ValuePrimitive::Bool(_) => BuiltinKind::Bool,
-                    ValuePrimitive::Integer(_) => BuiltinKind::I64,
-                    ValuePrimitive::Float(_) => BuiltinKind::F64,
-                };
-                let type_def = UnifiedTypeDefinition::Builtin(builtin_kind);
-                Ok(self.types.store_unified_type(type_def))
-            }
-            VmValue::Product(fields) => {
-                // Check if product contains mixed types and values
-                let mut has_types = false;
-                let mut has_values = false;
-
-                for field_value in fields.values() {
-                    match field_value {
-                        VmValue::Type(_) => has_types = true,
-                        VmValue::ValuePrimitive(_) | VmValue::Product(_) => has_values = true,
-                    }
-                }
-
-                if has_types && has_values {
-                    return Err(VmError::InvalidOperation(
-                        "Mixed type/value products not yet implemented".to_string(),
-                    ));
-                }
-
-                // Create product type from field types
-                let mut type_fields = BTreeMap::new();
-                for (field_name, field_value) in fields {
-                    let field_type_id = self.value_to_type(field_value)?;
-                    type_fields.insert(field_name.clone(), TypeRef::Reference(field_type_id));
-                }
-
-                let product_type = UnifiedTypeDefinition::Product {
-                    fields: type_fields,
-                };
-                Ok(self.types.store_unified_type(product_type))
-            }
-        }
-    }
 }
 
 #[cfg(test)]
 mod scope_stack_tests;
 #[cfg(test)]
 mod vm_tests;
-

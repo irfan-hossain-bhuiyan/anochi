@@ -9,7 +9,7 @@
         let value = VmValue::ValuePrimitive(ValuePrimitive::Integer(BigInt::from(42)));
 
         // Set variable in global scope
-        stack.set_variable(var_name.clone(), value.clone());
+        stack.insert_variable(var_name.clone(), value.clone());
         
         // Create new scope
         stack.create_scope();
@@ -35,7 +35,7 @@
         let modified_value = VmValue::ValuePrimitive(ValuePrimitive::Integer(BigInt::from(20)));
 
         // Set variable in global scope
-        stack.set_variable(var_name.clone(), initial_value.clone());
+        stack.insert_variable(var_name.clone(), initial_value.clone());
         
         // Create new scope
         stack.create_scope();
@@ -66,11 +66,11 @@
         let inner_value = VmValue::ValuePrimitive(ValuePrimitive::Bool(false));
 
         // Set variable in global scope
-        stack.set_variable(var_name.clone(), outer_value.clone());
+        stack.insert_variable(var_name.clone(), outer_value.clone());
         
         // Create new scope and set variable with same name
         stack.create_scope();
-        stack.set_variable(var_name.clone(), inner_value.clone());
+        stack.insert_variable(var_name.clone(), inner_value.clone());
         
         // Should access inner scope variable (shadowing)
         let retrieved = stack.get_variable(&var_name);
@@ -123,13 +123,13 @@
         assert!(!stack.has_variable(&var2));
 
         // Set variable in global scope
-        stack.set_variable(var1.clone(), value.clone());
+        stack.insert_variable(var1.clone(), value.clone());
         assert!(stack.has_variable(&var1));
         assert!(!stack.has_variable(&var2));
 
         // Create scope and add variable
         stack.create_scope();
-        stack.set_variable(var2.clone(), value.clone());
+        stack.insert_variable(var2.clone(), value.clone());
         assert!(stack.has_variable(&var1)); // From outer scope
         assert!(stack.has_variable(&var2)); // From current scope
 
@@ -152,15 +152,15 @@
         let scope2_value = VmValue::ValuePrimitive(ValuePrimitive::Integer(BigInt::from(300)));
 
         // Set global variable
-        stack.set_variable(global_var.clone(), global_value.clone());
+        stack.insert_variable(global_var.clone(), global_value.clone());
 
         // Create first nested scope
         stack.create_scope();
-        stack.set_variable(scope1_var.clone(), scope1_value.clone());
+        stack.insert_variable(scope1_var.clone(), scope1_value.clone());
         
         // Create second nested scope
         stack.create_scope();
-        stack.set_variable(scope2_var.clone(), scope2_value.clone());
+        stack.insert_variable(scope2_var.clone(), scope2_value.clone());
         
         // All variables should be accessible from deepest scope
         assert!(stack.has_variable(&global_var));

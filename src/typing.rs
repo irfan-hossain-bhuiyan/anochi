@@ -5,11 +5,9 @@
 //! - Type definitions (product types and sum types)
 //! - Type container for managing types and name resolution
 //! - Variable identifier aliasing
-
 use crate::prelude::HashCons;
 use crate::{ast::Identifier, prelude::HashPtr};
 use std::collections::{BTreeMap, BTreeSet};
-
 /// Represents primitive types that are built into the type system.
 /// These types are pre-registered in the TypeContainer and cannot be user-defined.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -28,22 +26,18 @@ pub enum BuiltinKind {
 pub type TypeId = HashPtr<OptimizedTypeDefinition>;
 
 /// TypeRef can hold either a direct type definition or a reference to a stored type
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub enum TypeRef {
-    Direct(UnifiedTypeDefinition), // Direct unified type definition
-    Reference(TypeId),             // Reference to stored type
-}
 
 /// UnifiedTypeDefinition is the main type that can contain both direct types and references
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum UnifiedTypeDefinition {
     Product {
-        fields: BTreeMap<Identifier, TypeRef>,
+        fields: BTreeMap<Identifier, Self>,
     },
     Sum {
-        variants: BTreeSet<TypeRef>,
+        variants: BTreeSet<Self>,
     },
     Builtin(BuiltinKind),
+    TypeId(TypeId),
 }
 
 /// OptimizedTypeDefinition uses only TypeId references for efficient storage
@@ -64,16 +58,18 @@ pub enum TypeDefinition {
     /// Fields are stored as a HashMap mapping field names to their types.
     Product {
         /// Fields in the product type, mapped by identifier
-        fields: BTreeMap<Identifier, TypeDefinition>,
+        fields: BTreeMap<Identifier, Self>,
     },
     /// Sum type: a collection of variants (enum-like).
     /// Variants are stored as a set of types to prevent duplication.
     Sum {
         /// Types associated with variants in the sum type
-        variants: BTreeSet<TypeDefinition>,
+        variants: BTreeSet<Self>,
     },
     /// Built-in type: a primitive type provided by the language.
     Builtin(BuiltinKind),
+    /// Reference to a stored type
+    TypeId(TypeId),
 }
 
 /// TypeContainer provides optimization and deduplication for types.
@@ -170,30 +166,31 @@ impl TypeDefinition {
            _ => None,
        }
    }
-    /// Convert TypeDefinition to UnifiedTypeDefinition
-    pub fn to_unified(self) -> UnifiedTypeDefinition {
-        match self {
-            TypeDefinition::Product { fields } => {
-                let unified_fields = fields
-                    .into_iter()
-                    .map(|(id, type_def)| (id, TypeRef::Direct(type_def.to_unified())))
-                    .collect();
-                UnifiedTypeDefinition::Product {
-                    fields: unified_fields,
-                }
-            }
-            TypeDefinition::Sum { variants } => {
-                let unified_variants = variants
-                    .into_iter()
-                    .map(|variant| TypeRef::Direct(variant.to_unified()))
-                    .collect();
-                UnifiedTypeDefinition::Sum {
-                    variants: unified_variants,
-                }
-            }
-            TypeDefinition::Builtin(kind) => UnifiedTypeDefinition::Builtin(kind),
-        }
-    }
+     /// Convert TypeDefinition to UnifiedTypeDefinition
+     pub fn to_unified(self) -> UnifiedTypeDefinition {
+         match self {
+             Self::Product { fields } => {
+                 let unified_fields = fields
+                     .into_iter()
+                     .map(|(id, type_def)| (id, type_def.to_unified()))
+                     .collect();
+                 UnifiedTypeDefinition::Product {
+                     fields: unified_fields,
+                 }
+             }
+             Self::Sum { variants } => {
+                 let unified_variants = variants
+                     .into_iter()
+                     .map(|variant| variant.to_unified())
+                     .collect();
+                 UnifiedTypeDefinition::Sum {
+                     variants: unified_variants,
+                 }
+             }
+             Self::Builtin(kind) => UnifiedTypeDefinition::Builtin(kind),
+             Self::TypeId(type_id) => UnifiedTypeDefinition::TypeId(type_id),
+         }
+     }
 
     /// Convert TypeDefinition directly to OptimizedTypeDefinition
     pub fn to_optimized(self, container: &mut TypeContainer) -> OptimizedTypeDefinition {
@@ -203,31 +200,30 @@ impl TypeDefinition {
 }
 
 impl UnifiedTypeDefinition {
-    pub fn product(fields: BTreeMap<Identifier, TypeRef>) -> Self {
-        UnifiedTypeDefinition::Product { fields }
+    pub fn product(fields: BTreeMap<Identifier, Self>) -> Self {
+        Self::Product { fields }
     }
 
-    pub fn sum(variants: BTreeSet<TypeRef>) -> Self {
-        UnifiedTypeDefinition::Sum { variants }
+    pub fn sum(variants: BTreeSet<Self>) -> Self {
+        Self::Sum { variants }
     }
 
     pub fn builtin(kind: BuiltinKind) -> Self {
-        UnifiedTypeDefinition::Builtin(kind)
+        Self::Builtin(kind)
+    }
+
+    pub fn type_id(id: TypeId) -> Self {
+        Self::TypeId(id)
     }
 
     /// Convert UnifiedTypeDefinition to OptimizedTypeDefinition using TypeContainer
     pub fn to_optimized(self, container: &mut TypeContainer) -> OptimizedTypeDefinition {
         match self {
-            UnifiedTypeDefinition::Product { fields } => {
+            Self::Product { fields } => {
                 let optimized_fields = fields
                     .into_iter()
-                    .map(|(id, type_ref)| {
-                        let type_id = match type_ref {
-                            TypeRef::Direct(type_def) => {
-                                container.store_unified_type(type_def)
-                            }
-                            TypeRef::Reference(type_id) => type_id,
-                        };
+                    .map(|(id, type_def)| {
+                        let type_id = container.store_unified_type(type_def);
                         (id, type_id)
                     })
                     .collect();
@@ -235,96 +231,86 @@ impl UnifiedTypeDefinition {
                     fields: optimized_fields,
                 }
             }
-            UnifiedTypeDefinition::Sum { variants } => {
+            Self::Sum { variants } => {
                 let optimized_variants = variants
                     .into_iter()
-                    .map(|type_ref| match type_ref {
-                        TypeRef::Direct(type_def) => {
-                            container.store_unified_type(type_def)
-                        }
-                        TypeRef::Reference(type_id) => type_id,
-                    })
+                    .map(|type_def| container.store_unified_type(type_def))
                     .collect();
                 OptimizedTypeDefinition::Sum {
                     variants: optimized_variants,
                 }
             }
-            UnifiedTypeDefinition::Builtin(kind) => OptimizedTypeDefinition::Builtin(kind),
+            Self::Builtin(kind) => OptimizedTypeDefinition::Builtin(kind),
+            Self::TypeId(type_id) => {
+                // If it's already a TypeId, we need to get the type and re-optimize it
+                // This handles the case where we have nested TypeId references
+                if let Some(type_def) = container.get_type(&type_id) {
+                    type_def.to_optimized(container)
+                } else {
+                    panic!("TypeId not found in container: {:?}", type_id)
+                }
+            }
         }
     }
 
     /// Add conversion method from OptimizedTypeDefinition back to UnifiedTypeDefinition
-    pub fn from_optimized(optimized: OptimizedTypeDefinition) -> UnifiedTypeDefinition {
+    pub fn from_optimized(optimized: OptimizedTypeDefinition) -> Self {
         match optimized {
             OptimizedTypeDefinition::Product { fields } => {
                 let unified_fields = fields
                     .into_iter()
-                    .map(|(id, type_id)| (id, TypeRef::Reference(type_id)))
+                    .map(|(id, type_id)| (id, Self::TypeId(type_id)))
                     .collect();
-                UnifiedTypeDefinition::Product {
+                Self::Product {
                     fields: unified_fields,
                 }
             }
             OptimizedTypeDefinition::Sum { variants } => {
                 let unified_variants = variants
                     .into_iter()
-                    .map(TypeRef::Reference)
+                    .map(Self::TypeId)
                     .collect();
-                UnifiedTypeDefinition::Sum {
+                Self::Sum {
                     variants: unified_variants,
                 }
             }
-            OptimizedTypeDefinition::Builtin(kind) => UnifiedTypeDefinition::Builtin(kind),
+            OptimizedTypeDefinition::Builtin(kind) => Self::Builtin(kind),
         }
     }
 
     /// Convert UnifiedTypeDefinition to TypeDefinition with reference expansion
     pub fn to_type_definition_expanded(self, container: &TypeContainer) -> TypeDefinition {
         match self {
-            UnifiedTypeDefinition::Product { fields } => {
+            Self::Product { fields } => {
                 let type_def_fields = fields
                     .into_iter()
-                    .map(|(id, type_ref)| {
-                        let type_def = match type_ref {
-                            TypeRef::Direct(unified_def) => {
-                                unified_def.to_type_definition_expanded(container)
-                            }
-                            TypeRef::Reference(type_id) => {
-                                if let Some(opt_def) = container.get_type(&type_id) {
-                                    opt_def
-                                } else {
-                                    panic!("TypeId not found in container")
-                                }
-                            }
-                        };
-                        (id, type_def)
+                    .map(|(id, type_def)| {
+                        let expanded_type = type_def.to_type_definition_expanded(container);
+                        (id, expanded_type)
                     })
                     .collect();
                 TypeDefinition::Product {
                     fields: type_def_fields,
                 }
             }
-            UnifiedTypeDefinition::Sum { variants } => {
+            Self::Sum { variants } => {
                 let type_def_variants = variants
                     .into_iter()
-                    .map(|type_ref| match type_ref {
-                        TypeRef::Direct(unified_def) => {
-                            unified_def.to_type_definition_expanded(container)
-                        }
-                        TypeRef::Reference(type_id) => {
-                            if let Some(opt_def) = container.get_type(&type_id) {
-                                opt_def
-                            } else {
-                                panic!("TypeId not found in container")
-                            }
-                        }
-                    })
+                    .map(|type_def| type_def.to_type_definition_expanded(container))
                     .collect();
                 TypeDefinition::Sum {
                     variants: type_def_variants,
                 }
             }
-            UnifiedTypeDefinition::Builtin(kind) => TypeDefinition::Builtin(kind),
+            Self::Builtin(kind) => TypeDefinition::Builtin(kind),
+            Self::TypeId(type_id) => {
+                if let Some(type_def) = container.get_type(&type_id) {
+                    type_def
+                } else {
+                    // Return a TypeId reference if not found in container
+                    TypeDefinition::TypeId(type_id)
+                }
+            }
         }
     }
 }
@@ -398,3 +384,4 @@ impl OptimizedTypeDefinition {
         }
     }
 }
+

@@ -59,3 +59,5 @@ D
         - One example is to create a new type for that
 ## Design Problem:
     Problem with type as expression and it's optimization,Now the 
+## THings I forgot
+    Type Definition,UnifiedTypeDefinition is only for to converting expression to that language,Only TypeId will be used for optimization.
