@@ -151,23 +151,6 @@ impl<Backend: VmBackend> Vm<Backend> {
         }
     }
 
-    /// Evaluates an expression using tree walking.
-    ///
-    /// This method recursively walks through the AST and evaluates expressions.
-    /// Currently supports integer and float arithmetic operations, comparison
-    /// operations, and logical operations. String operations and identifier
-    /// resolution are not yet implemented.
-    ///
-    /// # Arguments
-    ///
-    /// * `expression` - The expression to evaluate
-    ///
-    /// # Returns
-    ///
-    /// A `Result` containing the evaluated `Literal` value, or a `VmError`.
-    ///
-    ///
-    ///
     pub fn evaluate_expr(&mut self, expression_node: &ExpNode) -> VmResult {
         let expression = &expression_node.node;
         match expression {
@@ -253,6 +236,9 @@ impl<Backend: VmBackend> Vm<Backend> {
         match stmt {
             Statement::Assignment { target, r#type, value } =>{
                 let value=self.evaluate_expr(value)?;
+                let generated_type=self.value_to_type(&value);
+                //let intended_type = self.value_to_type(&r#type);
+                //if (generated_type!=r#type){return Err(VmError::TypeMismatch("Type is mismatched"));}
                 self.variables.set_variable(target.clone(), value);
                 Ok(())
             }
