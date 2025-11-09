@@ -247,7 +247,7 @@ impl UnifiedTypeDefinition {
                 if let Some(type_def) = container.get_type(&type_id) {
                     type_def.to_optimized(container)
                 } else {
-                    panic!("TypeId not found in container: {:?}", type_id)
+                    panic!("TypeId not found in container: {type_id:?}")
                 }
             }
         }

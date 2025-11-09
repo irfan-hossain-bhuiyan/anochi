@@ -36,6 +36,24 @@ pub enum VmError {
     InvalidTypeDefination,
 }
 
+impl VmError {
+    /// Returns `true` if the vm error is [`TypeMismatch`].
+    ///
+    /// [`TypeMismatch`]: VmError::TypeMismatch
+    #[must_use]
+    pub fn is_type_mismatch(&self) -> bool {
+        matches!(self, Self::TypeMismatch(..))
+    }
+
+    /// Returns `true` if the vm error is [`InvalidTypeDefination`].
+    ///
+    /// [`InvalidTypeDefination`]: VmError::InvalidTypeDefination
+    #[must_use]
+    pub fn is_invalid_type_defination(&self) -> bool {
+        matches!(self, Self::InvalidTypeDefination)
+    }
+}
+
 /// Result type for VM evaluation operations.
 pub type VmResult = Result<VmValue, VmError>;
 pub type VmResultMut<'a> = Result<&'a mut VmValue, VmError>;

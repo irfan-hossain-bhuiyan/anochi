@@ -6,10 +6,10 @@
 
 use crate::{
     parser::{Parser, ParserError},
-    token::{Tokenizer, token_type::TokenizerError},
+    token::{token_type::TokenizerError, Tokenizer},
     vm::{
         backend::VmBackend,
-        tree_walk::{Vm, VmValue},
+        tree_walk::{Vm, VmError, VmValue},
     },
 };
 use std::fmt;
@@ -54,6 +54,9 @@ impl CodeRunnerError {
         } else {
             None
         }
+    }
+    pub fn is_runtime_error_and(&self,f:impl Fn (&VmError)->bool)->bool{
+        self.as_runtime_error().is_some_and(f)
     }
 }
 /// Main code runner that orchestrates tokenization, parsing, and execution.

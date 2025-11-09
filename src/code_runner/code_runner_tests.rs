@@ -41,9 +41,18 @@ fn test_scope() {
 #[test]
 fn test_type_check(){
     let mut runner = CodeRunner::default();
+    runner.run_statement("let vec2={x=i64,y=i64};").unwrap();
+    runner.run_statement("let invalid_vec2={x=i64,y=10};").unwrap();
+    let var=runner.evaluate_expr("invalid_vec2");
+    println!("{var:?}");
+    runner.run_statement("let vec2={x=i64,y=i64};").unwrap();
+    runner.run_statement("let y:vec2={x=50,y=50};").unwrap();
     runner.run_statement("let y:{x=i64,y=i64}={x=50,y=50};").unwrap();
     let output=runner.run_statement("let y:{x=i64,y=bool}={x=50,y=50};");
-    assert!(output.is_err())
-
-
+    let yes=output.is_err_and(|x|x.is_runtime_error_and(|x|x.is_type_mismatch()));
+    assert!(yes);
+    let output=runner.run_statement("let y:invalid_vec2={x=50,y=50};");
+    //print!("{output:0?}");
+    let yes=output.is_err_and(|x|x.is_runtime_error_and(|x|x.is_invalid_type_defination()));
+    assert!(yes);
 }
