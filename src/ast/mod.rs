@@ -437,7 +437,9 @@ impl<'a> Statement<'a> {
             value:value.into(),
         }
     }
-    
+    pub fn assignment(target:Identifier,r#type:Option<ExpressionNode<'a>>,value: impl Into<ExpressionNode<'a>>) ->Self{
+        Statement::Assignment { target, r#type, value:value.into() }
+    }
     pub fn mutable_assignment(target: impl Into<ExpressionNode<'a>>, value: impl Into<ExpressionNode<'a>>) -> Self {
         Statement::MutableAssignment {
             target: target.into(),
@@ -445,7 +447,7 @@ impl<'a> Statement<'a> {
         }
     }
     
-    pub fn assignment(identifier: Identifier, value: impl Into<ExpressionNode<'a>>) -> Self {
+    pub fn assignment_no_type(identifier: Identifier, value: impl Into<ExpressionNode<'a>>) -> Self {
         Statement::Assignment {
             target: identifier,
             r#type:None,

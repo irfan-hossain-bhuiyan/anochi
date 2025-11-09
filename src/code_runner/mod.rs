@@ -5,9 +5,12 @@
 //! and return the result.
 
 use crate::{
-    parser::Parser,
-    token::{token_type::TokenizerError, Tokenizer},
-    vm::{backend::VmBackend, tree_walk::{Vm, VmValue}},
+    parser::{Parser, ParserError},
+    token::{Tokenizer, token_type::TokenizerError},
+    vm::{
+        backend::VmBackend,
+        tree_walk::{Vm, VmValue},
+    },
 };
 use std::fmt;
 use thiserror::Error;
@@ -20,12 +23,38 @@ pub enum CodeRunnerError {
     TokenizationError(#[from] TokenizerError),
 
     /// Error occurred during parsing
-    #[error("Parse error: could not parse the input")]
-    ParseError,
+    #[error("Parse error: could not parse the input {0:?}")]
+    ParseError(#[from] ParserError),
 
     /// Error occurred during VM execution
     #[error("Runtime error: {0}")]
     RuntimeError(#[from] crate::vm::tree_walk::VmError),
+}
+
+impl CodeRunnerError {
+    pub fn as_tokenization_error(&self) -> Option<&TokenizerError> {
+        if let Self::TokenizationError(v) = self {
+            Some(v)
+        } else {
+            None
+        }
+    }
+
+    pub fn as_parse_error(&self) -> Option<&ParserError> {
+        if let Self::ParseError(v) = self {
+            Some(v)
+        } else {
+            None
+        }
+    }
+
+    pub fn as_runtime_error(&self) -> Option<&crate::vm::tree_walk::VmError> {
+        if let Self::RuntimeError(v) = self {
+            Some(v)
+        } else {
+            None
+        }
+    }
 }
 /// Main code runner that orchestrates tokenization, parsing, and execution.
 ///
@@ -80,14 +109,11 @@ impl<Backend: VmBackend> CodeRunner<Backend> {
         }
         // Step 2: Parse tokens into AST
         let mut parser = Parser::new(&tokens);
-        if let Ok(stmt_node) = parser.parse_statement() {
-            // Step 3: Execute the statement
-            self.vm.execute_statement(&stmt_node)?;
-            return Ok(()); // Return unit type for statements
-        }
-
+        let stmt_node = parser.parse_statement()?;
+        // Step 3: Execute the statement
+        self.vm.execute_statement(&stmt_node)?;
+        Ok(())// Return unit type for statements
         // If both fail, return parse error
-        Err(CodeRunnerError::ParseError)
     }
     pub fn evaluate_expr(&mut self, source: &str) -> Result<VmValue, CodeRunnerError> {
         // Step 1: Tokenize the source code
@@ -102,14 +128,12 @@ impl<Backend: VmBackend> CodeRunner<Backend> {
         }
         // Step 2: Parse tokens into AST
         let mut parser = Parser::new(&tokens);
-        if let Ok(stmt_node) = parser.parse_expression() {
-            // Step 3: Execute the statement
-            let value=self.vm.evaluate_expr(&stmt_node)?;
-            return Ok(value)
-        }
+        let stmt_node = parser.parse_expression()?;
+        // Step 3: Execute the statement
+        let value = self.vm.evaluate_expr(&stmt_node)?;
+        Ok(value)
 
         // If both fail, return parse error
-        Err(CodeRunnerError::ParseError)
     }
 
     pub fn vm(&self) -> &Vm<Backend> {

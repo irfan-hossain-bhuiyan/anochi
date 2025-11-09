@@ -10,7 +10,7 @@ fn test_vm_basic_operations() {
     let mut vm = Vm::new(IoBackend::new());
 
     // Test assignment and variable lookup
-    let assignment = Statement::assignment(Identifier::new("x"), Expression::from_i64(42));
+    let assignment = Statement::assignment_no_type(Identifier::new("x"), Expression::from_i64(42));
     vm.execute_statement(&AstNode::new_temp(assignment))
         .unwrap();
 

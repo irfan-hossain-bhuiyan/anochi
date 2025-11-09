@@ -7,7 +7,7 @@ use crate::ast::{
 };
 use crate::token::token_type::Keyword::{self, And, Or};
 use crate::token::{Token, TokenType};
-use parser_error::*;
+pub use parser_error::*;
 
 /// Macro for token matching using matches! syntax
 macro_rules! match_token {
@@ -71,11 +71,15 @@ impl<'a, 'b: 'a> Parser<'a, 'b> {
             TokenType::Keyword(Keyword::Let) => {
                 self.advance();
                 let TokenType::Identifier(x)=match_token_or_err!(self,TokenType::Identifier(_))? else{unreachable!()};
+                let mut r#type=None;
                 let x=x.clone();
+                if match_token!{self,TokenType::Colon}.is_ok(){
+                    r#type=Some(self.parse_expression()?);
+                }
                 let _ = match_token_or_err!(self,TokenType::Equal)?;
                 let expr=self.parse_expression()?;
                 let _=match_token_or_err!(self,TokenType::Semicolon)?;
-                Ok(Statement::assignment(x, expr).into())
+                Ok(Statement::assignment(x, r#type, expr).into())
             }
             TokenType::Identifier(_) => {
                 let x = self.parse_expression()?;
