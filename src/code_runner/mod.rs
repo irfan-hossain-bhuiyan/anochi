@@ -131,4 +131,5 @@ impl<Backend: VmBackend> fmt::Debug for CodeRunner<Backend> {
             .finish()
     }
 }
-
+#[cfg(test)]
+mod code_runner_tests;
