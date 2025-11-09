@@ -1,15 +1,16 @@
-    use crate::{ast::Identifier, vm::tree_walk::{ScopeStack, ValuePrimitive, VmError, VmValue}};
+    use crate::{ast::Identifier, typing::TypeContainer, vm::tree_walk::{ScopeStack, ValuePrimitive, VmError, VmValue}};
     use num_bigint::BigInt;
 
     /// Test basic scope operations: create variable, create scope, access from inner scope
     #[test]
     fn test_scope_variable_access_across_scopes() {
         let mut stack = ScopeStack::new();
+        let mut type_container=TypeContainer::default();
         let var_name = Identifier::new("test_var".to_string());
         let value = VmValue::ValuePrimitive(ValuePrimitive::Integer(BigInt::from(42)));
 
         // Set variable in global scope
-        stack.insert_variable(var_name.clone(), value.clone());
+        stack.insert_variable(var_name.clone(), value.clone(),&mut type_container);
         
         // Create new scope
         stack.create_scope();
@@ -30,12 +31,13 @@
     #[test]
     fn test_mutable_variable_access_and_modification() {
         let mut stack = ScopeStack::new();
+        let mut type_container=TypeContainer::default();
         let var_name = Identifier::new("mutable_var".to_string());
         let initial_value = VmValue::ValuePrimitive(ValuePrimitive::Integer(BigInt::from(10)));
         let modified_value = VmValue::ValuePrimitive(ValuePrimitive::Integer(BigInt::from(20)));
 
         // Set variable in global scope
-        stack.insert_variable(var_name.clone(), initial_value.clone());
+        stack.insert_variable(var_name.clone(), initial_value.clone(),&mut type_container);
         
         // Create new scope
         stack.create_scope();
