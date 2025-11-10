@@ -363,6 +363,11 @@ impl<'a> Expression<'a> {
     }
 }
 #[derive(Debug, Clone, PartialEq)]
+pub struct StatementBlock<'a>{
+    pub statements: Vec<StatementNode<'a>>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum Statement<'a> {
     /// Assignment for creating new variables with `let` keyword
     Assignment {
@@ -375,9 +380,7 @@ pub enum Statement<'a> {
         target: ExpressionNode<'a>,
         value: ExpressionNode<'a>,
     },
-    StatementBlock {
-        statements: Vec<StatementNode<'a>>,
-    },
+    StatementBlock(StatementBlock<'a>),
     If {
         condition: ExpressionNode<'a>,
         on_true: Box<StatementNode<'a>>,
@@ -391,7 +394,7 @@ pub enum Statement<'a> {
         expr_vec:Vec<ExpressionNode<'a>>,
     },
     Loop{
-        statement:Box<StatementNode<'a>>,
+        statements:StatementBlock<'a>,
     },
     Break,
     Continue,
@@ -461,7 +464,7 @@ impl<'a> Statement<'a> {
     }
     
     pub fn statement_block(statements: Vec<StatementNode<'a>>) -> Self {
-        Statement::StatementBlock { statements }
+        Statement::StatementBlock(StatementBlock { statements })
     }
 
     pub fn if_stmt(condition: impl Into<ExpressionNode<'a>>, on_true: impl Into<StatementNode<'a>>) -> Self {
@@ -484,5 +487,21 @@ impl<'a> Statement<'a> {
     }
     pub fn debug(expr_vec:Vec<ExpressionNode<'a>>)->Self{
         Self::Debug { expr_vec }
+    }
+
+    /// Returns `true` if the statement is [`Break`].
+    ///
+    /// [`Break`]: Statement::Break
+    #[must_use]
+    pub fn is_break(&self) -> bool {
+        matches!(self, Self::Break)
+    }
+
+    /// Returns `true` if the statement is [`Continue`].
+    ///
+    /// [`Continue`]: Statement::Continue
+    #[must_use]
+    pub fn is_continue(&self) -> bool {
+        matches!(self, Self::Continue)
     }
 }

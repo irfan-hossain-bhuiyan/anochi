@@ -1,13 +1,13 @@
 //! Virtual Machine for the Anochi programming language.
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::HashMap;
 mod vm_value;
 pub use vm_value::{ValuePrimitive, VmValue};
 
 use crate::{
     ast::{
-        BinaryOperator, Expression, ExpressionNode, Identifier, Literal, Statement, StatementNode,
-        UnaryOperator,
+        BinaryOperator, Expression, ExpressionNode, Identifier, Literal, Statement, StatementBlock,
+        StatementNode, UnaryOperator,
     },
     typing::{TypeId, UnifiedTypeDefinition},
     vm::backend::{IoBackend, VmBackend},
@@ -96,8 +96,11 @@ impl<Backend: VmBackend> Vm<Backend> {
             let type_def = TypeDefinition::Builtin(builtin_kind);
             let unified = type_def.to_unified();
             let type_id = self.types.store_unified_type(unified);
-            self.variables
-                .insert_variable(Identifier::new(name.to_string()), VmValue::Type(type_id), &mut self.types);
+            self.variables.insert_variable(
+                Identifier::new(name.to_string()),
+                VmValue::Type(type_id),
+                &mut self.types,
+            );
         }
     }
 
@@ -183,7 +186,7 @@ impl<Backend: VmBackend> Vm<Backend> {
             .into_type_id(&mut self.types)
             .ok_or(VmError::InvalidTypeDefination)
     }
-    pub fn execute_statement(&mut self, stat_node:& StmtNode) -> Result<(), VmError> {
+    pub fn execute_statement(&mut self, stat_node: &StmtNode) -> Result<(), VmError> {
         let stmt = &stat_node.node;
         match stmt {
             Statement::Assignment {
@@ -197,18 +200,25 @@ impl<Backend: VmBackend> Vm<Backend> {
                     let expected_type_id = type_value
                         .into_type_id(&mut self.types)
                         .ok_or(VmError::InvalidTypeDefination)?;
-                    if !value.of_type(expected_type_id,&mut self.types){return Err(VmError::TypeMismatch(""));}
+                    if !value.of_type(expected_type_id, &mut self.types) {
+                        return Err(VmError::TypeMismatch(""));
+                    }
                     // Use insert_variable_check for type verification
                 }
-                    self.variables.insert_variable(target.clone(), value, &mut self.types);
-                    // Use insert_variable for automatic type inference
+                self.variables
+                    .insert_variable(target.clone(), value, &mut self.types);
+                // Use insert_variable for automatic type inference
                 Ok(())
             }
             Statement::MutableAssignment { target, value } => {
                 match &target.node {
                     Expression::Literal(Literal::Identifier(identifier)) => {
                         let evaluated_value = self.evaluate_expr(value)?;
-                        self.variables.set_variable(identifier, evaluated_value, &mut self.types)?;
+                        self.variables.set_variable(
+                            identifier,
+                            evaluated_value,
+                            &mut self.types,
+                        )?;
                         Ok(())
                     }
                     _ => {
@@ -220,7 +230,7 @@ impl<Backend: VmBackend> Vm<Backend> {
                     }
                 }
             }
-            Statement::StatementBlock { statements } => {
+            Statement::StatementBlock(StatementBlock { statements }) => {
                 self.variables.create_scope();
                 for stmt in statements.iter() {
                     self.execute_statement(stmt)?;
@@ -267,6 +277,18 @@ impl<Backend: VmBackend> Vm<Backend> {
                 }
                 Ok(())
             }
+            Statement::Continue | Statement::Break => {Ok(())},
+            Statement::Loop { statements } => {
+                'a:loop {
+                    for statement in statements.statements.iter() {
+                        let stat=&statement.node;
+                        if stat.is_break(){break 'a;}
+                        else if stat.is_continue(){break;}
+                        self.execute_statement(statement)?;
+                    }
+                }
+                Ok(())
+            },
         }
     }
 }

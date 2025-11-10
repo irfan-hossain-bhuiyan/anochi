@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod parser_block_tests {
     use super::*;
-    use crate::ast::{Identifier, Statement};
+    use crate::ast::{Identifier, Statement, StatementBlock};
     use crate::parser::Parser;
     use crate::token::{Tokenizer, Token, Position, TokenType};
     use crate::token::token_type::Keyword;
@@ -32,7 +32,7 @@ mod parser_block_tests {
         let result = parser.parse_statement();
         let statement = result.unwrap();
         match &statement.node {
-            Statement::StatementBlock { statements } => {
+            Statement::StatementBlock(StatementBlock { statements }) => {
                 assert!(statements.is_empty());
             }
             _ => panic!("Expected StatementBlock, got: {:?}", statement.node),
@@ -51,7 +51,7 @@ mod parser_block_tests {
         
         let statement = result.unwrap();
         match &statement.node {
-            Statement::StatementBlock { statements } => {
+            Statement::StatementBlock(StatementBlock { statements }) => {
                 assert_eq!(statements.len(), 1);
                 match &statements[0].node {
                     Statement::Assignment { target, value, .. } => {
@@ -76,7 +76,7 @@ mod parser_block_tests {
         
         let statement = result.unwrap();
         match &statement.node {
-            Statement::StatementBlock { statements } => {
+            Statement::StatementBlock(StatementBlock { statements }) => {
                 assert_eq!(statements.len(), 2);
                 
                 // Check first statement
@@ -111,7 +111,7 @@ mod parser_block_tests {
         
         let statement = result.unwrap();
         match &statement.node {
-            Statement::StatementBlock { statements } => {
+            Statement::StatementBlock(StatementBlock { statements }) => {
                 assert_eq!(statements.len(), 2);
                 
                 // Check first statement is assignment
@@ -124,7 +124,7 @@ mod parser_block_tests {
                 
                 // Check second statement is nested block
                 match &statements[1].node {
-                    Statement::StatementBlock { statements: nested_statements } => {
+                    Statement::StatementBlock(StatementBlock { statements: nested_statements }) => {
                         assert_eq!(nested_statements.len(), 1);
                         match &nested_statements[0].node {
                             Statement::Assignment { target, .. } => {
@@ -152,7 +152,7 @@ mod parser_block_tests {
         
         let statement = result.unwrap();
         match &statement.node {
-            Statement::StatementBlock { statements } => {
+            Statement::StatementBlock(StatementBlock { statements }) => {
                 assert_eq!(statements.len(), 1);
                 match &statements[0].node {
                     Statement::MutableAssignment { target, .. } => {
@@ -183,13 +183,13 @@ mod parser_block_tests {
         
         let statement = result.unwrap();
         match &statement.node {
-            Statement::StatementBlock { statements } => {
+            Statement::StatementBlock(StatementBlock { statements }) => {
                 assert_eq!(statements.len(), 1);
                 match &statements[0].node {
                     Statement::If { condition, on_true } => {
                         // Verify on_true is also a block
                         match &on_true.node {
-                            Statement::StatementBlock { statements: if_statements } => {
+                            Statement::StatementBlock(StatementBlock { statements: if_statements }) => {
                                 assert_eq!(if_statements.len(), 1);
                             }
                             _ => panic!("Expected StatementBlock in if body"),
@@ -214,7 +214,7 @@ mod parser_block_tests {
         
         let statement = result.unwrap();
         match &statement.node {
-            Statement::StatementBlock { statements } => {
+            Statement::StatementBlock(StatementBlock { statements }) => {
                 assert_eq!(statements.len(), 3);
                 
                 // First: let assignment

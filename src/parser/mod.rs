@@ -3,7 +3,7 @@ mod parser_error;
 #[cfg(test)]
 mod block_tests;
 use crate::ast::{
-    BinaryOperator, Expression, ExpressionNode, Statement, StatementNode, UnaryOperator,
+    BinaryOperator, Expression, ExpressionNode, Statement, StatementBlock, StatementNode, UnaryOperator
 };
 use crate::token::token_type::Keyword::{self, And, Or};
 use crate::token::{Token, TokenType};
@@ -35,8 +35,8 @@ pub struct Parser<'a, 'b: 'a> {
     tokens: &'a [Token<'b>],
     current: usize,
     is_error: bool,
-    is_in_loop:bool,
-    //DESIGN DECISION:It is here because the vm,might go inside a function inside loop,if the 
+    is_in_loop: bool,
+    //DESIGN DECISION:It is here because the vm,might go inside a function inside loop,if the
     //funciton has break,continue the vm will validate it,because it is inside loop.
 }
 type ExpNode<'a> = ExpressionNode<'a>;
@@ -67,21 +67,37 @@ impl<'a, 'b: 'a> Parser<'a, 'b> {
             Ok(Expression::sum(types).into())
         }
     }
-
+    pub fn parse_statement_block(&mut self) -> Result<StatementBlock<'b>,ParserError> {
+        match_token_or_err!(self,TokenType::LeftBrace)?;
+        let mut statements = Vec::new();
+        loop {
+            if match_token!(self, TokenType::RightBrace).is_ok() {
+                break;
+            }
+            match self.parse_statement() {
+                Ok(x) => statements.push(x),
+                Err(x) => return Err(x),
+            }
+        }
+        Ok(StatementBlock{statements})
+    }
     pub fn parse_statement(&mut self) -> ReStatNode<'b> {
         // Assignment: identifier = expression
         match self.peek_type().unwrap().clone() {
             TokenType::Keyword(Keyword::Let) => {
                 self.advance();
-                let TokenType::Identifier(x)=match_token_or_err!(self,TokenType::Identifier(_))? else{unreachable!()};
-                let mut r#type=None;
-                let x=x.clone();
-                if match_token!{self,TokenType::Colon}.is_ok(){
-                    r#type=Some(self.parse_expression()?);
+                let TokenType::Identifier(x) = match_token_or_err!(self, TokenType::Identifier(_))?
+                else {
+                    unreachable!()
+                };
+                let mut r#type = None;
+                let x = x.clone();
+                if match_token! {self,TokenType::Colon}.is_ok() {
+                    r#type = Some(self.parse_expression()?);
                 }
-                let _ = match_token_or_err!(self,TokenType::Equal)?;
-                let expr=self.parse_expression()?;
-                let _=match_token_or_err!(self,TokenType::Semicolon)?;
+                let _ = match_token_or_err!(self, TokenType::Equal)?;
+                let expr = self.parse_expression()?;
+                let _ = match_token_or_err!(self, TokenType::Semicolon)?;
                 Ok(Statement::assignment(x, r#type, expr).into())
             }
             TokenType::Identifier(_) => {
@@ -95,19 +111,11 @@ impl<'a, 'b: 'a> Parser<'a, 'b> {
                 Ok(Statement::mutable_assignment(x, expr).into())
             }
             TokenType::LeftBrace => {
-                self.advance();
-                let mut statements = Vec::new();
-                loop {
-                    if match_token!(self, TokenType::RightBrace).is_ok() {
-                        break;
-                    }
-                    match self.parse_statement() {
-                        Ok(x) => statements.push(x),
-                        err @ Err(_) => return err,
-                    }
+                match self.parse_statement_block(){
+                    Ok(x)=>Ok(Statement::StatementBlock(x).into()),
+                    Err(x)=>Err(x),
                 }
-                Ok(Statement::statement_block(statements).into())
-            }
+            },
             TokenType::Keyword(Keyword::If) => {
                 self.advance();
                 let expr = self.parse_expression()?;
@@ -133,23 +141,30 @@ impl<'a, 'b: 'a> Parser<'a, 'b> {
                 let _ = match_token_or_err!(self, TokenType::RightParen)?;
                 Ok(Statement::debug(expr_vec).into())
             }
-            TokenType::Keyword(Keyword::Loop)=>{
+            TokenType::Keyword(Keyword::Loop) => {
                 self.advance();
-                self.is_in_loop=true;
-                let statement=self.parse_statement()?;
-                self.is_in_loop=false;
-                Ok(Statement::Loop { statement: statement.into() }.into())
-            },
-            TokenType::Keyword(Keyword::Break)=>{
-                if !self.is_in_loop{return Err(StatementParseError::BreakOutsideLoop.into())}
+                self.is_in_loop = true;
+                let statement = self.parse_statement_block()?;
+                self.is_in_loop = false;
+                Ok(Statement::Loop {
+                    statements: statement.into(),
+                }
+                .into())
+            }
+            TokenType::Keyword(Keyword::Break) => {
+                if !self.is_in_loop {
+                    return Err(StatementParseError::BreakOutsideLoop.into());
+                }
                 self.advance();
                 Ok(Statement::Break.into())
-            },
-            TokenType::Keyword(Keyword::Continue)=>{
-                if !self.is_in_loop{return Err(StatementParseError::ContinueOutsideLoop.into())}
+            }
+            TokenType::Keyword(Keyword::Continue) => {
+                if !self.is_in_loop {
+                    return Err(StatementParseError::ContinueOutsideLoop.into());
+                }
                 self.advance();
                 Ok(Statement::Continue.into())
-            },
+            }
             _ => Err(StatementParseError::NoStatement.into()),
         }
     }
