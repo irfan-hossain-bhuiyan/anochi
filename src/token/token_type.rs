@@ -130,9 +130,11 @@ pub enum TokenizerError{
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Keyword {
+    Break,
+    Continue,
     If,
     Else,
-    While,
+    Loop,
     For,
     Or,
     And,
@@ -147,7 +149,9 @@ impl std::convert::TryFrom<String> for Keyword {
     type Error = ();
     fn try_from(value: String) -> Result<Self, Self::Error> {
         match value.as_str() {
-            "while" => Ok(Keyword::While),
+            "loop" => Ok(Keyword::Loop),
+            "continue" => Ok(Keyword::Continue),
+            "break"=> Ok(Keyword::Break),
             "for" => Ok(Keyword::For),
             "or" => Ok(Keyword::Or),
             "and" => Ok(Keyword::And),
@@ -166,7 +170,7 @@ impl std::convert::TryFrom<String> for Keyword {
 impl Keyword {
     pub fn into_str(&self) -> &'static str {
         match self {
-            Keyword::While => "while",
+            Keyword::Loop => "loop",
             Keyword::For => "for",
             Keyword::Or => "or",
             Keyword::And => "and",
@@ -177,6 +181,8 @@ impl Keyword {
             Keyword::Else => "else",
             Keyword::Debug => "debug",
             Keyword::Let => "let",
+            Keyword::Break=>"break",
+            Keyword::Continue=>"continue",
         }
     }
 }

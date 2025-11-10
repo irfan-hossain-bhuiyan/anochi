@@ -49,6 +49,10 @@ pub enum StatementParseError {
     TokenNotFound(#[from] NoTokenFound),
     #[error("No statement detected")]
     NoStatement,
+    #[error("Break is outside of loop")]
+    BreakOutsideLoop,
+    #[error("Continue is outside of loop")]
+    ContinueOutsideLoop
 }
 impl StatementParseError {
     /// Fast conversion to ParserError::Stat

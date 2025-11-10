@@ -46,7 +46,19 @@ impl Display for VmValue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::ValuePrimitive(x) => Display::fmt(x, f),
-            Self::Product(x) => write!(f, "Product{x:?}"),
+            Self::Product(fields) => {
+                write!(f, "{{")?;
+                let mut first = true;
+                for (key, value) in fields {
+                    if !first {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}={}", key, value)?;
+                    first = false;
+                }
+                write!(f, "}}")?;
+                Ok(())
+            },
             Self::Type(_) => write!(f, "Type"),
         }
     }

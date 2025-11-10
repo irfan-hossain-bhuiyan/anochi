@@ -35,6 +35,9 @@ pub struct Parser<'a, 'b: 'a> {
     tokens: &'a [Token<'b>],
     current: usize,
     is_error: bool,
+    is_in_loop:bool,
+    //DESIGN DECISION:It is here because the vm,might go inside a function inside loop,if the 
+    //funciton has break,continue the vm will validate it,because it is inside loop.
 }
 type ExpNode<'a> = ExpressionNode<'a>;
 type ReExpNode<'a> = Result<ExpNode<'a>, ParserError>;
@@ -130,6 +133,23 @@ impl<'a, 'b: 'a> Parser<'a, 'b> {
                 let _ = match_token_or_err!(self, TokenType::RightParen)?;
                 Ok(Statement::debug(expr_vec).into())
             }
+            TokenType::Keyword(Keyword::Loop)=>{
+                self.advance();
+                self.is_in_loop=true;
+                let statement=self.parse_statement()?;
+                self.is_in_loop=false;
+                Ok(Statement::Loop { statement: statement.into() }.into())
+            },
+            TokenType::Keyword(Keyword::Break)=>{
+                if !self.is_in_loop{return Err(StatementParseError::BreakOutsideLoop.into())}
+                self.advance();
+                Ok(Statement::Break.into())
+            },
+            TokenType::Keyword(Keyword::Continue)=>{
+                if !self.is_in_loop{return Err(StatementParseError::ContinueOutsideLoop.into())}
+                self.advance();
+                Ok(Statement::Continue.into())
+            },
             _ => Err(StatementParseError::NoStatement.into()),
         }
     }
@@ -183,6 +203,7 @@ impl<'a, 'b: 'a> Parser<'a, 'b> {
             tokens,
             current: 0,
             is_error: false,
+            is_in_loop: false,
         }
     }
 

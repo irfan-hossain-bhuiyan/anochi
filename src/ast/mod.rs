@@ -389,7 +389,12 @@ pub enum Statement<'a> {
     },
     Debug{
         expr_vec:Vec<ExpressionNode<'a>>,
-    }
+    },
+    Loop{
+        statement:Box<StatementNode<'a>>,
+    },
+    Break,
+    Continue,
 }
 pub type ExpressionNode<'a> = AstNode<'a, Expression<'a>>;
 pub type StatementNode<'a> = AstNode<'a, Statement<'a>>;
