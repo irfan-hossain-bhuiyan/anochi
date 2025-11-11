@@ -19,10 +19,17 @@
 - [x] Changing the Identifier to actual Identifier,
 - [x] Now change the vmvalue implementation in anochi,It use Literal as well,which need to be changed for bigint,bigfloat etc,String implmentation will be handled later,also automatically generate type for the vmvalue,type will be the builtin value type.
 - [x] Moving StacKScope to other other module,Variable,changing Variable Entry to make everything more modular.
-## Doing:
-- [ ] Add loop,continue,break;
+- [x] Add loop,continue,break;
         - In loop,I am thinking about loop being a wrapper around goto,Let's just ignore that for now.
         now continue and break this statement can be called inside loop.
+## Doing:
+- change the recursive tree like data structure to not 
+contain itself,rather the Vec will contain everything,So in the future I can iterate through the vec.
+- [ ] adding function for my language
+    - Like in the language,VmValue will have funcId,It is more like a pointer for now.
+    - As the statement in the function will not be hashed.
+    - 
+
 - [ ] Currently I have assignment ast that use expression on the right hand side,for say x.a=10; etc,but that is only used 
     for when the object is already created,I am returning the expression from that,not when I am creating a new variable.
 - [ ] checks if the test are right

@@ -147,7 +147,7 @@ impl<'a, 'b: 'a> Parser<'a, 'b> {
                 let statement = self.parse_statement_block()?;
                 self.is_in_loop = false;
                 Ok(Statement::Loop {
-                    statements: statement.into(),
+                    statements: statement,
                 }
                 .into())
             }

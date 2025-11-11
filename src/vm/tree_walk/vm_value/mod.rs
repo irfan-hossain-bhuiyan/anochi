@@ -3,7 +3,7 @@ use crate::ast::{Identifier, Literal};
 use crate::typing::{BuiltinKind, TypeContainer, TypeId, UnifiedTypeDefinition};
 use num_bigint::BigInt;
 use num_rational::BigRational;
-
+mod function;
 /// Primitive values that can be stored in the VM
 #[derive(Debug, Clone, PartialEq)]
 pub enum ValuePrimitive {
