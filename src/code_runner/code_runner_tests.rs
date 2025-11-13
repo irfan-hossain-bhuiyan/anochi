@@ -46,8 +46,5 @@ fn test_type_check(){
     let output=runner.run_statement("let y:{x=i64,y=bool}={x=50,y=50};");
     let yes=output.is_err_and(|x|x.is_runtime_error_and(|x|x.is_type_mismatch()));
     assert!(yes);
-    let output=runner.run_statement("let invalid_vec={x=164,y=bool};");
-    println!("{output:?}");
-    let yes=output.is_err_and(|x|x.is_runtime_error_and(|x|x.is_invalid_type_defination()));
-    assert!(yes);
+    runner.run_statement("let now_type={x=164,y=bool};").unwrap();
 }

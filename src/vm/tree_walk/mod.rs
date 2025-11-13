@@ -30,7 +30,7 @@ pub enum VmError {
     InvalidOperation(String),
     #[error("Unsupproted Operation {0:?}")]
     Unsupported(String),
-    #[error("Invalid type defination")]
+    #[error("Error for that are not supported yet.")]
     InvalidTypeDefination,
 }
 
@@ -42,14 +42,7 @@ impl VmError {
     pub fn is_type_mismatch(&self) -> bool {
         matches!(self, Self::TypeMismatch(..))
     }
-
-    /// Returns `true` if the vm error is [`InvalidTypeDefination`].
-    ///
-    /// [`InvalidTypeDefination`]: VmError::InvalidTypeDefination
-    #[must_use]
-    pub fn is_invalid_type_defination(&self) -> bool {
-        matches!(self, Self::InvalidTypeDefination)
-    }
+       
 }
 
 /// Result type for VM evaluation operations.
@@ -89,7 +82,6 @@ impl<Backend: VmBackend> Vm<Backend> {
             ("f64", BuiltinKind::F64),
             ("bool", BuiltinKind::Bool),
             ("usize", BuiltinKind::Usize),
-            ("type", BuiltinKind::Type),
         ];
 
         for (name, builtin_kind) in builtin_types {
