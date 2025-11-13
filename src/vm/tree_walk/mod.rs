@@ -186,6 +186,9 @@ impl<Backend: VmBackend> Vm<Backend> {
             .into_type_id(&mut self.types)
             .ok_or(VmError::InvalidTypeDefination)
     }
+    fn insert_variable(&mut self,target:Identifier,value:VmValue){
+        self.variables.insert_variable(target, value,&mut self.types);
+    }
     pub fn execute_statement(&mut self, stat_node: &StmtNode) -> Result<(), VmError> {
         let stmt = &stat_node.node;
         match stmt {
@@ -205,8 +208,7 @@ impl<Backend: VmBackend> Vm<Backend> {
                     }
                     // Use insert_variable_check for type verification
                 }
-                self.variables
-                    .insert_variable(target.clone(), value, &mut self.types);
+                self.insert_variable(target.clone(), value);
                 // Use insert_variable for automatic type inference
                 Ok(())
             }

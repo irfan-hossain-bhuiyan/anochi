@@ -55,15 +55,15 @@ fn test_vm_value_to_unified_type_definition() {
     
     // Test get_type_of_value for primitive values
     let bool_value = VmValue::from_bool(true);
-    let bool_type = bool_value.get_type_of_value().unwrap();
+    let bool_type = bool_value.get_type_of_value();
     assert_eq!(bool_type, UnifiedTypeDefinition::builtin(BuiltinKind::Bool));
     
     let int_value = VmValue::from_i64(42);
-    let int_type = int_value.get_type_of_value().unwrap();
+    let int_type = int_value.get_type_of_value();
     assert_eq!(int_type, UnifiedTypeDefinition::builtin(BuiltinKind::I64));
     
     let float_value = VmValue::from_f64(3.145);
-    let float_type = float_value.get_type_of_value().unwrap();
+    let float_type = float_value.get_type_of_value();
     assert_eq!(float_type, UnifiedTypeDefinition::builtin(BuiltinKind::F64));
 }
 #[test]
@@ -73,7 +73,7 @@ fn test_vm_value_for_complex_type(){
     map.insert(Identifier::new("y"), VmValue::from_i64(50));
     let value=VmValue::Product(map);
     let mut container=TypeContainer::new();
-    let value_type=value.get_type_of_value().unwrap();
+    let value_type=value.get_type_of_value();
     let id1=container.store_unified_type(value_type);
 
 

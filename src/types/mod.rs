@@ -236,6 +236,10 @@ impl UnifiedTypeDefinition {
         Self::TypeId(id)
     }
 
+    pub(crate) fn get_id(self,container:&mut TypeContainer) -> TypeId{
+        container.store_unified_type(self)
+    }
+
     //pub fn to_optimized(self, container: &mut TypeContainer) -> OptimizedTypeDefinition {
     //    match self {
     //        UnifiedTypeDefinition::TypeId(x) => OptimizedTypeDefinition::TypeId(x),

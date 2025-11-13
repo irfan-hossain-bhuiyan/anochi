@@ -44,7 +44,7 @@ impl VariableEntry {
         var_state: VariableState,
         type_container: &mut TypeContainer,
     ) -> Self {
-        let type_id=value.get_type_id_of_value(type_container).unwrap();
+        let type_id=value.get_type_id_of_value(type_container);
         unsafe{Self::new_unchecked(value, type_id, var_state)}
     }
     pub fn new_checked(
@@ -144,9 +144,7 @@ impl ScopeStack {
         let expected_type_id = existing_entry.type_id;
 
         // Check if the new value matches the expected type
-        let Some(value_type_id) = value.get_type_id_of_value(type_container) else {
-            return Err(VmError::TypeMismatch("Cannot infer type of value"));
-        };
+        let value_type_id = value.get_type_id_of_value(type_container);
         if value_type_id != expected_type_id {
             return Err(VmError::TypeMismatch(
                 "Value type does not match variable type",

@@ -148,14 +148,14 @@ impl VmValue {
     /// 
     /// Returns the type information for this value without requiring a TypeContainer.
     /// Returns None for mixed type/value products (not yet implemented).
-    pub fn get_type_id_of_value(&self,container:&mut TypeContainer)->Option<TypeId>{
-        self.get_type_of_value().map(|x|container.store_unified_type(x))
+    pub fn get_type_id_of_value(&self,container:&mut TypeContainer)->TypeId{
+        self.get_type_of_value().get_id(container)
     }
-    pub fn get_type_of_value(&self) -> Option<UnifiedTypeDefinition> {
+    pub fn get_type_of_value(&self) -> UnifiedTypeDefinition {
         match self {
             VmValue::Type(_) => {
                 // Return "type of type" (meta-type)
-                Some(UnifiedTypeDefinition::builtin(BuiltinKind::Type))
+                UnifiedTypeDefinition::builtin(BuiltinKind::Type)
             }
             VmValue::ValuePrimitive(primitive) => {
                 let builtin_kind = match primitive {
@@ -163,45 +163,32 @@ impl VmValue {
                     ValuePrimitive::Integer(_) => BuiltinKind::I64,
                     ValuePrimitive::Float(_) => BuiltinKind::F64,
                 };
-                Some(UnifiedTypeDefinition::builtin(builtin_kind))
+                UnifiedTypeDefinition::builtin(builtin_kind)
             }
             VmValue::Product(fields) => {
                 // Check if product contains mixed types and values
-                let mut has_types = false;
-                let mut has_values = false;
-
                 for field_value in fields.values() {
                     match field_value {
-                        VmValue::Type(_) => has_types = true,
-                        VmValue::ValuePrimitive(_) | VmValue::Product(_) => has_values = true,
+                        VmValue::Type(_) => return UnifiedTypeDefinition::builtin(BuiltinKind::Type),
+                        VmValue::ValuePrimitive(_) | VmValue::Product(_) => {},
                     }
                 }
-
-                if has_types && has_values {
-                    // Mixed type/value products not yet implemented
-                    return None;
-                }
-
                 // Create product type from field types
                 let mut type_fields = std::collections::BTreeMap::new();
                 for (field_name, field_value) in fields {
-                    if let Some(field_type) = field_value.get_type_of_value() {
-                        type_fields.insert(field_name.clone(), field_type);
-                    } else {
-                        // If any field type cannot be determined, return None
-                        return None;
-                    }
+                    let field_type = field_value.get_type_of_value();
+                    type_fields.insert(field_name.clone(), field_type);
                 }
 
-                Some(UnifiedTypeDefinition::TypeDef(TypeGeneric::Product {
+                UnifiedTypeDefinition::TypeDef(TypeGeneric::Product {
                     fields: type_fields,
-                }))
+                })
             }
         }
     }
 
     pub fn of_type(&self, expected_type_id: TypeId,type_container: &mut TypeContainer) -> bool {
-        let id=self.get_type_id_of_value(type_container).unwrap();
+        let id=self.get_type_id_of_value(type_container);
         id==expected_type_id
     }
 
