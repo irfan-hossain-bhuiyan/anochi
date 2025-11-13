@@ -12,7 +12,7 @@ use crate::{
         tree_walk::{Vm, VmError, VmValue},
     },
 };
-use std::fmt;
+use std::{any::TypeId, fmt};
 use thiserror::Error;
 
 /// Errors that can occur during code execution.
@@ -138,9 +138,14 @@ impl<Backend: VmBackend> CodeRunner<Backend> {
 
         // If both fail, return parse error
     }
+    
 
     pub fn vm(&self) -> &Vm<Backend> {
         &self.vm
+    }
+
+    fn stack_trace(&self) {
+        self.vm.print_stack();
     }
 }
 

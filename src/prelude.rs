@@ -104,3 +104,17 @@ impl<T: Eq + Hash + Clone> Default for HashCons<T> {
         Self::new()
     }
 }
+pub trait Mappable<NOW,AFTER>{
+    type Mapped;
+
+    fn map<F>(self, f: F) -> Self::Mapped
+    where
+        F: FnMut(NOW) -> AFTER;
+    //TODO: Tell the compiler to fix this mappable issue.
+    //fn trymap<F>(self,f:F) ->Option<Self::Mapped>
+    //    where
+    //        F: FnMut(NOW) -> Option<AFTER>{
+    //    self.map(f.)
+    //}
+
+}

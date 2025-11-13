@@ -5,7 +5,7 @@ use thiserror::Error;
 
 use crate::{
     ast::Identifier,
-    typing::{TypeContainer, TypeId},
+    types::{TypeContainer, TypeId},
     vm::tree_walk::{VmError, VmResult, VmValue},
 };
 
@@ -104,7 +104,7 @@ impl ScopeStack {
         &mut self,
         identifier: Identifier,
         value: VmValue,
-        type_container: &mut crate::typing::TypeContainer,
+        type_container: &mut crate::types::TypeContainer,
     ) {
         let entry = VariableEntry::new(value, VariableState::Immutable, type_container);
         if let Some(current_scope) = self.scopes.back_mut() {
@@ -118,7 +118,7 @@ impl ScopeStack {
         identifier: Identifier,
         value: VmValue,
         expected_type_id: TypeId,
-        type_container: &mut crate::typing::TypeContainer,
+        type_container: &mut crate::types::TypeContainer,
     ) -> Result<(), VmError> {
         let Some(entry) = VariableEntry::new_checked(value, expected_type_id, VariableState::Immutable, type_container) else {
             return Err(VmError::TypeMismatch("Value type does not match expected type"));
@@ -135,7 +135,7 @@ impl ScopeStack {
         &mut self,
         identifier: &Identifier,
         value: VmValue,
-        type_container: &mut crate::typing::TypeContainer,
+        type_container: &mut crate::types::TypeContainer,
     ) -> Result<(), VmError> {
         // First, find the existing variable to get its expected type
         let Some(existing_entry) = self.get_variable_entry(identifier) else {

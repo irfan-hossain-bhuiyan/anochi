@@ -1,4 +1,4 @@
-use crate::{ast::StatementNode, typing::TypeId};
+use crate::{ast::StatementNode, types::TypeId};
 
 struct Function{
     func_sig:FunctionSignature,

@@ -6,11 +6,9 @@ pub use vm_value::{ValuePrimitive, VmValue};
 
 use crate::{
     ast::{
-        BinaryOperator, Expression, ExpressionNode, Identifier, Literal, Statement, StatementBlock,
-        StatementNode, UnaryOperator,
-    },
-    typing::{TypeId, UnifiedTypeDefinition},
-    vm::backend::{IoBackend, VmBackend},
+        Expression, ExpressionNode, Identifier, Literal, Statement, StatementBlock,
+        StatementNode,
+    }, types::{TypeId, UnifiedTypeDefinition, BuiltinKind, TypeContainer}, vm::backend::{IoBackend, VmBackend}
 };
 
 use thiserror::Error;
@@ -63,7 +61,7 @@ use scope_stack::ScopeStack;
 #[derive(Debug, Default)]
 pub struct Vm<Backend = IoBackend> {
     variables: ScopeStack,
-    types: crate::typing::TypeContainer,
+    types: TypeContainer,
     backend: Backend,
 }
 
@@ -74,15 +72,17 @@ impl<Backend: VmBackend> Vm<Backend> {
     pub fn new(backend: Backend) -> Self {
         let mut vm = Self {
             variables: ScopeStack::new(),
-            types: crate::typing::TypeContainer::new(),
+            types: crate::types::TypeContainer::new(),
             backend,
         };
         vm.load_builtin_types();
         vm
     }
-
+    fn get_type_def(&self,id:&TypeId) -> Option<crate::types::TypeDefinition> {
+        self.types.get_type_def(id)
+    }
     fn load_builtin_types(&mut self) {
-        use crate::typing::{BuiltinKind, TypeDefinition};
+        use crate::types::{BuiltinKind };
 
         let builtin_types = [
             ("i64", BuiltinKind::I64),
@@ -93,9 +93,8 @@ impl<Backend: VmBackend> Vm<Backend> {
         ];
 
         for (name, builtin_kind) in builtin_types {
-            let type_def = TypeDefinition::Builtin(builtin_kind);
-            let unified = type_def.to_unified();
-            let type_id = self.types.store_unified_type(unified);
+            let type_def = UnifiedTypeDefinition::builtin(builtin_kind);
+            let type_id = self.types.store_unified_type(type_def);
             self.variables.insert_variable(
                 Identifier::new(name.to_string()),
                 VmValue::Type(type_id),
@@ -161,7 +160,7 @@ impl<Backend: VmBackend> Vm<Backend> {
                 // For sum types, we need to convert TypeIds back to TypeDefinitions to create the sum type
                 let mut variants = BTreeSet::new();
                 for type_id in type_set {
-                    if let Some(_optimized_def) = self.types.get_type(&type_id) {
+                    if self.types.has_type(&type_id) {
                         // Store the TypeId directly as UnifiedTypeDefinition::TypeId
                         variants.insert(UnifiedTypeDefinition::TypeId(type_id));
                     } else {
@@ -171,7 +170,7 @@ impl<Backend: VmBackend> Vm<Backend> {
                     }
                 }
 
-                let unified = crate::typing::UnifiedTypeDefinition::Sum { variants };
+                let unified = crate::types::UnifiedTypeDefinition::sum(variants);
                 let type_id = self.types.store_unified_type(unified);
                 Ok(VmValue::Type(type_id))
             }
@@ -179,6 +178,7 @@ impl<Backend: VmBackend> Vm<Backend> {
                 object: _,
                 member: _,
             } => todo!(),
+            Expression::Function { .. } => todo!(),
         }
     }
     fn to_type(&mut self, value: VmValue) -> Result<TypeId, VmError> {
@@ -290,6 +290,10 @@ impl<Backend: VmBackend> Vm<Backend> {
                 Ok(())
             },
         }
+    }
+
+    pub(crate) fn print_stack(&self) {
+        println!("{}",self.variables);
     }
 }
 

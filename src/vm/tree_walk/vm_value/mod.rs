@@ -1,9 +1,11 @@
 use std::{collections::HashMap, fmt::Display};
-use crate::ast::{Identifier, Literal};
-use crate::typing::{BuiltinKind, TypeContainer, TypeId, UnifiedTypeDefinition};
+use crate::ast::{Identifier, Literal, BinaryOperator, UnaryOperator};
+use crate::types::{BuiltinKind, TypeContainer, TypeId, UnifiedTypeDefinition, TypeGeneric, TypeDefinition};
 use num_bigint::BigInt;
 use num_rational::BigRational;
 mod function;
+#[cfg(test)]
+mod tests;
 /// Primitive values that can be stored in the VM
 #[derive(Debug, Clone, PartialEq)]
 pub enum ValuePrimitive {
@@ -11,6 +13,7 @@ pub enum ValuePrimitive {
     Integer(BigInt),
     Float(BigRational),
 }
+
 
 impl Display for ValuePrimitive {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -39,7 +42,7 @@ impl From<Literal> for ValuePrimitive {
 pub enum VmValue {
     ValuePrimitive(ValuePrimitive),
     Product(HashMap<Identifier, VmValue>),
-    Type(crate::typing::TypeId),
+    Type(TypeId),
 }
 
 impl Display for VmValue {
@@ -53,7 +56,7 @@ impl Display for VmValue {
                     if !first {
                         write!(f, ", ")?;
                     }
-                    write!(f, "{}={}", key, value)?;
+                    write!(f, "{key}={value}")?;
                     first = false;
                 }
                 write!(f, "}}")?;
@@ -125,13 +128,17 @@ impl VmValue {
                     type_fields.insert(identifier, field_type);
                 }
                 
-                Some(UnifiedTypeDefinition::Product { fields: type_fields })
+                Some(UnifiedTypeDefinition::TypeDef(TypeGeneric::Product { fields: type_fields }))
             }
             VmValue::Type(type_id) => {
                 // A Type value represents a type expression
                 Some(UnifiedTypeDefinition::TypeId(type_id))
             }
         }
+    }
+    pub fn into_type_definition(self,container:&mut TypeContainer)->Option<TypeDefinition>{
+        let type_id=container.store_unified_type(self.into_unified_type_definition()?);
+        type_id.to_type_def(container)
     }
     pub fn into_type_id(self, type_container: &mut TypeContainer) -> Option<TypeId> {
         self.into_unified_type_definition().map(|x| type_container.store_unified_type(x))
@@ -148,7 +155,7 @@ impl VmValue {
         match self {
             VmValue::Type(_) => {
                 // Return "type of type" (meta-type)
-                Some(UnifiedTypeDefinition::Builtin(BuiltinKind::Type))
+                Some(UnifiedTypeDefinition::builtin(BuiltinKind::Type))
             }
             VmValue::ValuePrimitive(primitive) => {
                 let builtin_kind = match primitive {
@@ -156,7 +163,7 @@ impl VmValue {
                     ValuePrimitive::Integer(_) => BuiltinKind::I64,
                     ValuePrimitive::Float(_) => BuiltinKind::F64,
                 };
-                Some(UnifiedTypeDefinition::Builtin(builtin_kind))
+                Some(UnifiedTypeDefinition::builtin(builtin_kind))
             }
             VmValue::Product(fields) => {
                 // Check if product contains mixed types and values
@@ -186,16 +193,19 @@ impl VmValue {
                     }
                 }
 
-                Some(UnifiedTypeDefinition::Product {
+                Some(UnifiedTypeDefinition::TypeDef(TypeGeneric::Product {
                     fields: type_fields,
-                })
+                }))
             }
         }
     }
 
     pub fn of_type(&self, expected_type_id: TypeId,type_container: &mut TypeContainer) -> bool {
-        self.get_type_id_of_value(type_container).unwrap()==expected_type_id
+        let id=self.get_type_id_of_value(type_container).unwrap();
+        id==expected_type_id
     }
+
+
 }
 
 use super::*;
