@@ -23,8 +23,7 @@
         - In loop,I am thinking about loop being a wrapper around goto,Let's just ignore that for now.
         now continue and break this statement can be called inside loop.
 ## Doing:
-- Prompt: the datatype HashPtrContainer  and HashPtr I have created,let's make a trait for it,trait ToHashOptimized,
-this trait will map the object to it's optimized form,given the Container datatype,the container will only contain the optimized object.
+- [ ] Change the representation Expression and Statement to be generic
 - change the recursive tree like data structure to not 
 contain itself,rather the Vec will contain everything,So in the future I can iterate through the vec.
 - [ ] adding function for my language

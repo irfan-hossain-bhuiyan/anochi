@@ -18,165 +18,10 @@ use std::fmt::{self};
 pub use crate::token::token_type::Identifier;
 pub type IdentifierMap<T> = HashMap<Identifier, T>;
 pub type IdentifierToValue = IdentifierMap<VmValue>;
-pub type IdentifierToExpression<'a> = IdentifierMap<ExpressionNode<'a>>;
+pub type IdentifierToExp<T> = IdentifierMap<ExpNode<T>>;
 use num_bigint::BigInt;
 use num_rational::BigRational;
 
-pub trait RemoveRef where Self::Output:'static{
-    type Output;
-    fn remove_ref(self) -> Self::Output;
-}
-
-impl<'a> RemoveRef for Expression<'a> {
-    type Output = Expression<'static>;
-    fn remove_ref(self) -> Self::Output {
-        match self {
-            Expression::Literal(literal) => Expression::Literal(literal),
-            Expression::Binary {
-                operator,
-                left,
-                right,
-            } => {
-                let new_left = Box::new(left.remove_ref());
-                let new_right = Box::new(right.remove_ref());
-                Expression::Binary {
-                    operator,
-                    left: new_left,
-                    right: new_right,
-                }
-            }
-            Expression::Unary { operator, operand } => {
-                let new_operand = Box::new(operand.remove_ref());
-                Expression::Unary {
-                    operator,
-                    operand: new_operand,
-                }
-            }
-            Expression::Grouping { expression } => {
-                let expression = expression.remove_ref();
-                Expression::Grouping {
-                    expression: Box::new(expression),
-                }
-            }
-            Expression::MemberAccess { object, member } => {
-                let static_object = object.remove_ref();
-                Expression::MemberAccess {
-                    object: Box::new(static_object),
-                    member,
-                }
-            }
-            Expression::Product { data } => {
-                let static_data = data
-                    .into_iter()
-                    .map(|(k, v)| (k, v.remove_ref()))
-                    .collect();
-                Expression::Product { data: static_data }
-            }
-            Expression::Sum { data } => {
-                let static_data = data.into_iter().map(|node| node.remove_ref()).collect();
-                Expression::Sum { data: static_data }
-            }
-            Expression::Function { input, output, statements }=>{
-                let new_input = Box::new(input.remove_ref());
-                let new_output = Box::new(output.remove_ref());
-                let new_statements = Box::new(statements.remove_ref());
-                let x: Expression<'static> = Expression::Function {
-                    input: new_input,
-                    output: new_output,
-                    statements: new_statements,
-                };
-                return x;
-            }
-        }
-    }
-}
-
-impl<'a> RemoveRef for StatementBlock<'a> {
-    type Output = StatementBlock<'static>;
-    fn remove_ref(self) -> Self::Output {
-        let static_statements:Vec<AstNode<'static, Statement<'static>>> = self
-            .statements
-            .into_iter()
-            .map(|stmt| stmt.remove_ref())
-            .collect();
-        StatementBlock {
-            statements: static_statements,
-        }
-    }
-}
-
-
-// Implement for Statement<'a>
-impl<'a> RemoveRef for Statement<'a> {
-    type Output = Statement<'static>;
-    fn remove_ref(self) -> Self::Output {
-        match self {
-            Statement::Assignment {
-                target,
-                r#type,
-                value,
-            } => {
-                let new_type = r#type.map(|t| t.remove_ref());
-                let new_value = value.remove_ref();
-                Statement::Assignment {
-                    target,
-                    r#type: new_type,
-                    value: new_value,
-                }
-            }
-            Statement::MutableAssignment { target, value } => {
-                let new_target = target.remove_ref();
-                let new_value = value.remove_ref();
-                Statement::MutableAssignment {
-                    target: new_target,
-                    value: new_value,
-                }
-            }
-            Statement::StatementBlock(block) => Statement::StatementBlock(block.remove_ref()),
-            Statement::If { condition, on_true } => {
-                let new_condition = condition.remove_ref();
-                let new_on_true = Box::new(on_true.remove_ref());
-                Statement::If {
-                    condition: new_condition,
-                    on_true: new_on_true,
-                }
-            }
-            Statement::IfElse {
-                condition,
-                on_true,
-                on_false,
-            } => {
-                let new_condition = condition.remove_ref();
-                let new_on_true = Box::new(on_true.remove_ref());
-                let new_on_false = Box::new(on_false.remove_ref());
-                Statement::IfElse {
-                    condition: new_condition,
-                    on_true: new_on_true,
-                    on_false: new_on_false,
-                }
-            }
-            Statement::Debug { expr_vec } => Statement::Debug {
-                expr_vec: expr_vec.into_iter().map(|e| e.remove_ref()).collect(),
-            },
-            Statement::Loop { statements } => Statement::Loop {
-                statements: statements.remove_ref(),
-            },
-            Statement::Break => Statement::Break,
-            Statement::Continue => Statement::Continue,
-        }
-    }
-}
-
-// RemoveRef implementation for AstNode
-impl<'a, T: RemoveRef> RemoveRef for AstNode<'a, T> {
-    type Output = AstNode<'static, T::Output>;
-    fn remove_ref(self) -> Self::Output {
-        AstNode {
-            node: self.node.remove_ref(),
-            position: None,
-        }
-    }
-}
 use crate::token::Position;
 use crate::token::token_type::Keyword::{False, True};
 use crate::token::token_type::TokenType;
@@ -247,13 +92,22 @@ pub enum UnaryOperator {
 
     Not,
 }
-
+#[derive(Debug, Clone, PartialEq)]
+pub struct ExpNode<T>{
+    data:T,
+    exp:Expression<T>,
+}
+#[derive(Debug, Clone, PartialEq)]
+pub struct StatNode<T>{
+    data:T,
+    stat:Statement<T>,
+}
 /// The main AST node type representing all possible expressions.
 ///
 /// This enum encompasses all types of expressions that can appear in
 /// Anochi source code, from simple literals to complex nested expressions.
 #[derive(Debug, Clone, PartialEq)]
-pub enum Expression<'a> {
+pub enum Expression<T> {
     /// A literal value (number, string, identifier)
     Literal(Literal),
 
@@ -262,9 +116,9 @@ pub enum Expression<'a> {
         /// The binary operator
         operator: BinaryOperator,
         /// Left operand of the binary operation
-        left: Box<ExpressionNode<'a>>,
+        left: Box<ExpNode<T>>,
         /// Right operand of the binary operation
-        right: Box<ExpressionNode<'a>>,
+        right: Box<ExpNode<T>>,
     },
 
     /// A unary operation on a single expression
@@ -272,34 +126,34 @@ pub enum Expression<'a> {
         /// The unary operator
         operator: UnaryOperator,
         /// The operand of the unary operation
-        operand: Box<ExpressionNode<'a>>,
+        operand: Box<ExpNode<T>>,
     },
 
     /// A grouped expression (parentheses for precedence control)
     Grouping {
         /// The expression inside the parentheses
-        expression: Box<ExpressionNode<'a>>,
+        expression: Box<ExpNode<T>>,
     },
 
     /// A member access expression (e.g., `a.x`, `{x=10}.y`)
     MemberAccess {
         /// The object being accessed (left side of the dot)
-        object: Box<ExpressionNode<'a>>,
+        object: Box<ExpNode<T>>,
         /// The member being accessed (right side of the dot)
         member: Identifier,
     },
 
     Product {
-        data: IdentifierToExpression<'a>,
+        data: IdentifierToExp<T>,
     },
 
     Sum {
-        data: Vec<ExpressionNode<'a>>,
+        data: Vec<ExpNode<T>>,
     },
     Function {
-        input: Box<ExpressionNode<'a>>,
-        output: Box<ExpressionNode<'a>>,
-        statements: Box<StatementNode<'a>>,
+        input: Box<ExpNode<T>>,
+        output: Box<ExpNode<T>>,
+        statements: Box<StatNode<T>>,
     }
 }
 
@@ -346,7 +200,7 @@ impl fmt::Display for UnaryOperator {
     }
 }
 
-impl<'a> Expression<'a> {
+impl<T> Expression<T> {
     /// Creates a new literal integer expression.
     ///
     /// # Arguments
@@ -368,71 +222,29 @@ impl<'a> Expression<'a> {
     pub fn integer(value: BigInt) -> Self {
         Expression::Literal(Literal::Integer(value))
     }
-    pub fn product(value: IdentifierToExpression<'a>) -> Self {
+    pub fn product(value: IdentifierToExp<T>) -> Self {
         Expression::Product { data: value }
     }
-    pub fn sum(value: Vec<ExpressionNode<'a>>) -> Self {
+    pub fn sum(value: Vec<ExpNode<T>>) -> Self {
         Expression::Sum { data: value }
     }
-    /// Creates a new literal float expression.
-    ///
-    /// # Arguments
-    ///
-    /// * `value` - The float value for the literal
-    ///
-    /// # Returns
-    ///
-    /// An `Expression::Literal` containing the float value.
-    // pub fn float(value: num_rational::BigRational) -> Self {
-    //     Expression::Literal(Literal::Float(value))
-    // }
     pub fn float(value: BigRational) -> Self {
         Expression::Literal(Literal::Float(value))
     }
     pub fn bool(value: bool) -> Self {
         Self::Literal(Literal::Bool(value))
     }
-    /// Creates a new literal string expression.
-    ///
-    /// # Arguments
-    ///
-    /// * `value` - The string value for the literal
-    ///
-    /// # Returns
-    ///
-    /// An `Expression::Literal` containing the string value.
     pub fn string(value: String) -> Self {
         Expression::Literal(Literal::String(value))
     }
-
-    /// Creates a new identifier expression.
-    ///
-    /// # Arguments
-    ///
-    /// * `name` - The identifier name
-    ///
-    /// # Returns
-    ///
-    /// An `Expression::Literal` containing the identifier.
     pub fn identifier(name: Identifier) -> Self {
         Expression::Literal(Literal::Identifier(name))
     }
 
-    /// Creates a new binary expression.
-    ///
-    /// # Arguments
-    ///
-    /// * `left` - The left operand expression
-    /// * `operator` - The binary operator
-    /// * `right` - The right operand expression
-    ///
-    /// # Returns
-    ///
-    /// An `Expression::Binary` representing the binary operation.
     pub fn binary(
-        left: impl Into<ExpressionNode<'a>>,
+        left: impl Into<ExpNode<T>>,
         operator: BinaryOperator,
-        right: impl Into<ExpressionNode<'a>>,
+        right: impl Into<ExpNode<T>>,
     ) -> Self {
         Expression::Binary {
             left: Box::new(left.into()),
@@ -451,7 +263,7 @@ impl<'a> Expression<'a> {
     /// # Returns
     ///
     /// An `Expression::Unary` representing the unary operation.
-    pub fn unary(operator: UnaryOperator, operand: impl Into<ExpressionNode<'a>>) -> Self {
+    pub fn unary(operator: UnaryOperator, operand: impl Into<ExpNode<T>>) -> Self {
         Self::Unary {
             operator,
             operand: Box::new(operand.into()),
@@ -467,7 +279,7 @@ impl<'a> Expression<'a> {
     /// # Returns
     ///
     /// An `Expression::Grouping` representing the grouped expression.
-    pub fn grouping(expression: impl Into<ExpressionNode<'a>>) -> Self {
+    pub fn grouping(expression: impl Into<ExpNode<T>>) -> Self {
         Expression::Grouping {
             expression: Box::new(expression.into()),
         }
@@ -483,7 +295,7 @@ impl<'a> Expression<'a> {
     /// # Returns
     ///
     /// An `Expression::MemberAccess` representing the member access operation.
-    pub fn member_access(object: impl Into<ExpressionNode<'a>>, member: Identifier) -> Self {
+    pub fn member_access(object: impl Into<ExpNode<T>>, member: Identifier) -> Self {
         Expression::MemberAccess {
             object: Box::new(object.into()),
             member,
@@ -513,40 +325,40 @@ impl<'a> Expression<'a> {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct StatementBlock<'a> {
-    pub statements: Vec<StatementNode<'a>>,
+pub struct StatementBlock<T> {
+    pub statements: Vec<StatNode<T>>,
 }
 
 
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Statement<'a> {
+pub enum Statement<T> {
     /// Assignment for creating new variables with `let` keyword
     Assignment {
         target: Identifier,
-        r#type: Option<ExpressionNode<'a>>,
-        value: ExpressionNode<'a>,
+        r#type: Option<ExpNode<T>>,
+        value: ExpNode<T>,
     },
     /// Assignment for modifying existing objects/members
     MutableAssignment {
-        target: ExpressionNode<'a>,
-        value: ExpressionNode<'a>,
+        target: ExpNode<T>,
+        value: ExpNode<T>,
     },
-    StatementBlock(StatementBlock<'a>),
+    StatementBlock(StatementBlock<T>),
     If {
-        condition: ExpressionNode<'a>,
-        on_true: Box<StatementNode<'a>>,
+        condition: ExpNode<T>,
+        on_true: Box<StatNode<T>>,
     },
     IfElse {
-        condition: ExpressionNode<'a>,
-        on_true: Box<StatementNode<'a>>,
-        on_false: Box<StatementNode<'a>>,
+        condition: ExpNode<T>,
+        on_true: Box<StatNode<T>>,
+        on_false: Box<StatNode<T>>,
     },
     Debug {
-        expr_vec: Vec<ExpressionNode<'a>>,
+        expr_vec: Vec<ExpNode<T>>,
     },
     Loop {
-        statements: StatementBlock<'a>,
+        statements: StatementBlock<T>,
     },
     Break,
     Continue,
@@ -576,9 +388,7 @@ impl<'a, T> From<T> for AstNode<'a, T> {
         AstNode::new_temp(value)
     }
 }
-pub type ExpressionNode<'a> = AstNode<'a, Expression<'a>>;
-pub type StatementNode<'a> = AstNode<'a, Statement<'a>>;
-impl<'a> Statement<'a> {
+impl<T> Statement<T> {
     /// Creates a new variable assignment with let keyword (literal value)
     //pub fn assignment(target: Identifier, value: Literal) -> Self {
     //    Statement::Assignment {
@@ -590,8 +400,8 @@ impl<'a> Statement<'a> {
     /// Creates a new variable assignment with explicit type
     pub fn assignment_with_type(
         target: Identifier,
-        r#type: impl Into<ExpressionNode<'a>>,
-        value: impl Into<ExpressionNode<'a>>,
+        r#type: impl Into<ExpNode<T>>,
+        value: impl Into<ExpNode<T>>,
     ) -> Self {
         Statement::Assignment {
             target,
@@ -601,8 +411,8 @@ impl<'a> Statement<'a> {
     }
     pub fn assignment(
         target: Identifier,
-        r#type: Option<ExpressionNode<'a>>,
-        value: impl Into<ExpressionNode<'a>>,
+        r#type: Option<ExpNode<T>>,
+        value: impl Into<ExpNode<T>>,
     ) -> Self {
         Statement::Assignment {
             target,
@@ -611,8 +421,8 @@ impl<'a> Statement<'a> {
         }
     }
     pub fn mutable_assignment(
-        target: impl Into<ExpressionNode<'a>>,
-        value: impl Into<ExpressionNode<'a>>,
+        target: impl Into<ExpNode<T>>,
+        value: impl Into<ExpNode<T>>,
     ) -> Self {
         Statement::MutableAssignment {
             target: target.into(),
@@ -622,7 +432,7 @@ impl<'a> Statement<'a> {
 
     pub fn assignment_no_type(
         identifier: Identifier,
-        value: impl Into<ExpressionNode<'a>>,
+        value: impl Into<ExpNode<T>>,
     ) -> Self {
         Statement::Assignment {
             target: identifier,
@@ -631,13 +441,13 @@ impl<'a> Statement<'a> {
         }
     }
 
-    pub fn statement_block(statements: Vec<StatementNode<'a>>) -> Self {
+    pub fn statement_block(statements: Vec<StatNode<T>>) -> Self {
         Statement::StatementBlock(StatementBlock { statements })
     }
 
     pub fn if_stmt(
-        condition: impl Into<ExpressionNode<'a>>,
-        on_true: impl Into<StatementNode<'a>>,
+        condition: impl Into<ExpNode<T>>,
+        on_true: impl Into<StatNode<T>>,
     ) -> Self {
         Statement::If {
             condition: condition.into(),
@@ -646,9 +456,9 @@ impl<'a> Statement<'a> {
     }
 
     pub fn if_else(
-        condition: impl Into<ExpressionNode<'a>>,
-        on_true: impl Into<StatementNode<'a>>,
-        on_false: impl Into<StatementNode<'a>>,
+        condition: impl Into<ExpNode<T>>,
+        on_true: impl Into<StatNode<T>>,
+        on_false: impl Into<StatNode<T>>,
     ) -> Self {
         Statement::IfElse {
             condition: condition.into(),
@@ -656,7 +466,7 @@ impl<'a> Statement<'a> {
             on_false: Box::new(on_false.into()),
         }
     }
-    pub fn debug(expr_vec: Vec<ExpressionNode<'a>>) -> Self {
+    pub fn debug(expr_vec: Vec<ExpNode<T>>) -> Self {
         Self::Debug { expr_vec }
     }
 
