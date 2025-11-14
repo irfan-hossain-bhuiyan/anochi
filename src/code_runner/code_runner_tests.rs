@@ -1,5 +1,5 @@
 
-use crate::{vm::tree_walk::{VmError, VmValue}, CodeRunner};
+use crate::{vm::tree_walk::{VmError, VmValue}, code_runner::CodeRunner};
 
 #[test]
 fn test_basic_functionality() {

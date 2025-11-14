@@ -23,7 +23,7 @@ fn test_basic_tokenization() {
     ];
     
     let tokens = Tokenizer::new(source).tokenize();
-    let actual: Vec<TokenType> = tokens.into_iter().map(|t| t.token_type).collect();
+    let actual: Vec<TokenType> = tokens.into_iter().map(|t| t.token_type.clone()).collect();
     
     assert_eq!(actual, expected_type);
 }

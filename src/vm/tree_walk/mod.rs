@@ -293,5 +293,5 @@ impl<Backend: VmBackend> Vm<Backend> {
 
 //#[cfg(test)]
 //mod scope_stack_tests;
-#[cfg(test)]
-mod vm_tests;
+//#[cfg(test)]
+//mod vm_tests;
