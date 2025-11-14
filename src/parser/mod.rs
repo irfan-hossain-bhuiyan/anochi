@@ -316,20 +316,38 @@ impl<'a> Parser<'a> {
         Ok(node)
     }
 
-    // Unary ::= ("+" | "-") Unary | Primary
+    // Unary ::= ("+" | "-") Unary | MemberAccess
     fn parse_unary(&mut self) -> ReExpNode<'a> {
         let start=self.current;
         let operator = match self.peek_type().ok_or(ParserError::NO_EXPN_FOUND)? {
             TokenType::Minus => UnaryOperator::Minus,
             TokenType::Keyword(Keyword::Not) => UnaryOperator::Not,
             _ => {
-                return self.parse_primary();
+                return self.parse_member_access();
             }
         };
         self.advance();
         let operand = self.parse_unary()?;
         let expr=Expression::unary(operator, operand);
         Ok(self.make_expr_node(expr, start))
+    }
+    
+    // MemberAccess ::= Primary ("." Identifier)*
+    fn parse_member_access(&mut self) -> ReExpNode<'a> {
+        let start = self.current;
+        let mut node = self.parse_primary()?;
+        
+        while match_token!(self, TokenType::Dot).is_ok() {
+            let TokenType::Identifier(member) = match_token_or_err!(self, TokenType::Identifier(_))?
+            else {
+                unreachable!()
+            };
+            let member = member.clone();
+            let expr = Expression::member_access(node, member);
+            node = self.make_expr_node(expr, start);
+        }
+        
+        Ok(node)
     }
     // Primary ::= Integer | Float | Identifier | "(" Expr ")"
     fn parse_primary(&mut self) -> ReExpNode<'a> {

@@ -570,6 +570,16 @@ impl<'a> TokenContainer<'a> {
     }
 }
 
+// IntoIterator implementation for TokenContainer
+impl<'a> IntoIterator for TokenContainer<'a> {
+    type Item = Token<'a>;
+    type IntoIter = std::vec::IntoIter<Token<'a>>;
+    
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
+
 impl<'a> Deref for TokenContainer<'a> {
     type Target = TokenSlice<'a>;
     
