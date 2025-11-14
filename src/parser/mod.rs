@@ -4,7 +4,8 @@ mod parser_error;
 //mod block_tests;
 
 use crate::ast::{
-    BinaryOperator, Expression, ExpressionNode, Statement, StatementBlock, StatementNode, UnaryOperator
+    BinaryOperator, Expression, ExpressionNode, Statement, StatementBlock, StatementNode,
+    UnaryOperator,
 };
 use crate::token::token_type::Keyword::{self, And, Or};
 use crate::token::{Token, TokenSlice, TokenType};
@@ -32,7 +33,7 @@ macro_rules! match_token_or_err {
     ($self:expr, $pattern:pat) => {{ match_token!($self, $pattern).map_err(|x| x.into_parser_error()) }};
 }
 
-pub struct Parser<'a, > {
+pub struct Parser<'a> {
     tokens: &'a TokenSlice<'a>,
     current: usize,
     is_error: bool,
@@ -41,24 +42,46 @@ pub struct Parser<'a, > {
     //funciton has break,continue the vm will validate it,because it is inside loop.
 }
 type ExpNode<'a> = ExpressionNode<'a>;
-type Exp<'a>=Expression<&'a TokenSlice<'a>>;
-type Stat<'a>=Statement<&'a TokenSlice<'a>>;
+type Exp<'a> = Expression<&'a TokenSlice<'a>>;
+type Stat<'a> = Statement<&'a TokenSlice<'a>>;
 type ReExpNode<'a> = Result<ExpNode<'a>, ParserError>;
 type StatNode<'a> = StatementNode<'a>;
 type ReStatNode<'a> = Result<StatementNode<'a>, ParserError>;
-type StatBlock<'a>=StatementBlock<&'a TokenSlice<'a>>;
+type StatBlock<'a> = StatementBlock<&'a TokenSlice<'a>>;
 impl<'a> Parser<'a> {
     // Helper methods to reduce repetition
     fn make_expr_node(&self, expr: Exp<'a>, start: usize) -> ExpNode<'a> {
         let slice = self.tokens.slice(start, self.current);
         expr.to_node(slice)
     }
-    
+
+    // Function ::= "|" Identifier "|" ("->" Expression)? "{" Statement "}"
+    fn parse_function(&mut self) -> ReExpNode<'a> {
+        let start = self.current;
+        match_token_or_err!(self, TokenType::Pipe)?;
+        let input = self.parse_expr()?;
+        match_token_or_err!(self, TokenType::Pipe)?;
+        let output = if match_token!(self, TokenType::Arrow).is_err() {
+            None
+        } else {
+            Some(Box::new(self.parse_expr()?))
+        };
+        let statements = self.parse_statement()?;
+        let input = Box::new(input);
+        let statements = Box::new(statements);
+        let expr = Expression::Function {
+            input,
+            output,
+            statements,
+        };
+        Ok(self.make_expr_node(expr, start))
+    }
+
     fn make_stat_node(&self, stmt: Stat<'a>, start: usize) -> StatNode<'a> {
         let slice = self.tokens.slice(start, self.current);
         stmt.to_node(slice)
     }
-    
+
     fn with_expr_tracking<F>(&mut self, f: F) -> ReExpNode<'a>
     where
         F: FnOnce(&mut Self) -> Result<Exp<'a>, ParserError>,
@@ -67,7 +90,7 @@ impl<'a> Parser<'a> {
         let expr = f(self)?;
         Ok(self.make_expr_node(expr, start))
     }
-    
+
     fn with_stat_tracking<F>(&mut self, f: F) -> ReStatNode<'a>
     where
         F: FnOnce(&mut Self) -> Result<Stat<'a>, ParserError>,
@@ -104,8 +127,8 @@ impl<'a> Parser<'a> {
             Ok(self.make_expr_node(expr, start))
         }
     }
-    pub fn parse_statement_block(&mut self) -> Result<StatBlock<'a>,ParserError> {
-        match_token_or_err!(self,TokenType::LeftBrace)?;
+    pub fn parse_statement_block(&mut self) -> Result<StatBlock<'a>, ParserError> {
+        match_token_or_err!(self, TokenType::LeftBrace)?;
         let mut statements = Vec::new();
         loop {
             if match_token!(self, TokenType::RightBrace).is_ok() {
@@ -116,7 +139,7 @@ impl<'a> Parser<'a> {
                 Err(x) => return Err(x),
             }
         }
-        Ok(StatementBlock{statements})
+        Ok(StatementBlock { statements })
     }
     pub fn parse_statement(&mut self) -> ReStatNode<'a> {
         let start = self.current;
@@ -150,14 +173,12 @@ impl<'a> Parser<'a> {
                 let stmt = Statement::mutable_assignment(x, expr);
                 Ok(self.make_stat_node(stmt, start))
             }
-            TokenType::LeftBrace => {
-                match self.parse_statement_block(){
-                    Ok(x)=>{
-                        let stmt = Statement::StatementBlock(x);
-                        Ok(self.make_stat_node(stmt, start))
-                    },
-                    Err(x)=>Err(x),
+            TokenType::LeftBrace => match self.parse_statement_block() {
+                Ok(x) => {
+                    let stmt = Statement::StatementBlock(x);
+                    Ok(self.make_stat_node(stmt, start))
                 }
+                Err(x) => Err(x),
             },
             TokenType::Keyword(Keyword::If) => {
                 self.advance();
@@ -167,7 +188,7 @@ impl<'a> Parser<'a> {
                     Err(_) => {
                         let stmt = Statement::if_stmt(expr, on_true);
                         Ok(self.make_stat_node(stmt, start))
-                    },
+                    }
                     Ok(_) => {
                         let on_false = self.parse_statement()?;
                         let stmt = Statement::if_else(expr, on_true, on_false);
@@ -199,22 +220,22 @@ impl<'a> Parser<'a> {
                 };
                 Ok(self.make_stat_node(stmt, start))
             }
-              TokenType::Keyword(Keyword::Break) => {
-                  if !self.is_in_loop {
-                      return Err(StatementParseError::BreakOutsideLoop.into());
-                  }
-                  self.advance();
-                  let stmt = Statement::Break;
-                  Ok(self.make_stat_node(stmt, start))
-              }
-              TokenType::Keyword(Keyword::Continue) => {
-                  if !self.is_in_loop {
-                      return Err(StatementParseError::ContinueOutsideLoop.into());
-                  }
-                  self.advance();
-                  let stmt = Statement::Continue;
-                  Ok(self.make_stat_node(stmt, start))
-              }
+            TokenType::Keyword(Keyword::Break) => {
+                if !self.is_in_loop {
+                    return Err(StatementParseError::BreakOutsideLoop.into());
+                }
+                self.advance();
+                let stmt = Statement::Break;
+                Ok(self.make_stat_node(stmt, start))
+            }
+            TokenType::Keyword(Keyword::Continue) => {
+                if !self.is_in_loop {
+                    return Err(StatementParseError::ContinueOutsideLoop.into());
+                }
+                self.advance();
+                let stmt = Statement::Continue;
+                Ok(self.make_stat_node(stmt, start))
+            }
             _ => Err(StatementParseError::NoStatement.into()),
         }
     }
@@ -318,7 +339,7 @@ impl<'a> Parser<'a> {
 
     // Unary ::= ("+" | "-") Unary | MemberAccess
     fn parse_unary(&mut self) -> ReExpNode<'a> {
-        let start=self.current;
+        let start = self.current;
         let operator = match self.peek_type().ok_or(ParserError::NO_EXPN_FOUND)? {
             TokenType::Minus => UnaryOperator::Minus,
             TokenType::Keyword(Keyword::Not) => UnaryOperator::Not,
@@ -328,17 +349,18 @@ impl<'a> Parser<'a> {
         };
         self.advance();
         let operand = self.parse_unary()?;
-        let expr=Expression::unary(operator, operand);
+        let expr = Expression::unary(operator, operand);
         Ok(self.make_expr_node(expr, start))
     }
-    
+
     // MemberAccess ::= Primary ("." Identifier)*
     fn parse_member_access(&mut self) -> ReExpNode<'a> {
         let start = self.current;
         let mut node = self.parse_primary()?;
-        
+
         while match_token!(self, TokenType::Dot).is_ok() {
-            let TokenType::Identifier(member) = match_token_or_err!(self, TokenType::Identifier(_))?
+            let TokenType::Identifier(member) =
+                match_token_or_err!(self, TokenType::Identifier(_))?
             else {
                 unreachable!()
             };
@@ -346,20 +368,21 @@ impl<'a> Parser<'a> {
             let expr = Expression::member_access(node, member);
             node = self.make_expr_node(expr, start);
         }
-        
+
         Ok(node)
     }
-    // Primary ::= Integer | Float | Identifier | "(" Expr ")"
+    // Primary ::= Integer | Float | Identifier | "(" Expr ")" | Function
     fn parse_primary(&mut self) -> ReExpNode<'a> {
-        let start=self.current;
+        let start = self.current;
         match self.peek_type().ok_or(ParserError::NO_EXPN_FOUND)? {
+            TokenType::Pipe => self.parse_function(),
             TokenType::LeftBrace => self.parse_struct(),
             TokenType::LeftParen => {
                 self.advance(); // consume '('
                 let expr = self.parse_expression()?;
                 if let Some(TokenType::RightParen) = self.peek_type() {
                     self.advance(); // consume ')'
-                    Ok(self.make_expr_node(Expression::grouping(expr),start))
+                    Ok(self.make_expr_node(Expression::grouping(expr), start))
                 } else {
                     Err(ParserError::expected_token_in_expression(
                         TokenType::RightParen,
@@ -370,7 +393,7 @@ impl<'a> Parser<'a> {
                 let expression =
                     Expression::from_token_type(any.clone()).ok_or(ParserError::NO_EXPN_FOUND)?;
                 self.advance();
-                Ok(self.make_expr_node(expression,start))
+                Ok(self.make_expr_node(expression, start))
             }
         }
     }
@@ -386,12 +409,12 @@ impl<'a> Parser<'a> {
 
     // Struct ::= "{" (Identifier "=" Expression ("," Identifier "=" Expression)*)? "}"
     fn parse_struct(&mut self) -> ReExpNode<'a> {
-        let start=self.current;
+        let start = self.current;
         self.advance(); // consume '{'
         let mut fields = std::collections::HashMap::new();
         // Handle empty struct case
         if match_token!(self, TokenType::RightBrace).is_ok() {
-            let expr=Expression::product(fields);
+            let expr = Expression::product(fields);
             return Ok(self.make_expr_node(expr, start));
         }
 
@@ -419,7 +442,7 @@ impl<'a> Parser<'a> {
                 }
             }
         }
-        let expr=Expression::product(fields);
+        let expr = Expression::product(fields);
         Ok(self.make_expr_node(expr, start))
     }
 

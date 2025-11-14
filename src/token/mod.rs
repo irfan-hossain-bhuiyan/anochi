@@ -1,14 +1,13 @@
 //! Token module for the Anochi programming language lexer.
 //! Token module for the Anochi programming language lexer.
-pub mod token_type;
 #[cfg(test)]
 mod tests;
-pub use token_type::{TokenType, Identifier};
+pub mod token_type;
+pub use token_type::{Identifier, TokenType};
 
-
+use std::fmt;
 use std::num::NonZeroUsize;
 use std::ops::Deref;
-use std::fmt;
 
 use crate::token::token_type::{Keyword, TokenizerError};
 
@@ -69,6 +68,30 @@ impl<'a> Tokenizer<'a> {
             line: 1,
             column: 1,
         }
+    }
+    
+    // Helper methods to reduce boilerplate
+    fn make_token(&self, token_type: TokenType, start_line: usize, start_column: usize, start_pos: usize) -> Token<'a> {
+        let slice = &self.source[start_pos..self.current];
+        Token::new(
+            token_type,
+            Position::new(start_line, start_column, slice).unwrap(),
+        )
+    }
+    
+    fn make_token_at_current(&self, token_type: TokenType) -> Token<'a> {
+        self.make_token(token_type, self.line, self.column, self.current)
+    }
+    
+    fn make_single_char_token(&mut self, token_type: TokenType, start_line: usize, start_column: usize, start_pos: usize) -> Token<'a> {
+        self.advance();
+        self.make_token(token_type, start_line, start_column, start_pos)
+    }
+    
+    fn make_two_char_token(&mut self, token_type: TokenType, start_line: usize, start_column: usize, start_pos: usize) -> Token<'a> {
+        self.advance(); // First char
+        self.advance(); // Second char
+        self.make_token(token_type, start_line, start_column, start_pos)
     }
 
     pub fn tokenize(mut self) -> TokenContainer<'a> {
@@ -168,20 +191,13 @@ impl<'a> Tokenizer<'a> {
             }
         }
 
-        let slice = &self.source[start_pos..self.current];
-
         if !identifier.is_empty() {
             // Check if identifier is a keyword
-            match Keyword::try_from(identifier.clone()) {
-                Ok(keyword) => Token::new(
-                    TokenType::Keyword(keyword),
-                    Position::new(start_line, start_column, slice).unwrap(),
-                ),
-                Err(_) => Token::new(
-                    TokenType::Identifier(Identifier::new(identifier)),
-                    Position::new(start_line, start_column, slice).unwrap(),
-                ),
-            }
+            let token_type = match Keyword::try_from(identifier.clone()) {
+                Ok(keyword) => TokenType::Keyword(keyword),
+                Err(_) => TokenType::Identifier(Identifier::new(identifier)),
+            };
+            self.make_token(token_type, start_line, start_column, start_pos)
         } else {
             unreachable!("Parse identifier should be called on alpha,So it can't be null")
         }
@@ -213,36 +229,23 @@ impl<'a> Tokenizer<'a> {
             }
         }
 
-        let slice = &self.source[start_pos..self.current];
-
         if number.is_empty() {
             unreachable!("parse number should be called when digit is accessed.")
         }
 
-        if is_float {
+        let token_type = if is_float {
             match number.parse::<num_rational::BigRational>() {
-                Ok(value) => Token::new(
-                    TokenType::Float(value),
-                    Position::new(start_line, start_column, slice).unwrap(),
-                ),
-                Err(_x) =>
-                    Token::new(
-                    TokenType::Error(TokenizerError::InvalidFloat),
-                    Position::new(start_line, start_column, slice).unwrap(),
-                ),
+                Ok(value) => TokenType::Float(value),
+                Err(_) => TokenType::Error(TokenizerError::InvalidFloat),
             }
         } else {
             match number.parse::<num_bigint::BigInt>() {
-                Ok(value) => Token::new(
-                    TokenType::Integer(value),
-                    Position::new(start_line, start_column, slice).unwrap(),
-                ),
-                Err(_) => Token::new(
-                    TokenType::Error(TokenizerError::InvalidInt),
-                    Position::new(start_line, start_column, slice).unwrap(),
-                ),
+                Ok(value) => TokenType::Integer(value),
+                Err(_) => TokenType::Error(TokenizerError::InvalidInt),
             }
-        }
+        };
+        
+        self.make_token(token_type, start_line, start_column, start_pos)
     }
 
     /// Parses a string literal token
@@ -251,25 +254,19 @@ impl<'a> Tokenizer<'a> {
         let start_column = self.column;
         let start_pos = self.current;
         let mut string_value = String::new();
-        if Some('"')==self.peek(){
+        
+        if Some('"') == self.peek() {
             self.advance();
-        } else{
+        } else {
             unreachable!("Should be checked before.")
         }
-        // Skip opening quote
-
+        
         while let Some(ch) = self.peek() {
             if ch == '"' {
-                // Found closing quote
                 self.advance();
-                let slice = &self.source[start_pos..self.current];
-                return Token::new(
-                    TokenType::String(string_value),
-                    Position::new(start_line, start_column, slice).unwrap(),
-                );
+                return self.make_token(TokenType::String(string_value), start_line, start_column, start_pos);
             } else if ch == '\\' {
-                // Handle escape sequences
-                self.advance(); // Skip backslash
+                self.advance();
                 if let Some(escaped) = self.peek() {
                     match escaped {
                         'n' => {
@@ -294,35 +291,23 @@ impl<'a> Tokenizer<'a> {
                         }
                         '\n' => {}
                         _ => {
-                            // Unknown escape sequence, treat as literal
                             string_value.push('\\');
                             string_value.push(escaped);
                             self.advance();
                         }
                     }
                 } else {
-                    // Backslash at end of input
                     string_value.push('\\');
                 }
             } else if ch == '\n' {
-                // Unterminated string at newline
-                let slice = &self.source[start_pos..self.current];
-                return Token::new(
-                    TokenType::Error(TokenizerError::StringInNewLine),
-                    Position::new(start_line, start_column, slice).unwrap(),
-                );
+                return self.make_token(TokenType::Error(TokenizerError::StringInNewLine), start_line, start_column, start_pos);
             } else {
                 string_value.push(ch);
                 self.advance();
             }
         }
 
-        // Reached end of input without closing quote
-        let slice = &self.source[start_pos..self.current];
-        Token::new(
-            TokenType::Error(TokenizerError::NoClosingBracket),
-            Position::new(start_line, start_column, slice).unwrap(),
-        )
+        self.make_token(TokenType::Error(TokenizerError::NoClosingBracket), start_line, start_column, start_pos)
     }
 
     /// Parses special characters and operators
@@ -333,204 +318,69 @@ impl<'a> Tokenizer<'a> {
 
         if let Some(ch) = self.peek() {
             match ch {
-                // Check for two-character tokens first
+                // Two-character tokens
                 '!' => {
                     self.advance();
                     if self.peek() == Some('=') {
-                        self.advance();
-                        let slice = &self.source[start_pos..self.current];
-                        Token::new(
-                            TokenType::BangEqual,
-                            Position::new(start_line, start_column, slice).unwrap(),
-                        )
+                        self.make_two_char_token(TokenType::BangEqual, start_line, start_column, start_pos)
                     } else {
-                        let slice = &self.source[start_pos..self.current];
-                        Token::new(
-                            TokenType::Bang,
-                            Position::new(start_line, start_column, slice).unwrap(),
-                        )
+                        self.make_token(TokenType::Bang, start_line, start_column, start_pos)
                     }
                 }
                 '=' => {
                     self.advance();
                     if self.peek() == Some('=') {
                         self.advance();
-                        let slice = &self.source[start_pos..self.current];
-                        Token::new(
-                            TokenType::EqualEqual,
-                            Position::new(start_line, start_column, slice).unwrap(),
-                        )
+                        self.make_token(TokenType::EqualEqual, start_line, start_column, start_pos)
                     } else {
-                        let slice = &self.source[start_pos..self.current];
-                        Token::new(
-                            TokenType::Equal,
-                            Position::new(start_line, start_column, slice).unwrap(),
-                        )
+                        self.make_token(TokenType::Equal, start_line, start_column, start_pos)
                     }
                 }
                 '>' => {
                     self.advance();
                     if self.peek() == Some('=') {
                         self.advance();
-                        let slice = &self.source[start_pos..self.current];
-                        Token::new(
-                            TokenType::GreaterEqual,
-                            Position::new(start_line, start_column, slice).unwrap(),
-                        )
+                        self.make_token(TokenType::GreaterEqual, start_line, start_column, start_pos)
                     } else {
-                        let slice = &self.source[start_pos..self.current];
-                        Token::new(
-                            TokenType::Greater,
-                            Position::new(start_line, start_column, slice).unwrap(),
-                        )
+                        self.make_token(TokenType::Greater, start_line, start_column, start_pos)
                     }
                 }
                 '<' => {
                     self.advance();
                     if self.peek() == Some('=') {
                         self.advance();
-                        let slice = &self.source[start_pos..self.current];
-                        Token::new(
-                            TokenType::LessEqual,
-                            Position::new(start_line, start_column, slice).unwrap(),
-                        )
+                        self.make_token(TokenType::LessEqual, start_line, start_column, start_pos)
                     } else {
-                        let slice = &self.source[start_pos..self.current];
-                        Token::new(
-                            TokenType::Less,
-                            Position::new(start_line, start_column, slice).unwrap(),
-                        )
+                        self.make_token(TokenType::Less, start_line, start_column, start_pos)
+                    }
+                }
+                '-' => {
+                    self.advance();
+                    if self.peek() == Some('>') {
+                        self.advance();
+                        self.make_token(TokenType::Arrow, start_line, start_column, start_pos)
+                    } else {
+                        self.make_token(TokenType::Minus, start_line, start_column, start_pos)
                     }
                 }
                 // Single-character tokens
-                '(' => {
-                    self.advance();
-                    let slice = &self.source[start_pos..self.current];
-                    Token::new(
-                        TokenType::LeftParen,
-                        Position::new(start_line, start_column, slice).unwrap(),
-                    )
-                }
-                ')' => {
-                    self.advance();
-                    let slice = &self.source[start_pos..self.current];
-                    Token::new(
-                        TokenType::RightParen,
-                        Position::new(start_line, start_column, slice).unwrap(),
-                    )
-                }
-                '{' => {
-                    self.advance();
-                    let slice = &self.source[start_pos..self.current];
-                    Token::new(
-                        TokenType::LeftBrace,
-                        Position::new(start_line, start_column, slice).unwrap(),
-                    )
-                }
-                '}' => {
-                    self.advance();
-                    let slice = &self.source[start_pos..self.current];
-                    Token::new(
-                        TokenType::RightBrace,
-                        Position::new(start_line, start_column, slice).unwrap(),
-                    )
-                }
-                ',' => {
-                    self.advance();
-                    let slice = &self.source[start_pos..self.current];
-                    Token::new(
-                        TokenType::Comma,
-                        Position::new(start_line, start_column, slice).unwrap(),
-                    )
-                }
-                '.' => {
-                    self.advance();
-                    let slice = &self.source[start_pos..self.current];
-                    Token::new(
-                        TokenType::Dot,
-                        Position::new(start_line, start_column, slice).unwrap(),
-                    )
-                }
-               ':' => {
-                   self.advance();
-                   let slice = &self.source[start_pos..self.current];
-                   Token::new(
-                       TokenType::Colon,
-                       Position::new(start_line, start_column, slice).unwrap(),
-                   )
-               }
-                '-' => {
-                    self.advance();
-                    let slice = &self.source[start_pos..self.current];
-                    Token::new(
-                        TokenType::Minus,
-                        Position::new(start_line, start_column, slice).unwrap(),
-                    )
-                }
-                '+' => {
-                    self.advance();
-                    let slice = &self.source[start_pos..self.current];
-                    Token::new(
-                        TokenType::Plus,
-                        Position::new(start_line, start_column, slice).unwrap(),
-                    )
-                }
-                ';' => {
-                    self.advance();
-                    let slice = &self.source[start_pos..self.current];
-                    Token::new(
-                        TokenType::Semicolon,
-                        Position::new(start_line, start_column, slice).unwrap(),
-                    )
-                }
-                '/' => {
-                    self.advance();
-                    let slice = &self.source[start_pos..self.current];
-                    Token::new(
-                        TokenType::Slash,
-                        Position::new(start_line, start_column, slice).unwrap(),
-                    )
-                }
-                '*' => {
-                    self.advance();
-                    let slice = &self.source[start_pos..self.current];
-                    Token::new(
-                        TokenType::Star,
-                        Position::new(start_line, start_column, slice).unwrap(),
-                    )
-                }
-               '|' => {
-                   self.advance();
-                   let slice = &self.source[start_pos..self.current];
-                   Token::new(
-                       TokenType::Pipe,
-                       Position::new(start_line, start_column, slice).unwrap(),
-                   )
-               }
-                '\n' => {
-                    self.advance();
-                    let slice = &self.source[start_pos..self.current];
-                    Token::new(
-                        TokenType::Newline,
-                        Position::new(start_line, start_column, slice).unwrap(),
-                    )
-                }
-                _ => {
-                    // Unknown special character, create an error token
-                    let _ = ch;
-                    self.advance();
-                    let slice = &self.source[start_pos..self.current];
-                    Token::new(
-                        TokenType::Error(TokenizerError::UnknownSpeicalChar),
-                        Position::new(start_line, start_column, slice).unwrap(),
-                    )
-                }
+                '(' => self.make_single_char_token(TokenType::LeftParen, start_line, start_column, start_pos),
+                ')' => self.make_single_char_token(TokenType::RightParen, start_line, start_column, start_pos),
+                '{' => self.make_single_char_token(TokenType::LeftBrace, start_line, start_column, start_pos),
+                '}' => self.make_single_char_token(TokenType::RightBrace, start_line, start_column, start_pos),
+                ',' => self.make_single_char_token(TokenType::Comma, start_line, start_column, start_pos),
+                '.' => self.make_single_char_token(TokenType::Dot, start_line, start_column, start_pos),
+                ':' => self.make_single_char_token(TokenType::Colon, start_line, start_column, start_pos),
+                '+' => self.make_single_char_token(TokenType::Plus, start_line, start_column, start_pos),
+                ';' => self.make_single_char_token(TokenType::Semicolon, start_line, start_column, start_pos),
+                '/' => self.make_single_char_token(TokenType::Slash, start_line, start_column, start_pos),
+                '*' => self.make_single_char_token(TokenType::Star, start_line, start_column, start_pos),
+                '|' => self.make_single_char_token(TokenType::Pipe, start_line, start_column, start_pos),
+                '\n' => self.make_single_char_token(TokenType::Newline, start_line, start_column, start_pos),
+                _ => self.make_single_char_token(TokenType::Error(TokenizerError::UnknownSpeicalChar), start_line, start_column, start_pos),
             }
         } else {
-            Token::new(
-                TokenType::Error(TokenizerError::NoRightQuote),
-                Position::new(start_line, start_column, "").unwrap(),
-            )
+            self.make_token(TokenType::Error(TokenizerError::NoRightQuote), start_line, start_column, start_pos)
         }
     }
 
@@ -552,19 +402,19 @@ impl<'a> TokenContainer<'a> {
     fn new(tokens: Vec<Token<'a>>) -> Self {
         Self(tokens)
     }
-    
+
     pub fn slice(&self, start: usize, end: usize) -> &TokenSlice<'a> {
         TokenSlice::from_slice(&self.0[start..end])
     }
-    
+
     pub fn full_slice(&self) -> &TokenSlice<'a> {
         TokenSlice::from_slice(&self.0[..])
     }
-    
+
     pub fn len(&self) -> usize {
         self.0.len()
     }
-    
+
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
@@ -574,7 +424,7 @@ impl<'a> TokenContainer<'a> {
 impl<'a> IntoIterator for TokenContainer<'a> {
     type Item = Token<'a>;
     type IntoIter = std::vec::IntoIter<Token<'a>>;
-    
+
     fn into_iter(self) -> Self::IntoIter {
         self.0.into_iter()
     }
@@ -582,7 +432,7 @@ impl<'a> IntoIterator for TokenContainer<'a> {
 
 impl<'a> Deref for TokenContainer<'a> {
     type Target = TokenSlice<'a>;
-    
+
     fn deref(&self) -> &Self::Target {
         TokenSlice::from_slice(&self.0)
     }
@@ -597,29 +447,29 @@ impl<'a> TokenSlice<'a> {
         // This is private - only TokenContainer can create TokenSlice from raw arrays
         unsafe { &*(tokens as *const [Token<'a>] as *const Self) }
     }
-    
+
     pub fn slice(&self, start: usize, end: usize) -> &Self {
         Self::from_slice(&self.0[start..end])
     }
-    
+
     pub fn slice_from(&self, start: usize) -> &Self {
         Self::from_slice(&self.0[start..])
     }
-    
+
     pub fn slice_to(&self, end: usize) -> &Self {
         Self::from_slice(&self.0[..end])
     }
-    
+
     pub fn get_str_slice(&self) -> &'a str {
         let Some(first_token) = self.0.first() else {
-            return ""
+            return "";
         };
         let last_token = self.0.last().unwrap();
-        
+
         let start_ptr = first_token.position.slice.as_ptr();
         let last_slice = last_token.position.slice;
         let end_ptr = unsafe { last_slice.as_ptr().add(last_slice.len()) };
-        
+
         let start_offset = start_ptr as usize;
         let end_offset = end_ptr as usize;
         let slice_len = end_offset - start_offset;
@@ -634,7 +484,7 @@ impl<'a> TokenSlice<'a> {
 // Deref implementation for convenient slice access
 impl<'a> Deref for TokenSlice<'a> {
     type Target = [Token<'a>];
-    
+
     fn deref(&self) -> &Self::Target {
         &self.0
     }

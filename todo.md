@@ -40,13 +40,16 @@ contain itself,rather the Vec will contain everything,So in the future I can ite
         - [ ] make it simplfy
         - [ ] make it 
 ## Todo:
-    - support for function and for function verification.
-    - support for a.x operation,and I can do something like a.x=10;
-    - Change the assignment to have comptime,let,None
-        - It will check for keyword first before the assignment.
-    - Change the ast to encompass it,to know what kind of assignment is this 
-    - Add Option<TypeDefination>,int eh assignment ast,To do static type checking,
-        - I need to transfer the ast as mut,in typechecker function,which will update the necessary types in there
+- [ ] dereference struct,create a function for it.that will extract all the variable from struct and push to stack.
+- [ ] A operation that will extract it,Add it in the ast,but not decide what will it be,make it "**" for now.
+- [ ] Add const. in variable state.
+- [ ] support for function and for function verification.
+- [ ] support for a.x operation,and I can do something like a.x=10;
+- [ ] Change the assignment to have comptime,let,None
+    - [ ] It will check for keyword first before the assignment.
+- [ ] Change the ast to encompass it,to know what kind of assignment is this 
+- [ ] Add Option<TypeDefination>,int eh assignment ast,To do static type checking,
+    - [ ] I need to transfer the ast as mut,in typechecker function,which will update the necessary types in there
 
 ## QnA:
 > Why use third bracket for statement,not first bracket?

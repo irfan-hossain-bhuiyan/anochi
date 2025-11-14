@@ -8,7 +8,7 @@ use crate::{
     ast::{
         Expression, ExpressionNode, Identifier, Literal, Statement, StatementBlock,
         StatementNode,
-    }, types::{TypeId, UnifiedTypeDefinition, TypeContainer}, vm::backend::{IoBackend, VmBackend}
+    }, types::{TypeContainer, TypeId, UnifiedTypeDefinition}, vm::{backend::{IoBackend, VmBackend}, tree_walk::vm_value::StructValue}
 };
 
 use thiserror::Error;
@@ -74,6 +74,7 @@ impl<Backend: VmBackend> Vm<Backend> {
     fn get_type_def(&self,id:&TypeId) -> Option<crate::types::TypeDefinition> {
         self.types.get_type_def(id)
     }
+    //fn extract_struct(&mut self,value:)
     fn load_builtin_types(&mut self) {
         use crate::types::{BuiltinKind };
 
@@ -122,7 +123,7 @@ impl<Backend: VmBackend> Vm<Backend> {
             }
             Expression::Unary { operator, operand } => {
                 let operand_val = self.evaluate_expr(&operand)?;
-                vm_value::evaluate_unary_op(&operator, &operand_val)
+                vm_value::evaluate_unary_op(operator, &operand_val)
             }
             Expression::Grouping { expression } => self.evaluate_expr(&expression),
             Expression::Product { data } => {
@@ -130,7 +131,7 @@ impl<Backend: VmBackend> Vm<Backend> {
                 for (key, value) in data.iter() {
                     product.insert(key.clone(), self.evaluate_expr(value)?);
                 }
-                Ok(VmValue::Product(product))
+                Ok(VmValue::Product(StructValue::new(product)))
             }
             Expression::Sum { data } => {
                 use std::collections::BTreeSet;

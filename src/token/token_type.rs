@@ -109,6 +109,7 @@ pub enum TokenType {
     GreaterEqual,
     Less,
     LessEqual,
+    Arrow,
     Newline,
     Error(TokenizerError),
 }

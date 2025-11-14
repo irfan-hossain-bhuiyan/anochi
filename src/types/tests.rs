@@ -71,7 +71,7 @@ fn test_vm_value_for_complex_type(){
     let mut map=HashMap::new();
     map.insert(Identifier::new("x"), VmValue::from_i64(50));
     map.insert(Identifier::new("y"), VmValue::from_i64(50));
-    let value=VmValue::Product(map);
+    let value=VmValue::Product { field1: map };
     let mut container=TypeContainer::new();
     let value_type=value.get_type_of_value();
     let id1=container.store_unified_type(value_type);

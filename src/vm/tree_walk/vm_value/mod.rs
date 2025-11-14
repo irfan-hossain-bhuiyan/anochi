@@ -1,8 +1,11 @@
-use std::{collections::HashMap, fmt::Display};
-use crate::ast::{Identifier, Literal, BinaryOperator, UnaryOperator};
-use crate::types::{BuiltinKind, TypeContainer, TypeId, UnifiedTypeDefinition, TypeGeneric, TypeDefinition};
+use crate::ast::{BinaryOperator, Identifier, Literal, UnaryOperator};
+use crate::types::{
+    BuiltinKind, TypeContainer, TypeDefinition, TypeGeneric, TypeId, UnifiedTypeDefinition,
+};
 use num_bigint::BigInt;
 use num_rational::BigRational;
+use std::ops::Deref;
+use std::{collections::HashMap, fmt::Display};
 mod function;
 #[cfg(test)]
 mod tests;
@@ -13,7 +16,6 @@ pub enum ValuePrimitive {
     Integer(BigInt),
     Float(BigRational),
 }
-
 
 impl Display for ValuePrimitive {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -31,17 +33,44 @@ impl From<Literal> for ValuePrimitive {
             Literal::Bool(b) => Self::Bool(b),
             Literal::Integer(i) => Self::Integer(i),
             Literal::Float(f) => Self::Float(f),
-            Literal::String(_) => panic!("String literals should be handled as arrays, not primitives"),
-            Literal::Identifier(_) => panic!("Identifiers should be resolved before conversion to primitive"),
+            Literal::String(_) => {
+                panic!("String literals should be handled as arrays, not primitives")
+            }
+            Literal::Identifier(_) => {
+                panic!("Identifiers should be resolved before conversion to primitive")
+            }
         }
     }
 }
+#[derive(Debug, Default, Clone, PartialEq)]
+pub struct StructValue {
+    value: HashMap<Identifier, VmValue>,
+}
+impl StructValue {
+    pub(crate) fn new(product: HashMap<Identifier, VmValue>) -> Self {
+        Self { value: product }
+    }
+}
+impl IntoIterator for StructValue {
+    type Item = (Identifier, VmValue);
+    type IntoIter = std::collections::hash_map::IntoIter<Identifier, VmValue>;
 
+    fn into_iter(self) -> Self::IntoIter {
+        self.value.into_iter()
+    }
+}
+impl Deref for StructValue {
+    fn deref(&self) -> &Self::Target {
+        &self.value
+    }
+
+    type Target = HashMap<Identifier, VmValue>;
+}
 /// The main value type used in the VM
 #[derive(Debug, Clone, PartialEq)]
 pub enum VmValue {
     ValuePrimitive(ValuePrimitive),
-    Product(HashMap<Identifier, VmValue>),
+    Product(StructValue),
     Type(TypeId),
 }
 
@@ -52,7 +81,7 @@ impl Display for VmValue {
             Self::Product(fields) => {
                 write!(f, "{{")?;
                 let mut first = true;
-                for (key, value) in fields {
+                for (key, value) in fields.iter() {
                     if !first {
                         write!(f, ", ")?;
                     }
@@ -61,7 +90,7 @@ impl Display for VmValue {
                 }
                 write!(f, "}}")?;
                 Ok(())
-            },
+            }
             Self::Type(_) => write!(f, "Type"),
         }
     }
@@ -70,7 +99,9 @@ impl Display for VmValue {
 impl From<Literal> for VmValue {
     fn from(v: Literal) -> Self {
         match v {
-            Literal::String(_) => panic!("String literals should be handled as arrays, not primitives"),
+            Literal::String(_) => {
+                panic!("String literals should be handled as arrays, not primitives")
+            }
             Literal::Identifier(_) => panic!("Identifiers should be resolved before conversion"),
             _ => Self::ValuePrimitive(ValuePrimitive::from(v)),
         }
@@ -82,31 +113,31 @@ impl VmValue {
     pub fn from_i64(value: i64) -> Self {
         Self::ValuePrimitive(ValuePrimitive::Integer(BigInt::from(value)))
     }
-    
+
     /// Create VmValue from f64
     pub fn from_f64(value: f64) -> Self {
-        let rational = BigRational::from_float(value)
-            .unwrap_or_else(|| BigRational::from(BigInt::from(0)));
+        let rational =
+            BigRational::from_float(value).unwrap_or_else(|| BigRational::from(BigInt::from(0)));
         Self::ValuePrimitive(ValuePrimitive::Float(rational))
     }
-    
+
     /// Create VmValue from bool
     pub fn from_bool(value: bool) -> Self {
         Self::ValuePrimitive(ValuePrimitive::Bool(value))
     }
-    
+
     /// Create VmValue from BigInt
     pub fn from_bigint(value: BigInt) -> Self {
         Self::ValuePrimitive(ValuePrimitive::Integer(value))
     }
-    
+
     /// Create VmValue from BigRational
     pub fn from_bigrational(value: BigRational) -> Self {
         Self::ValuePrimitive(ValuePrimitive::Float(value))
     }
 
     /// Convert VmValue to UnifiedTypeDefinition for type expressions only
-    /// 
+    ///
     /// This function only works on type expressions, not value expressions.
     /// Type expressions can be:
     /// - Type(id) - direct type reference
@@ -122,13 +153,15 @@ impl VmValue {
             VmValue::Product(fields) => {
                 // Check if all fields are valid type expressions (recursive)
                 let mut type_fields = std::collections::BTreeMap::new();
-                
-                for (identifier, value) in fields {
+
+                for (identifier, value) in fields.into_iter() {
                     let field_type = value.into_unified_type_definition()?;
                     type_fields.insert(identifier, field_type);
                 }
-                
-                Some(UnifiedTypeDefinition::TypeDef(TypeGeneric::Product { fields: type_fields }))
+
+                Some(UnifiedTypeDefinition::TypeDef(TypeGeneric::Product {
+                    fields: type_fields,
+                }))
             }
             VmValue::Type(type_id) => {
                 // A Type value represents a type expression
@@ -136,19 +169,20 @@ impl VmValue {
             }
         }
     }
-    pub fn into_type_definition(self,container:&mut TypeContainer)->Option<TypeDefinition>{
-        let type_id=container.store_unified_type(self.into_unified_type_definition()?);
+    pub fn into_type_definition(self, container: &mut TypeContainer) -> Option<TypeDefinition> {
+        let type_id = container.store_unified_type(self.into_unified_type_definition()?);
         type_id.to_type_def(container)
     }
     pub fn into_type_id(self, type_container: &mut TypeContainer) -> Option<TypeId> {
-        self.into_unified_type_definition().map(|x| type_container.store_unified_type(x))
+        self.into_unified_type_definition()
+            .map(|x| type_container.store_unified_type(x))
     }
 
     /// Get the type of this VmValue as UnifiedTypeDefinition
-    /// 
+    ///
     /// Returns the type information for this value without requiring a TypeContainer.
     /// Returns None for mixed type/value products (not yet implemented).
-    pub fn get_type_id_of_value(&self,container:&mut TypeContainer)->TypeId{
+    pub fn get_type_id_of_value(&self, container: &mut TypeContainer) -> TypeId {
         self.get_type_of_value().get_id(container)
     }
     pub fn get_type_of_value(&self) -> UnifiedTypeDefinition {
@@ -169,13 +203,15 @@ impl VmValue {
                 // Check if product contains mixed types and values
                 for field_value in fields.values() {
                     match field_value {
-                        VmValue::Type(_) => return UnifiedTypeDefinition::builtin(BuiltinKind::Type),
-                        VmValue::ValuePrimitive(_) | VmValue::Product(_) => {},
+                        VmValue::Type(_) => {
+                            return UnifiedTypeDefinition::builtin(BuiltinKind::Type);
+                        }
+                        VmValue::ValuePrimitive(_) | VmValue::Product(_) => {}
                     }
                 }
                 // Create product type from field types
                 let mut type_fields = std::collections::BTreeMap::new();
-                for (field_name, field_value) in fields {
+                for (field_name, field_value) in fields.iter() {
                     let field_type = field_value.get_type_of_value();
                     type_fields.insert(field_name.clone(), field_type);
                 }
@@ -187,18 +223,16 @@ impl VmValue {
         }
     }
 
-    pub fn of_type(&self, expected_type_id: TypeId,type_container: &mut TypeContainer) -> bool {
-        let id=self.get_type_id_of_value(type_container);
-        id==expected_type_id
+    pub fn of_type(&self, expected_type_id: TypeId, type_container: &mut TypeContainer) -> bool {
+        let id = self.get_type_id_of_value(type_container);
+        id == expected_type_id
     }
-
-
 }
 
 use super::*;
 /// Evaluates a unary operation on a VmValue.
 ///
-/// This is a standalone function that handles negation and logical NOT operations 
+/// This is a standalone function that handles negation and logical NOT operations
 /// on numeric and boolean values. It doesn't require any VM state and can be used independently.
 ///
 /// # Arguments
@@ -213,14 +247,16 @@ pub fn evaluate_unary_op(operator: &UnaryOperator, operand: &VmValue) -> VmResul
     match (operator, operand) {
         (UnaryOperator::Minus, VmValue::ValuePrimitive(ValuePrimitive::Integer(i))) => {
             Ok(VmValue::ValuePrimitive(ValuePrimitive::Integer(-i)))
-        },
+        }
         (UnaryOperator::Minus, VmValue::ValuePrimitive(ValuePrimitive::Float(f))) => {
             Ok(VmValue::ValuePrimitive(ValuePrimitive::Float(-f)))
-        },
+        }
         (UnaryOperator::Not, VmValue::ValuePrimitive(ValuePrimitive::Bool(b))) => {
             Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(!b)))
-        },
-        (_, VmValue::Product(_)) => Err(VmError::InvalidOperation("Product operations not yet implemented".to_string())),
+        }
+        (_, VmValue::Product(_)) => Err(VmError::InvalidOperation(
+            "Product operations not yet implemented".to_string(),
+        )),
         _ => Err(VmError::InvalidOperation(format!(
             "Cannot apply {operator:?} to {operand:?}",
         ))),
@@ -229,7 +265,7 @@ pub fn evaluate_unary_op(operator: &UnaryOperator, operand: &VmValue) -> VmResul
 
 /// Evaluates a binary operation between two VmValues.
 ///
-/// This is a standalone function that handles arithmetic, comparison, and logical 
+/// This is a standalone function that handles arithmetic, comparison, and logical
 /// operations with type coercion between integers and floats when necessary.
 /// It doesn't require any VM state and can be used independently.
 ///
@@ -242,28 +278,34 @@ pub fn evaluate_unary_op(operator: &UnaryOperator, operand: &VmValue) -> VmResul
 /// # Returns
 ///
 /// A `VmResult` containing the computed result or an error.
-pub fn evaluate_binary_op(
-    left: &VmValue,
-    operator: &BinaryOperator,
-    right: &VmValue,
-) -> VmResult {
+pub fn evaluate_binary_op(left: &VmValue, operator: &BinaryOperator, right: &VmValue) -> VmResult {
     match (left, right) {
         // Bool operations
-        (VmValue::ValuePrimitive(ValuePrimitive::Bool(l)), VmValue::ValuePrimitive(ValuePrimitive::Bool(r))) => match operator {
+        (
+            VmValue::ValuePrimitive(ValuePrimitive::Bool(l)),
+            VmValue::ValuePrimitive(ValuePrimitive::Bool(r)),
+        ) => match operator {
             BinaryOperator::Equal => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(l == r))),
             BinaryOperator::NotEqual => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(l != r))),
             BinaryOperator::And => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(*l && *r))),
             BinaryOperator::Or => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(*l || *r))),
             BinaryOperator::Less => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(!*l && *r))), // false < true
-            BinaryOperator::LessEqual => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(!*l || *r))), // false <= true, true <= true
-            BinaryOperator::Greater => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(*l && !*r))),   // true > false
-            BinaryOperator::GreaterEqual => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(*l || !*r))), // true >= false, true >= true
+            BinaryOperator::LessEqual => {
+                Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(!*l || *r)))
+            } // false <= true, true <= true
+            BinaryOperator::Greater => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(*l && !*r))), // true > false
+            BinaryOperator::GreaterEqual => {
+                Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(*l || !*r)))
+            } // true >= false, true >= true
             _ => Err(VmError::InvalidOperation(format!(
                 "Cannot apply {operator:?} to Bool"
             ))),
         },
         // Integer operations
-        (VmValue::ValuePrimitive(ValuePrimitive::Integer(l)), VmValue::ValuePrimitive(ValuePrimitive::Integer(r))) => match operator {
+        (
+            VmValue::ValuePrimitive(ValuePrimitive::Integer(l)),
+            VmValue::ValuePrimitive(ValuePrimitive::Integer(r)),
+        ) => match operator {
             BinaryOperator::Plus => Ok(VmValue::ValuePrimitive(ValuePrimitive::Integer(l + r))),
             BinaryOperator::Minus => Ok(VmValue::ValuePrimitive(ValuePrimitive::Integer(l - r))),
             BinaryOperator::Multiply => Ok(VmValue::ValuePrimitive(ValuePrimitive::Integer(l * r))),
@@ -286,13 +328,18 @@ pub fn evaluate_binary_op(
             BinaryOperator::Less => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(l < r))),
             BinaryOperator::LessEqual => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(l <= r))),
             BinaryOperator::Greater => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(l > r))),
-            BinaryOperator::GreaterEqual => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(l >= r))),
+            BinaryOperator::GreaterEqual => {
+                Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(l >= r)))
+            }
             _ => Err(VmError::InvalidOperation(format!(
                 "Cannot apply {operator:?} to integer"
             ))),
         },
         // Float operations
-        (VmValue::ValuePrimitive(ValuePrimitive::Float(l)), VmValue::ValuePrimitive(ValuePrimitive::Float(r))) => match operator {
+        (
+            VmValue::ValuePrimitive(ValuePrimitive::Float(l)),
+            VmValue::ValuePrimitive(ValuePrimitive::Float(r)),
+        ) => match operator {
             BinaryOperator::Plus => Ok(VmValue::ValuePrimitive(ValuePrimitive::Float(l + r))),
             BinaryOperator::Minus => Ok(VmValue::ValuePrimitive(ValuePrimitive::Float(l - r))),
             BinaryOperator::Multiply => Ok(VmValue::ValuePrimitive(ValuePrimitive::Float(l * r))),
@@ -315,18 +362,22 @@ pub fn evaluate_binary_op(
             BinaryOperator::Less => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(l < r))),
             BinaryOperator::LessEqual => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(l <= r))),
             BinaryOperator::Greater => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(l > r))),
-            BinaryOperator::GreaterEqual => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(l >= r))),
+            BinaryOperator::GreaterEqual => {
+                Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(l >= r)))
+            }
             _ => Err(VmError::InvalidOperation(format!(
                 "Cannot apply {operator:?} to float"
             ))),
         },
 
         // Handle Product types - all operations return error for now
-        (VmValue::Product(_), _) | (_, VmValue::Product(_)) => {
-            Err(VmError::InvalidOperation("Product operations not yet implemented".to_string()))
-        }
-        
+        (VmValue::Product(_), _) | (_, VmValue::Product(_)) => Err(VmError::InvalidOperation(
+            "Product operations not yet implemented".to_string(),
+        )),
+
         // Type mismatch for other combinations
-        _ => Err(VmError::InvalidOperation("The operation is not implemented yet".into())),
+        _ => Err(VmError::InvalidOperation(
+            "The operation is not implemented yet".into(),
+        )),
     }
 }

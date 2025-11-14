@@ -222,11 +222,11 @@ impl<T,U> Mappable<T,U> for Expression<T> {
             },
             Self::Function { input, output, statements } => {
                 let mapped_input = input.inner_map(&mut f);
-                let mapped_output = output.inner_map(&mut f);
+                let mapped_output = output.map(|out| Box::new(out.inner_map(&mut f)));
                 let mapped_statements = statements.inner_map(f);
                 Self::Mapped::Function {
                     input: Box::new(mapped_input),
-                    output: Box::new(mapped_output),
+                    output: mapped_output,
                     statements: Box::new(mapped_statements),
                 }
             },
@@ -283,7 +283,7 @@ pub enum Expression<T> {
     },
     Function {
         input: Box<ExprNode<T>>,
-        output: Box<ExprNode<T>>,
+        output: Option<Box<ExprNode<T>>>,
         statements: Box<StatNode<T>>,
     }
 }
