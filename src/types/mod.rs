@@ -124,7 +124,7 @@ impl TypeContainer {
     pub fn store_unified_type(&mut self, unified_def: UnifiedTypeDefinition) -> TypeId {
         let optimized:OptimizedTypeDefinition = match unified_def{
             UnifiedTypeDefinition::TypeId(x)=>return x,
-            UnifiedTypeDefinition::TypeDef(x)=> OptimizedTypeDefinition(x.map(|x|self.store_unified_type(x)))
+            UnifiedTypeDefinition::TypeDef(x)=> OptimizedTypeDefinition(x.inner_map(|x|self.store_unified_type(x)))
         };
         self.store_type(optimized)
     }
@@ -151,26 +151,17 @@ impl Default for TypeContainer {
 }
 
 // Implementation of Mappable trait for TypeGeneric
-impl<T, U: Ord> Mappable<T, U> for TypeGeneric<T> {
+impl<T, U:Ord> Mappable<T, U> for TypeGeneric<T> {
     type Mapped = TypeGeneric<U>;
-    fn map<F>(self, mut f: F) -> Self::Mapped
+    fn inner_map<F>(self, f: F) -> Self::Mapped
     where
         F: FnMut(T) -> U,
     {
         match self {
-            TypeGeneric::Product { fields } => {
-                let new_fields = fields
-                    .into_iter()
-                    .map(|(id, value)| (id, f(value)))
-                    .collect();
-                TypeGeneric::Product { fields: new_fields }
-            }
-            TypeGeneric::Sum { variants } => {
-                let new_variants = variants.into_iter().map(f).collect();
-                TypeGeneric::Sum {
-                    variants: new_variants,
-                }
-            }
+            TypeGeneric::Product { fields } => TypeGeneric::Product { fields: fields.inner_map(f) },
+            
+            TypeGeneric::Sum { variants } => TypeGeneric::Sum {variants: variants.inner_map(f)},
+            
             TypeGeneric::Builtin(kind) => TypeGeneric::Builtin(kind),
         }
     }

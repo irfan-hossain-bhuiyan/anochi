@@ -8,7 +8,7 @@ use crate::{
     ast::{
         Expression, ExpressionNode, Identifier, Literal, Statement, StatementBlock,
         StatementNode,
-    }, types::{TypeId, UnifiedTypeDefinition, BuiltinKind, TypeContainer}, vm::backend::{IoBackend, VmBackend}
+    }, types::{TypeId, UnifiedTypeDefinition, TypeContainer}, vm::backend::{IoBackend, VmBackend}
 };
 
 use thiserror::Error;
@@ -96,10 +96,10 @@ impl<Backend: VmBackend> Vm<Backend> {
     }
 
     pub fn evaluate_expr(&mut self, expression_node: &ExpNode) -> VmResult {
-        let expression = &expression_node.node;
+        let expression = &expression_node.exp;
         match expression {
             Expression::Literal(literal) => match literal {
-                Literal::Identifier(x) => self.variables.get_variable_or_err(x),
+                Literal::Identifier(x) => self.variables.get_variable_or_err(&x),
                 Literal::Bool(_) | Literal::Float(_) | Literal::Integer(_) => Ok(
                     VmValue::ValuePrimitive(ValuePrimitive::from(literal.clone())),
                 ),
@@ -115,16 +115,16 @@ impl<Backend: VmBackend> Vm<Backend> {
                 operator,
                 right,
             } => {
-                let left_val = self.evaluate_expr(left)?;
-                let right_val = self.evaluate_expr(right)?;
+                let left_val = self.evaluate_expr(&left)?;
+                let right_val = self.evaluate_expr(&right)?;
 
-                vm_value::evaluate_binary_op(&left_val, operator, &right_val)
+                vm_value::evaluate_binary_op(&left_val, &operator, &right_val)
             }
             Expression::Unary { operator, operand } => {
-                let operand_val = self.evaluate_expr(operand)?;
-                vm_value::evaluate_unary_op(operator, &operand_val)
+                let operand_val = self.evaluate_expr(&operand)?;
+                vm_value::evaluate_unary_op(&operator, &operand_val)
             }
-            Expression::Grouping { expression } => self.evaluate_expr(expression),
+            Expression::Grouping { expression } => self.evaluate_expr(&expression),
             Expression::Product { data } => {
                 let mut product = HashMap::new();
                 for (key, value) in data.iter() {
@@ -182,16 +182,16 @@ impl<Backend: VmBackend> Vm<Backend> {
         self.variables.insert_variable(target, value,&mut self.types);
     }
     pub fn execute_statement(&mut self, stat_node: &StmtNode) -> Result<(), VmError> {
-        let stmt = &stat_node.node;
+        let stmt = &stat_node.stat;
         match stmt {
             Statement::Assignment {
                 target,
                 r#type,
                 value,
             } => {
-                let value = self.evaluate_expr(value)?;
+                let value = self.evaluate_expr(&value)?;
                 if let Some(type_expr) = r#type {
-                    let type_value = self.evaluate_expr(type_expr)?;
+                    let type_value = self.evaluate_expr(&type_expr)?;
                     let expected_type_id = type_value
                         .into_type_id(&mut self.types)
                         .ok_or(VmError::InvalidTypeDefination)?;
@@ -205,7 +205,7 @@ impl<Backend: VmBackend> Vm<Backend> {
                 Ok(())
             }
             Statement::MutableAssignment { target, value } => {
-                match &target.node {
+                match &target.exp {
                     Expression::Literal(Literal::Identifier(identifier)) => {
                         let evaluated_value = self.evaluate_expr(value)?;
                         self.variables.set_variable(
@@ -275,7 +275,7 @@ impl<Backend: VmBackend> Vm<Backend> {
             Statement::Loop { statements } => {
                 'a:loop {
                     for statement in statements.statements.iter() {
-                        let stat=&statement.node;
+                        let stat=&statement.stat;
                         if stat.is_break(){break 'a;}
                         else if stat.is_continue(){break;}
                         self.execute_statement(statement)?;

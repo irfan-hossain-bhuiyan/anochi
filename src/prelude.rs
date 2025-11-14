@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::mem::size_of;
@@ -107,7 +107,7 @@ impl<T: Eq + Hash + Clone> Default for HashCons<T> {
 pub trait Mappable<NOW,AFTER>{
     type Mapped;
 
-    fn map<F>(self, f: F) -> Self::Mapped
+    fn inner_map<F>(self, f: F) -> Self::Mapped
     where
         F: FnMut(NOW) -> AFTER;
     //TODO: Tell the compiler to fix this mappable issue.
@@ -117,4 +117,40 @@ pub trait Mappable<NOW,AFTER>{
     //    self.map(f.)
     //}
 
+}
+
+impl<T,U> Mappable<T,U> for Vec<T>{
+    type Mapped = Vec<U>;
+    fn inner_map<F>(self, f: F) -> Self::Mapped
+        where
+            F: FnMut(T) -> U {
+        self.into_iter().map(f).collect()
+    }
+}
+impl<K:Ord,T,U> Mappable<T,U> for BTreeMap<K,T>{
+    fn inner_map<F>(self,mut f: F) -> Self::Mapped
+        where
+            F: FnMut(T) -> U {
+        self.into_iter().map(|(k,d)|(k,f(d))).collect()
+    }
+
+    type Mapped=BTreeMap<K,U>;
+}
+
+
+impl<T,U: Ord> Mappable<T,U> for BTreeSet<T>{
+    type Mapped = BTreeSet<U>;
+    fn inner_map<F>(self, f: F) -> Self::Mapped
+        where
+            F: FnMut(T) -> U {
+        self.into_iter().map(f).collect()
+    }
+}
+impl<K: Hash + Eq,T,U> Mappable<T,U> for HashMap<K,T>{
+    type Mapped = HashMap<K,U>;
+    fn inner_map<F>(self, mut f: F) -> Self::Mapped
+        where
+            F: FnMut(T) -> U {
+        self.into_iter().map(|(key,data)|(key,f(data))).collect()
+    }
 }

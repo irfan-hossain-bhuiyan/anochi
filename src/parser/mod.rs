@@ -2,11 +2,12 @@ mod parser_error;
 
 #[cfg(test)]
 mod block_tests;
+
 use crate::ast::{
     BinaryOperator, Expression, ExpressionNode, Statement, StatementBlock, StatementNode, UnaryOperator
 };
 use crate::token::token_type::Keyword::{self, And, Or};
-use crate::token::{Token, TokenType};
+use crate::token::{Token, TokenSlice, TokenType};
 pub use parser_error::*;
 
 /// Macro for token matching using matches! syntax
@@ -31,8 +32,8 @@ macro_rules! match_token_or_err {
     ($self:expr, $pattern:pat) => {{ match_token!($self, $pattern).map_err(|x| x.into_parser_error()) }};
 }
 
-pub struct Parser<'a, 'b: 'a> {
-    tokens: &'a [Token<'b>],
+pub struct Parser<'a, > {
+    tokens: &'a TokenSlice<'a>,
     current: usize,
     is_error: bool,
     is_in_loop: bool,
@@ -40,23 +41,58 @@ pub struct Parser<'a, 'b: 'a> {
     //funciton has break,continue the vm will validate it,because it is inside loop.
 }
 type ExpNode<'a> = ExpressionNode<'a>;
+type Exp<'a>=Expression<&'a TokenSlice<'a>>;
+type Stat<'a>=Statement<&'a TokenSlice<'a>>;
 type ReExpNode<'a> = Result<ExpNode<'a>, ParserError>;
 type StatNode<'a> = StatementNode<'a>;
 type ReStatNode<'a> = Result<StatementNode<'a>, ParserError>;
-impl<'a, 'b: 'a> Parser<'a, 'b> {
+type StatBlock<'a>=StatementBlock<&'a TokenSlice<'a>>;
+impl<'a> Parser<'a> {
+    // Helper methods to reduce repetition
+    fn make_expr_node(&self, expr: Exp<'a>, start: usize) -> ExpNode<'a> {
+        let slice = self.tokens.slice(start, self.current);
+        expr.to_node(slice)
+    }
+    
+    fn make_stat_node(&self, stmt: Stat<'a>, start: usize) -> StatNode<'a> {
+        let slice = self.tokens.slice(start, self.current);
+        stmt.to_node(slice)
+    }
+    
+    fn with_expr_tracking<F>(&mut self, f: F) -> ReExpNode<'a>
+    where
+        F: FnOnce(&mut Self) -> Result<Exp<'a>, ParserError>,
+    {
+        let start = self.current;
+        let expr = f(self)?;
+        Ok(self.make_expr_node(expr, start))
+    }
+    
+    fn with_stat_tracking<F>(&mut self, f: F) -> ReStatNode<'a>
+    where
+        F: FnOnce(&mut Self) -> Result<Stat<'a>, ParserError>,
+    {
+        let start = self.current;
+        let stmt = f(self)?;
+        Ok(self.make_stat_node(stmt, start))
+    }
+
     // Logical OR: expr || expr
-    fn parse_logical_or(&mut self) -> ReExpNode<'b> {
+    fn parse_logical_or(&mut self) -> ReExpNode<'a> {
+        let start = self.current;
         let mut node = self.parse_logical_and()?;
         while match_token!(self, TokenType::Keyword(Or)).is_ok() {
             let operator = BinaryOperator::Or;
             let right = self.parse_logical_and()?;
-            node = Expression::binary(node, operator, right).into();
+            let expr = Expression::binary(node, operator, right);
+            node = self.make_expr_node(expr, start);
         }
         Ok(node)
     }
 
     // Type Union: type | type
-    fn parse_type_union(&mut self) -> ReExpNode<'b> {
+    fn parse_type_union(&mut self) -> ReExpNode<'a> {
+        let start = self.current;
         let mut types = vec![self.parse_logical_or()?];
         while match_token!(self, TokenType::Pipe).is_ok() {
             types.push(self.parse_logical_or()?);
@@ -64,10 +100,11 @@ impl<'a, 'b: 'a> Parser<'a, 'b> {
         if types.len() == 1 {
             Ok(types.into_iter().next().unwrap())
         } else {
-            Ok(Expression::sum(types).into())
+            let expr = Expression::sum(types);
+            Ok(self.make_expr_node(expr, start))
         }
     }
-    pub fn parse_statement_block(&mut self) -> Result<StatementBlock<'b>,ParserError> {
+    pub fn parse_statement_block(&mut self) -> Result<StatBlock<'a>,ParserError> {
         match_token_or_err!(self,TokenType::LeftBrace)?;
         let mut statements = Vec::new();
         loop {
@@ -81,7 +118,8 @@ impl<'a, 'b: 'a> Parser<'a, 'b> {
         }
         Ok(StatementBlock{statements})
     }
-    pub fn parse_statement(&mut self) -> ReStatNode<'b> {
+    pub fn parse_statement(&mut self) -> ReStatNode<'a> {
+        let start = self.current;
         // Assignment: identifier = expression
         match self.peek_type().unwrap().clone() {
             TokenType::Keyword(Keyword::Let) => {
@@ -98,7 +136,8 @@ impl<'a, 'b: 'a> Parser<'a, 'b> {
                 let _ = match_token_or_err!(self, TokenType::Equal)?;
                 let expr = self.parse_expression()?;
                 let _ = match_token_or_err!(self, TokenType::Semicolon)?;
-                Ok(Statement::assignment(x, r#type, expr).into())
+                let stmt = Statement::assignment(x, r#type, expr);
+                Ok(self.make_stat_node(stmt, start))
             }
             TokenType::Identifier(_) => {
                 let x = self.parse_expression()?;
@@ -108,11 +147,15 @@ impl<'a, 'b: 'a> Parser<'a, 'b> {
                 let _ = match_token_or_err!(self, TokenType::Equal)?;
                 let expr = self.parse_expression()?;
                 let _ = match_token_or_err!(self, TokenType::Semicolon)?;
-                Ok(Statement::mutable_assignment(x, expr).into())
+                let stmt = Statement::mutable_assignment(x, expr);
+                Ok(self.make_stat_node(stmt, start))
             }
             TokenType::LeftBrace => {
                 match self.parse_statement_block(){
-                    Ok(x)=>Ok(Statement::StatementBlock(x).into()),
+                    Ok(x)=>{
+                        let stmt = Statement::StatementBlock(x);
+                        Ok(self.make_stat_node(stmt, start))
+                    },
                     Err(x)=>Err(x),
                 }
             },
@@ -121,10 +164,14 @@ impl<'a, 'b: 'a> Parser<'a, 'b> {
                 let expr = self.parse_expression()?;
                 let on_true = self.parse_statement()?;
                 match match_token!(self, TokenType::Keyword(Keyword::Else)) {
-                    Err(_) => Ok(Statement::if_stmt(expr, on_true).into()),
+                    Err(_) => {
+                        let stmt = Statement::if_stmt(expr, on_true);
+                        Ok(self.make_stat_node(stmt, start))
+                    },
                     Ok(_) => {
                         let on_false = self.parse_statement()?;
-                        Ok(Statement::if_else(expr, on_true, on_false).into())
+                        let stmt = Statement::if_else(expr, on_true, on_false);
+                        Ok(self.make_stat_node(stmt, start))
                     }
                 }
             }
@@ -139,48 +186,54 @@ impl<'a, 'b: 'a> Parser<'a, 'b> {
                     }
                 }
                 let _ = match_token_or_err!(self, TokenType::RightParen)?;
-                Ok(Statement::debug(expr_vec).into())
+                let stmt = Statement::debug(expr_vec);
+                Ok(self.make_stat_node(stmt, start))
             }
             TokenType::Keyword(Keyword::Loop) => {
                 self.advance();
                 self.is_in_loop = true;
                 let statement = self.parse_statement_block()?;
                 self.is_in_loop = false;
-                Ok(Statement::Loop {
+                let stmt = Statement::Loop {
                     statements: statement,
-                }
-                .into())
+                };
+                Ok(self.make_stat_node(stmt, start))
             }
-            TokenType::Keyword(Keyword::Break) => {
-                if !self.is_in_loop {
-                    return Err(StatementParseError::BreakOutsideLoop.into());
-                }
-                self.advance();
-                Ok(Statement::Break.into())
-            }
-            TokenType::Keyword(Keyword::Continue) => {
-                if !self.is_in_loop {
-                    return Err(StatementParseError::ContinueOutsideLoop.into());
-                }
-                self.advance();
-                Ok(Statement::Continue.into())
-            }
+              TokenType::Keyword(Keyword::Break) => {
+                  if !self.is_in_loop {
+                      return Err(StatementParseError::BreakOutsideLoop.into());
+                  }
+                  self.advance();
+                  let stmt = Statement::Break;
+                  Ok(self.make_stat_node(stmt, start))
+              }
+              TokenType::Keyword(Keyword::Continue) => {
+                  if !self.is_in_loop {
+                      return Err(StatementParseError::ContinueOutsideLoop.into());
+                  }
+                  self.advance();
+                  let stmt = Statement::Continue;
+                  Ok(self.make_stat_node(stmt, start))
+              }
             _ => Err(StatementParseError::NoStatement.into()),
         }
     }
     // Logical AND: expr && expr
-    fn parse_logical_and(&mut self) -> ReExpNode<'b> {
+    fn parse_logical_and(&mut self) -> ReExpNode<'a> {
+        let start = self.current;
         let mut node = self.parse_equality()?;
         while match_token!(self, TokenType::Keyword(And)).is_ok() {
             let operator = BinaryOperator::And;
             let right = self.parse_equality()?;
-            node = Expression::binary(node, operator, right).into();
+            let expr = Expression::binary(node, operator, right);
+            node = self.make_expr_node(expr, start);
         }
         Ok(node)
     }
 
     // Equality: expr == expr, expr != expr
-    fn parse_equality(&mut self) -> ReExpNode<'b> {
+    fn parse_equality(&mut self) -> ReExpNode<'a> {
+        let start = self.current;
         let mut node = self.parse_comparison()?;
         while let Ok(op) = match_token!(self, TokenType::EqualEqual | TokenType::BangEqual) {
             let operator = match op {
@@ -189,13 +242,15 @@ impl<'a, 'b: 'a> Parser<'a, 'b> {
                 _ => unreachable!(),
             };
             let right = self.parse_comparison()?;
-            node = Expression::binary(node, operator, right).into();
+            let expr = Expression::binary(node, operator, right);
+            node = self.make_expr_node(expr, start);
         }
         Ok(node)
     }
 
     // Comparison: < > <= >=
-    fn parse_comparison(&mut self) -> ReExpNode<'b> {
+    fn parse_comparison(&mut self) -> ReExpNode<'a> {
+        let start = self.current;
         let mut node = self.parse_expr()?;
         while let Ok(op) = match_token!(
             self,
@@ -209,11 +264,12 @@ impl<'a, 'b: 'a> Parser<'a, 'b> {
                 _ => unreachable!(),
             };
             let right = self.parse_expr()?;
-            node = Expression::binary(node, operator, right).into();
+            let expr = Expression::binary(node, operator, right);
+            node = self.make_expr_node(expr, start);
         }
         Ok(node)
     }
-    pub fn new(tokens: &'a [Token<'b>]) -> Self {
+    pub fn new(tokens: &'a TokenSlice<'a>) -> Self {
         Parser {
             tokens,
             current: 0,
@@ -222,12 +278,13 @@ impl<'a, 'b: 'a> Parser<'a, 'b> {
         }
     }
 
-    pub fn parse_expression(&mut self) -> ReExpNode<'b> {
+    pub fn parse_expression(&mut self) -> ReExpNode<'a> {
         self.parse_type_union()
     }
 
     // Expr ::= Term (("+" | "-") Term)*
-    fn parse_expr(&mut self) -> ReExpNode<'b> {
+    fn parse_expr(&mut self) -> ReExpNode<'a> {
+        let start = self.current;
         let mut node = self.parse_term()?;
         while let Ok(op) = match_token!(self, TokenType::Plus | TokenType::Minus) {
             let operator = match op {
@@ -236,13 +293,15 @@ impl<'a, 'b: 'a> Parser<'a, 'b> {
                 _ => unreachable!(),
             };
             let right = self.parse_term()?;
-            node = Expression::binary(node, operator, right).into();
+            let expr = Expression::binary(node, operator, right);
+            node = self.make_expr_node(expr, start);
         }
         Ok(node)
     }
 
     // Term ::= Unary (("*" | "/") Unary)*
-    fn parse_term(&mut self) -> ReExpNode<'b> {
+    fn parse_term(&mut self) -> ReExpNode<'a> {
+        let start = self.current;
         let mut node = self.parse_unary()?;
         while let Ok(op) = match_token!(self, TokenType::Star | TokenType::Slash) {
             let operator = match op {
@@ -251,13 +310,15 @@ impl<'a, 'b: 'a> Parser<'a, 'b> {
                 _ => unreachable!(),
             };
             let right = self.parse_unary()?;
-            node = Expression::binary(node, operator, right).into();
+            let expr = Expression::binary(node, operator, right);
+            node = self.make_expr_node(expr, start);
         }
         Ok(node)
     }
 
     // Unary ::= ("+" | "-") Unary | Primary
-    fn parse_unary(&mut self) -> ReExpNode<'b> {
+    fn parse_unary(&mut self) -> ReExpNode<'a> {
+        let start=self.current;
         let operator = match self.peek_type().ok_or(ParserError::NO_EXPN_FOUND)? {
             TokenType::Minus => UnaryOperator::Minus,
             TokenType::Keyword(Keyword::Not) => UnaryOperator::Not,
@@ -267,10 +328,12 @@ impl<'a, 'b: 'a> Parser<'a, 'b> {
         };
         self.advance();
         let operand = self.parse_unary()?;
-        Ok(Expression::unary(operator, operand).into())
+        let expr=Expression::unary(operator, operand);
+        Ok(self.make_expr_node(expr, start))
     }
     // Primary ::= Integer | Float | Identifier | "(" Expr ")"
-    fn parse_primary(&mut self) -> ReExpNode<'b> {
+    fn parse_primary(&mut self) -> ReExpNode<'a> {
+        let start=self.current;
         match self.peek_type().ok_or(ParserError::NO_EXPN_FOUND)? {
             TokenType::LeftBrace => self.parse_struct(),
             TokenType::LeftParen => {
@@ -278,7 +341,7 @@ impl<'a, 'b: 'a> Parser<'a, 'b> {
                 let expr = self.parse_expression()?;
                 if let Some(TokenType::RightParen) = self.peek_type() {
                     self.advance(); // consume ')'
-                    Ok(Expression::grouping(expr).into())
+                    Ok(self.make_expr_node(Expression::grouping(expr),start))
                 } else {
                     Err(ParserError::expected_token_in_expression(
                         TokenType::RightParen,
@@ -289,7 +352,7 @@ impl<'a, 'b: 'a> Parser<'a, 'b> {
                 let expression =
                     Expression::from_token_type(any.clone()).ok_or(ParserError::NO_EXPN_FOUND)?;
                 self.advance();
-                Ok(expression.into())
+                Ok(self.make_expr_node(expression,start))
             }
         }
     }
@@ -304,14 +367,14 @@ impl<'a, 'b: 'a> Parser<'a, 'b> {
     }
 
     // Struct ::= "{" (Identifier "=" Expression ("," Identifier "=" Expression)*)? "}"
-    fn parse_struct(&mut self) -> ReExpNode<'b> {
+    fn parse_struct(&mut self) -> ReExpNode<'a> {
+        let start=self.current;
         self.advance(); // consume '{'
-
         let mut fields = std::collections::HashMap::new();
-
         // Handle empty struct case
         if match_token!(self, TokenType::RightBrace).is_ok() {
-            return Ok(Expression::product(fields).into());
+            let expr=Expression::product(fields);
+            return Ok(self.make_expr_node(expr, start));
         }
 
         loop {
@@ -320,16 +383,12 @@ impl<'a, 'b: 'a> Parser<'a, 'b> {
                 TokenType::Identifier(name) => name.clone(),
                 _ => unreachable!(),
             };
-
             // Expect '='
             let _ = match_token_or_err!(self, TokenType::Equal)?;
-
             // Parse field value (expression)
             let field_value = self.parse_expression()?;
-
             // Add field to struct
             fields.insert(field_name, field_value);
-
             // Check for continuation or end
             match match_token!(self, TokenType::Comma | TokenType::RightBrace) {
                 Ok(TokenType::Comma) => continue,   // More fields to parse
@@ -342,8 +401,8 @@ impl<'a, 'b: 'a> Parser<'a, 'b> {
                 }
             }
         }
-
-        Ok(Expression::product(fields).into())
+        let expr=Expression::product(fields);
+        Ok(self.make_expr_node(expr, start))
     }
 
     fn advance(&mut self) -> &Token {

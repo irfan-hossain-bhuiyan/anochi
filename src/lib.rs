@@ -5,14 +5,14 @@
 //!
 //! This crate provides the core functionality for the Anochi programming language,
 //! including lexical analysis, parsing, and compilation.
-pub mod ast;
 pub mod token;
-pub mod vm;
+pub mod ast;
 pub mod parser;
-pub mod code_runner;
 pub mod types;
+pub mod vm;
+pub mod code_runner;
 pub mod prelude;
 
 pub use token::{Token, TokenType, Tokenizer};
-pub use code_runner::CodeRunner;
+//pub use code_runner::CodeRunner;
 

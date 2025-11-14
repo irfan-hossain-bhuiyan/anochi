@@ -68,10 +68,10 @@ impl TypeDefinition {
 
     /// Convert TypeDefinition to UnifiedTypeDefinition
     pub fn from_optimized(other: OptimizedTypeDefinition, container: &TypeContainer) -> TypeDefinition {
-        TypeDefinition(other.0.map(|x|container.get_type_def(&x).unwrap()))
+        TypeDefinition(other.0.inner_map(|x|container.get_type_def(&x).unwrap()))
     }
     pub fn into_optimized(self,container: &mut TypeContainer)->OptimizedTypeDefinition{
-        OptimizedTypeDefinition(self.0.map(|x|container.store_type_def(x)))
+        OptimizedTypeDefinition(self.0.inner_map(|x|container.store_type_def(x)))
     }
 }
 impl OptimizedTypeDefinition{

@@ -10,22 +10,22 @@
 //! - **Binary expressions**: Operations between two operands (e.g., `a + b`, `x * y`)
 //! - **Unary expressions**: Operations on a single operand (e.g., `-x`, `!flag`)
 //! - **Literal expressions**: Direct values (numbers, strings, identifiers)
-//! - **Grouping expressions**: Parenthesized expressions for precedence control
-
+/// - **Grouping expressions**: Parenthesized expressions for precedence control
 use std::collections::HashMap;
 use std::fmt::{self};
 
+use crate::prelude::Mappable;
 pub use crate::token::token_type::Identifier;
 pub type IdentifierMap<T> = HashMap<Identifier, T>;
-pub type IdentifierToValue = IdentifierMap<VmValue>;
-pub type IdentifierToExp<T> = IdentifierMap<ExpNode<T>>;
+//pub type IdentifierToValue = IdentifierMap<VmValue>;
+pub type IdentifierToExp<T> = IdentifierMap<ExprNode<T>>;
 use num_bigint::BigInt;
 use num_rational::BigRational;
 
-use crate::token::Position;
+use crate::token::{Position, TokenSlice};
 use crate::token::token_type::Keyword::{False, True};
 use crate::token::token_type::TokenType;
-use crate::vm::tree_walk::VmValue;
+//use crate::vm::tree_walk::VmValue;
 
 /// Represents different types of literal values in the AST.
 ///
@@ -42,6 +42,70 @@ pub enum Literal {
     /// Identifier (variable name, function name, etc.)
     Identifier(Identifier),
     Bool(bool),
+}
+
+// Mappable implementations for Statement and related types
+impl<T,U> Mappable<T,U> for StatNode<T> {
+    type Mapped = StatNode<U>;
+
+    fn inner_map<F>(self, mut f: F) -> Self::Mapped
+    where
+        F: FnMut(T) -> U {
+        Self::Mapped {
+            data: f(self.data),
+            stat: self.stat.inner_map(f),
+        }
+    }
+}
+
+impl<T,U> Mappable<T,U> for StatementBlock<T> {
+    type Mapped = StatementBlock<U>;
+
+    fn inner_map<F>(self,mut f: F) -> Self::Mapped
+    where
+        F: FnMut(T) -> U {
+        Self::Mapped {
+            statements: self.statements.inner_map(|x|x.inner_map(&mut f)),
+        }
+    }
+}
+
+impl<T,U> Mappable<T,U> for Statement<T> {
+    type Mapped = Statement<U>;
+
+    fn inner_map<F>(self, mut f: F) -> Self::Mapped
+    where
+        F: FnMut(T) -> U {
+        match self {
+            Self::Assignment { target, r#type, value } => Statement::Assignment {
+                target,
+                r#type: r#type.map(|t| t.inner_map(&mut f)),
+                value: value.inner_map(&mut f),
+            },
+            Self::MutableAssignment { target, value } => Statement::MutableAssignment {
+                target: target.inner_map(&mut f),
+                value: value.inner_map(&mut f),
+            },
+            Self::StatementBlock(block) => Statement::StatementBlock(block.inner_map(&mut f)),
+            Self::If { condition, on_true } => Statement::If {
+                condition: condition.inner_map(&mut f),
+                on_true: Box::new(on_true.inner_map(&mut f)),
+            },
+            Self::IfElse { condition, on_true, on_false } => Statement::IfElse {
+                condition: condition.inner_map(&mut f),
+                on_true: Box::new(on_true.inner_map(&mut f)),
+                on_false: Box::new(on_false.inner_map(f)),
+            },
+            Self::Debug { expr_vec } => Statement::Debug {
+                expr_vec: expr_vec.inner_map(|x|x.inner_map(&mut f)),
+            },
+            Self::Loop { statements } => Statement::Loop {
+                statements: statements.inner_map(f),
+            },
+            Self::Break => Statement::Break,
+            Self::Continue => Statement::Continue,
+        }
+    }
 }
 
 /// Binary operators for expressions that operate on two operands.
@@ -93,14 +157,81 @@ pub enum UnaryOperator {
     Not,
 }
 #[derive(Debug, Clone, PartialEq)]
-pub struct ExpNode<T>{
+pub struct ExprNode<T>{
     data:T,
-    exp:Expression<T>,
+    pub exp:Expression<T>,
 }
 #[derive(Debug, Clone, PartialEq)]
 pub struct StatNode<T>{
     data:T,
-    stat:Statement<T>,
+    pub stat:Statement<T>,
+}
+impl<T,U> Mappable<T,U> for ExprNode<T> {
+    type Mapped = ExprNode<U>;
+
+    fn inner_map<F>(self, mut f: F) -> Self::Mapped
+    where
+        F: FnMut(T) -> U {
+            Self::Mapped {
+                data: f(self.data),
+                exp: self.exp.inner_map(f),
+            }
+    }
+}
+impl<T,U> Mappable<T,U> for Expression<T> {
+    type Mapped = Expression<U>;
+    fn inner_map<F>(self, mut f: F) -> Self::Mapped
+        where
+            F: FnMut(T) -> U {
+        match self {
+            Self::Literal(literal) => Self::Mapped::Literal(literal),
+            Self::Binary { operator, left, right } => {
+                let mapped_left = left.inner_map(&mut f);
+                let mapped_right = right.inner_map(&mut f);
+                Self::Mapped::Binary {
+                    operator,
+                    left: Box::new(mapped_left),
+                    right: Box::new(mapped_right),
+                }
+            },
+            Self::Unary { operator, operand } => {
+                let mapped_operand = operand.inner_map(&mut f);
+                Self::Mapped::Unary {
+                    operator,
+                    operand: Box::new(mapped_operand),
+                }
+            },
+            Self::Grouping { expression } => {
+                let mapped_expression = expression.inner_map(&mut f);
+                Self::Mapped::Grouping {
+                    expression: Box::new(mapped_expression),
+                }
+            },
+            Self::MemberAccess { object, member } => {
+                let mapped_object = object.inner_map(&mut f);
+                Self::Mapped::MemberAccess {
+                    object: Box::new(mapped_object),
+                    member,
+                }
+            },
+            Self::Product { data } => Self::Mapped::Product {
+                data: data.inner_map(|expr_node| expr_node.inner_map(&mut f)),
+            },
+            Self::Sum { data } => Self::Mapped::Sum {
+                data: data.inner_map(|expr_node| expr_node.inner_map(&mut f)),
+            },
+            Self::Function { input, output, statements } => {
+                let mapped_input = input.inner_map(&mut f);
+                let mapped_output = output.inner_map(&mut f);
+                let mapped_statements = statements.inner_map(f);
+                Self::Mapped::Function {
+                    input: Box::new(mapped_input),
+                    output: Box::new(mapped_output),
+                    statements: Box::new(mapped_statements),
+                }
+            },
+        }
+    }
 }
 /// The main AST node type representing all possible expressions.
 ///
@@ -116,9 +247,9 @@ pub enum Expression<T> {
         /// The binary operator
         operator: BinaryOperator,
         /// Left operand of the binary operation
-        left: Box<ExpNode<T>>,
+        left: Box<ExprNode<T>>,
         /// Right operand of the binary operation
-        right: Box<ExpNode<T>>,
+        right: Box<ExprNode<T>>,
     },
 
     /// A unary operation on a single expression
@@ -126,19 +257,19 @@ pub enum Expression<T> {
         /// The unary operator
         operator: UnaryOperator,
         /// The operand of the unary operation
-        operand: Box<ExpNode<T>>,
+        operand: Box<ExprNode<T>>,
     },
 
     /// A grouped expression (parentheses for precedence control)
     Grouping {
         /// The expression inside the parentheses
-        expression: Box<ExpNode<T>>,
+        expression: Box<ExprNode<T>>,
     },
 
     /// A member access expression (e.g., `a.x`, `{x=10}.y`)
     MemberAccess {
         /// The object being accessed (left side of the dot)
-        object: Box<ExpNode<T>>,
+        object: Box<ExprNode<T>>,
         /// The member being accessed (right side of the dot)
         member: Identifier,
     },
@@ -148,11 +279,11 @@ pub enum Expression<T> {
     },
 
     Sum {
-        data: Vec<ExpNode<T>>,
+        data: Vec<ExprNode<T>>,
     },
     Function {
-        input: Box<ExpNode<T>>,
-        output: Box<ExpNode<T>>,
+        input: Box<ExprNode<T>>,
+        output: Box<ExprNode<T>>,
         statements: Box<StatNode<T>>,
     }
 }
@@ -225,7 +356,7 @@ impl<T> Expression<T> {
     pub fn product(value: IdentifierToExp<T>) -> Self {
         Expression::Product { data: value }
     }
-    pub fn sum(value: Vec<ExpNode<T>>) -> Self {
+    pub fn sum(value: Vec<ExprNode<T>>) -> Self {
         Expression::Sum { data: value }
     }
     pub fn float(value: BigRational) -> Self {
@@ -242,9 +373,9 @@ impl<T> Expression<T> {
     }
 
     pub fn binary(
-        left: impl Into<ExpNode<T>>,
+        left: impl Into<ExprNode<T>>,
         operator: BinaryOperator,
-        right: impl Into<ExpNode<T>>,
+        right: impl Into<ExprNode<T>>,
     ) -> Self {
         Expression::Binary {
             left: Box::new(left.into()),
@@ -263,7 +394,7 @@ impl<T> Expression<T> {
     /// # Returns
     ///
     /// An `Expression::Unary` representing the unary operation.
-    pub fn unary(operator: UnaryOperator, operand: impl Into<ExpNode<T>>) -> Self {
+    pub fn unary(operator: UnaryOperator, operand: impl Into<ExprNode<T>>) -> Self {
         Self::Unary {
             operator,
             operand: Box::new(operand.into()),
@@ -279,7 +410,7 @@ impl<T> Expression<T> {
     /// # Returns
     ///
     /// An `Expression::Grouping` representing the grouped expression.
-    pub fn grouping(expression: impl Into<ExpNode<T>>) -> Self {
+    pub fn grouping(expression: impl Into<ExprNode<T>>) -> Self {
         Expression::Grouping {
             expression: Box::new(expression.into()),
         }
@@ -295,7 +426,7 @@ impl<T> Expression<T> {
     /// # Returns
     ///
     /// An `Expression::MemberAccess` representing the member access operation.
-    pub fn member_access(object: impl Into<ExpNode<T>>, member: Identifier) -> Self {
+    pub fn member_access(object: impl Into<ExprNode<T>>, member: Identifier) -> Self {
         Expression::MemberAccess {
             object: Box::new(object.into()),
             member,
@@ -307,7 +438,7 @@ impl<T> Expression<T> {
         Expression::Literal(literal)
     }
 
-    /// Converts a Token to an Expression if it is a literal token.
+    /// Returns a Token to an Expression if it is a literal token.
     pub fn from_token_type(token_type: TokenType) -> Option<Self> {
         use TokenType::{Float, Identifier, Integer, Keyword, String};
         match token_type {
@@ -321,7 +452,12 @@ impl<T> Expression<T> {
         }
     }
 
-    
+    pub fn to_node(self, data: T) -> ExprNode<T> {
+        ExprNode {
+            data,
+            exp: self,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -336,26 +472,26 @@ pub enum Statement<T> {
     /// Assignment for creating new variables with `let` keyword
     Assignment {
         target: Identifier,
-        r#type: Option<ExpNode<T>>,
-        value: ExpNode<T>,
+        r#type: Option<ExprNode<T>>,
+        value: ExprNode<T>,
     },
     /// Assignment for modifying existing objects/members
     MutableAssignment {
-        target: ExpNode<T>,
-        value: ExpNode<T>,
+        target: ExprNode<T>,
+        value: ExprNode<T>,
     },
     StatementBlock(StatementBlock<T>),
     If {
-        condition: ExpNode<T>,
+        condition: ExprNode<T>,
         on_true: Box<StatNode<T>>,
     },
     IfElse {
-        condition: ExpNode<T>,
+        condition: ExprNode<T>,
         on_true: Box<StatNode<T>>,
         on_false: Box<StatNode<T>>,
     },
     Debug {
-        expr_vec: Vec<ExpNode<T>>,
+        expr_vec: Vec<ExprNode<T>>,
     },
     Loop {
         statements: StatementBlock<T>,
@@ -400,8 +536,8 @@ impl<T> Statement<T> {
     /// Creates a new variable assignment with explicit type
     pub fn assignment_with_type(
         target: Identifier,
-        r#type: impl Into<ExpNode<T>>,
-        value: impl Into<ExpNode<T>>,
+        r#type: impl Into<ExprNode<T>>,
+        value: impl Into<ExprNode<T>>,
     ) -> Self {
         Statement::Assignment {
             target,
@@ -411,8 +547,8 @@ impl<T> Statement<T> {
     }
     pub fn assignment(
         target: Identifier,
-        r#type: Option<ExpNode<T>>,
-        value: impl Into<ExpNode<T>>,
+        r#type: Option<ExprNode<T>>,
+        value: impl Into<ExprNode<T>>,
     ) -> Self {
         Statement::Assignment {
             target,
@@ -421,8 +557,8 @@ impl<T> Statement<T> {
         }
     }
     pub fn mutable_assignment(
-        target: impl Into<ExpNode<T>>,
-        value: impl Into<ExpNode<T>>,
+        target: impl Into<ExprNode<T>>,
+        value: impl Into<ExprNode<T>>,
     ) -> Self {
         Statement::MutableAssignment {
             target: target.into(),
@@ -432,7 +568,7 @@ impl<T> Statement<T> {
 
     pub fn assignment_no_type(
         identifier: Identifier,
-        value: impl Into<ExpNode<T>>,
+        value: impl Into<ExprNode<T>>,
     ) -> Self {
         Statement::Assignment {
             target: identifier,
@@ -446,7 +582,7 @@ impl<T> Statement<T> {
     }
 
     pub fn if_stmt(
-        condition: impl Into<ExpNode<T>>,
+        condition: impl Into<ExprNode<T>>,
         on_true: impl Into<StatNode<T>>,
     ) -> Self {
         Statement::If {
@@ -456,7 +592,7 @@ impl<T> Statement<T> {
     }
 
     pub fn if_else(
-        condition: impl Into<ExpNode<T>>,
+        condition: impl Into<ExprNode<T>>,
         on_true: impl Into<StatNode<T>>,
         on_false: impl Into<StatNode<T>>,
     ) -> Self {
@@ -466,7 +602,7 @@ impl<T> Statement<T> {
             on_false: Box::new(on_false.into()),
         }
     }
-    pub fn debug(expr_vec: Vec<ExpNode<T>>) -> Self {
+    pub fn debug(expr_vec: Vec<ExprNode<T>>) -> Self {
         Self::Debug { expr_vec }
     }
 
@@ -485,4 +621,14 @@ impl<T> Statement<T> {
     pub fn is_continue(&self) -> bool {
         matches!(self, Self::Continue)
     }
+
+    pub fn to_node(self, data: T) -> StatNode<T> {
+        StatNode {
+            data,
+            stat: self,
+        }
+    }
 }
+pub type StatementNode<'a>=StatNode<&'a TokenSlice<'a>>;
+pub type StatmentBlockNode<'a>=StatementBlock<&'a TokenSlice<'a>>;
+pub type ExpressionNode<'a>=ExprNode<&'a TokenSlice<'a>>;

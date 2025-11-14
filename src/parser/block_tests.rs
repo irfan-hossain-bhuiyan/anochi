@@ -196,7 +196,7 @@ mod parser_block_tests {
                         }
                     }
                     _ => panic!("Expected If statement"),
-                }
+                }k
             }
             _ => panic!("Expected StatementBlock, got: {:?}", statement.node),
         }

@@ -12,7 +12,7 @@ use crate::{
         tree_walk::{Vm, VmError, VmValue},
     },
 };
-use std::{any::TypeId, fmt};
+use std::fmt;
 use thiserror::Error;
 
 /// Errors that can occur during code execution.
@@ -105,7 +105,7 @@ impl<Backend: VmBackend> CodeRunner<Backend> {
         let tokens = tokenizer.tokenize();
 
         // Check for tokenization errors
-        for token in &tokens {
+        for token in tokens.iter() {
             if let crate::token::TokenType::Error(err) = &token.token_type {
                 return Err(CodeRunnerError::TokenizationError(err.clone()));
             }
@@ -124,7 +124,7 @@ impl<Backend: VmBackend> CodeRunner<Backend> {
         let tokens = tokenizer.tokenize();
 
         // Check for tokenization errors
-        for token in &tokens {
+        for token in tokens.iter() {
             if let crate::token::TokenType::Error(err) = &token.token_type {
                 return Err(CodeRunnerError::TokenizationError(err.clone()));
             }
