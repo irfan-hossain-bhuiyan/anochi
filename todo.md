@@ -24,8 +24,6 @@
         now continue and break this statement can be called inside loop.
 - [x] Change the representation Expression and Statement to be generic
 ## Doing:
-- [ ] Make a derive trait for mappable,As I need to get good at meta programming in rust too.
-- change the recursive tree like data structure to not 
 contain itself,rather the Vec will contain everything,So in the future I can iterate through the vec.
 - [ ] adding function for my language
     - Like in the language,VmValue will have funcId,It is more like a pointer for now.
@@ -42,6 +40,7 @@ contain itself,rather the Vec will contain everything,So in the future I can ite
         - [ ] make it simplfy
         - [ ] make it 
 ## Todo:
+    - support for function and for function verification.
     - support for a.x operation,and I can do something like a.x=10;
     - Change the assignment to have comptime,let,None
         - It will check for keyword first before the assignment.
@@ -60,7 +59,7 @@ Add struct based type in Literal,where I can create {x=10,y=10},
         So that's why I am using third bracket
 
 > Why the duplication like TypeDefinition,OptimizedTypeDefinition,UnifiedTypeDefinition?
-D
+
 ## Ideas:
     Types are values as well,they are object in vmvalue
     So I can add them as expresssion,and generate them from struct,
@@ -72,6 +71,8 @@ D
         - One example is to create a new type for that
 ## Design Problem:
     Problem with type as expression and it's optimization,Now the 
+
+- change the recursive tree like data structure to not,Let's not go with it,See how far I can go?
 ## Things I disabled
 
 //#[cfg(test)]
