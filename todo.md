@@ -24,7 +24,8 @@
         now continue and break this statement can be called inside loop.
 - [x] Change the representation Expression and Statement to be generic
 ## Doing:
-contain itself,rather the Vec will contain everything,So in the future I can iterate through the vec.
+- [ ] fixing loop
+    - A way to fix this issue,Iis to add return type in the execute statement if break or continue is called,the loop will evaluate the decision and check if it is okay.to break or continue.
 - [ ] adding function for my language
     - Like in the language,VmValue will have funcId,It is more like a pointer for now.
     - As the statement in the function will not be hashed.
