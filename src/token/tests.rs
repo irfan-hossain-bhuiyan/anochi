@@ -25,3 +25,4 @@ fn test_basic_tokenization() {
     
     assert_eq!(actual, expected_type);
 }
+

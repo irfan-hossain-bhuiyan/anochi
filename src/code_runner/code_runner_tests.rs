@@ -51,12 +51,25 @@ let y:{x=i64,y=i64}={x=50,y=50};");
     runner.run_statements("let now_type={x=164,y=bool};").unwrap();
 }
 #[test]
+fn test_if(){
+    let mut runner=CodeRunner::default();
+    runner.run_statements(r"
+        let x=10;
+        if (x==10){x=20;}
+    ").unwrap();
+    let output=runner.evaluate_expr("x").unwrap();
+    assert_eq!(output,VmValue::from_i64(20))
+}
+
+#[test]
 fn test_loop(){
     let mut runner = CodeRunner::default();
-    runner.run_statements(r"let x=10;loop{
-        if (x>5) {break;}
+    runner.run_statements(r"
+    let x=10;
+    loop{
         x=x+1;
-        }").unwrap();
+        if (x>30) {break;}
+    }").unwrap();
     let output=runner.evaluate_expr("x").unwrap();
-    assert_eq!(output,VmValue::from_i64(51))
+    assert_eq!(output,VmValue::from_i64(30))
 }

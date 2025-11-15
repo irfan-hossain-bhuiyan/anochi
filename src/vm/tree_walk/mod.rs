@@ -34,6 +34,7 @@ pub enum VmError {
     InvalidTypeDefination,
 }
 
+
 impl VmError {
     /// Returns `true` if the vm error is [`TypeMismatch`].
     ///
@@ -48,6 +49,18 @@ impl VmError {
 /// Result type for VM evaluation operations.
 pub type VmResult = Result<VmValue, VmError>;
 pub type VmResultMut<'a> = Result<&'a mut VmValue, VmError>;
+
+/// Statement execution events for control flow
+#[derive(Debug, Clone, PartialEq)]
+pub enum StatementEvent {
+    Break,
+    Continue,
+    Return(VmValue),
+    None,
+}
+
+/// Result type for statement execution
+pub type StatementResult = Result<StatementEvent, VmError>;
 /// Variable entry storing both value and type information
 mod scope_stack;
 use scope_stack::ScopeStack;
@@ -186,35 +199,38 @@ impl<Backend: VmBackend> Vm<Backend> {
     fn insert_variable(&mut self,target:Identifier,value:VmValue){
         self.variables.insert_variable(target, value,&mut self.types);
     }
-    pub fn execute_statement(&mut self, stat_node: &StmtNode) -> Result<(), VmError> {
-        let stmt = &stat_node.stat;
-        match stmt {
-            Statement::Assignment {
-                target,
-                r#type,
-                value,
-            } => {
-                let value = self.evaluate_expr(&value)?;
-                if let Some(type_expr) = r#type {
-                    let type_value = self.evaluate_expr(&type_expr)?;
-                    let expected_type_id = type_value
-                        .into_type_id(&mut self.types)
-                        .ok_or(VmError::InvalidTypeDefination)?;
-                    if !value.of_type(expected_type_id, &mut self.types) {
-                        return Err(VmError::TypeMismatch(""));
-                    }
-                    // Use insert_variable_check for type verification
-                }
-                self.insert_variable(target.clone(), value);
-                // Use insert_variable for automatic type inference
-                Ok(())
-            },
-            Statement::Statements(block)=>{
-                for x in block.statements.iter(){
-                    self.execute_statement(x)?;
-                }
-                Ok(())
-            },
+      pub fn execute_statement(&mut self, stat_node: &StmtNode) -> StatementResult {
+          let stmt = &stat_node.stat;
+          match stmt {
+              Statement::Assignment {
+                  target,
+                  r#type,
+                  value,
+              } => {
+                  let value = self.evaluate_expr(&value)?;
+                  if let Some(type_expr) = r#type {
+                      let type_value = self.evaluate_expr(&type_expr)?;
+                      let expected_type_id = type_value
+                          .into_type_id(&mut self.types)
+                          .ok_or(VmError::InvalidTypeDefination)?;
+                      if !value.of_type(expected_type_id, &mut self.types) {
+                          return Err(VmError::TypeMismatch(""));
+                      }
+                      // Use insert_variable_check for type verification
+                  }
+                  self.insert_variable(target.clone(), value);
+                  // Use insert_variable for automatic type inference
+                  Ok(StatementEvent::None)
+              },
+              Statement::Statements(block)=>{
+                  for x in block.statements.iter(){
+                      match self.execute_statement(x)? {
+                          StatementEvent::None => continue,
+                          event => return Ok(event), // Propagate break, continue, return
+                      }
+                  }
+                  Ok(StatementEvent::None)
+              },
             Statement::MutableAssignment { target, value } => {
                 match &target.exp {
                     Expression::Literal(Literal::Identifier(identifier)) => {
@@ -224,7 +240,7 @@ impl<Backend: VmBackend> Vm<Backend> {
                             evaluated_value,
                             &mut self.types,
                         )?;
-                        Ok(())
+                        Ok(StatementEvent::None)
                     }
                     _ => {
                         // For member access and other complex assignments,
@@ -238,10 +254,16 @@ impl<Backend: VmBackend> Vm<Backend> {
             Statement::StatementBlock(StatementBlock { statements }) => {
                 self.variables.create_scope();
                 for stmt in statements.iter() {
-                    self.execute_statement(stmt)?;
+                    match self.execute_statement(stmt)? {
+                        StatementEvent::None => continue,
+                        event => {
+                            self.variables.drop_scope();
+                            return Ok(event); // Propagate control flow events
+                        }
+                    }
                 }
                 self.variables.drop_scope();
-                Ok(())
+                Ok(StatementEvent::None)
             }
             Statement::If { condition, on_true } => {
                 let VmValue::ValuePrimitive(ValuePrimitive::Bool(x)) =
@@ -252,9 +274,10 @@ impl<Backend: VmBackend> Vm<Backend> {
                     ));
                 };
                 if x {
-                    self.execute_statement(on_true)?;
+                    self.execute_statement(on_true)
+                } else {
+                    Ok(StatementEvent::None)
                 }
-                Ok(())
             }
             Statement::IfElse {
                 condition,
@@ -269,30 +292,31 @@ impl<Backend: VmBackend> Vm<Backend> {
                     ));
                 };
                 if x {
-                    self.execute_statement(on_true)?;
+                    self.execute_statement(on_true)
                 } else {
-                    self.execute_statement(on_false)?;
+                    self.execute_statement(on_false)
                 }
-                Ok(())
             }
             Statement::Debug { expr_vec } => {
                 for expr in expr_vec.iter() {
                     let expr = self.evaluate_expr(expr)?;
                     self.backend.debug_print(&expr.to_string()).unwrap();
                 }
-                Ok(())
+                Ok(StatementEvent::None)
             }
-            Statement::Continue | Statement::Break => {Ok(())},
+            Statement::Continue => Ok(StatementEvent::Continue),
+            Statement::Break => Ok(StatementEvent::Break),
             Statement::Loop { statements } => {
-                'a:loop {
+                loop {
                     for statement in statements.statements.iter() {
-                        let stat=&statement.stat;
-                        if stat.is_break(){break 'a;}
-                        else if stat.is_continue(){break;}
-                        self.execute_statement(statement)?;
+                        match self.execute_statement(statement)? {
+                            StatementEvent::None => {},
+                            StatementEvent::Break => return Ok(StatementEvent::None), // Break out of loop
+                            StatementEvent::Continue => break, // Continue to next iteration
+                            StatementEvent::Return(value) => return Ok(StatementEvent::Return(value)), // Propagate return
+                        }
                     }
                 }
-                Ok(())
             },
         }
     }

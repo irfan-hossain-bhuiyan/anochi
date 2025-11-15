@@ -48,7 +48,7 @@ pub enum Literal {
 impl<T,U> Mappable<T,U> for StatNode<T> {
     type Mapped = StatNode<U>;
 
-    fn inner_map<F>(self, mut f: F) -> Self::Mapped
+    fn inner_map<F>(self, f:&mut F) -> Self::Mapped
     where
         F: FnMut(T) -> U {
         Self::Mapped {
@@ -61,11 +61,12 @@ impl<T,U> Mappable<T,U> for StatNode<T> {
 impl<T,U> Mappable<T,U> for StatementBlock<T> {
     type Mapped = StatementBlock<U>;
 
-    fn inner_map<F>(self,mut f: F) -> Self::Mapped
+    fn inner_map<F>(self, f:&mut F) -> Self::Mapped
     where
-        F: FnMut(T) -> U {
+        F: FnMut(T) -> U,
+    {
         Self::Mapped {
-            statements: self.statements.inner_map(|x|x.inner_map(&mut f)),
+            statements: self.statements.into_iter().map(|x| x.inner_map(f)).collect(),
         }
     }
 }
@@ -73,32 +74,32 @@ impl<T,U> Mappable<T,U> for StatementBlock<T> {
 impl<T,U> Mappable<T,U> for Statement<T> {
     type Mapped = Statement<U>;
 
-    fn inner_map<F>(self, mut f: F) -> Self::Mapped
+    fn inner_map<F>(self,f:&mut F) -> Self::Mapped
     where
         F: FnMut(T) -> U {
         match self {
             Self::Assignment { target, r#type, value } => Statement::Assignment {
                 target,
-                r#type: r#type.map(|t| t.inner_map(&mut f)),
-                value: value.inner_map(&mut f),
+                r#type: r#type.map(|t| t.inner_map(f)),
+                value: value.inner_map(f),
             },
-            Self::Statements(block) => Statement::Statements(block.inner_map(&mut f)),
+            Self::Statements(block) => Statement::Statements(block.inner_map(f)),
             Self::MutableAssignment { target, value } => Statement::MutableAssignment {
-                target: target.inner_map(&mut f),
-                value: value.inner_map(&mut f),
+                target: target.inner_map(f),
+                value: value.inner_map(f),
             },
-            Self::StatementBlock(block) => Statement::StatementBlock(block.inner_map(&mut f)),
+            Self::StatementBlock(block) => Statement::StatementBlock(block.inner_map(f)),
             Self::If { condition, on_true } => Statement::If {
-                condition: condition.inner_map(&mut f),
-                on_true: Box::new(on_true.inner_map(&mut f)),
+                condition: condition.inner_map(f),
+                on_true: Box::new(on_true.inner_map(f)),
             },
             Self::IfElse { condition, on_true, on_false } => Statement::IfElse {
-                condition: condition.inner_map(&mut f),
-                on_true: Box::new(on_true.inner_map(&mut f)),
+                condition: condition.inner_map(f),
+                on_true: Box::new(on_true.inner_map(f)),
                 on_false: Box::new(on_false.inner_map(f)),
             },
             Self::Debug { expr_vec } => Statement::Debug {
-                expr_vec: expr_vec.inner_map(|x|x.inner_map(&mut f)),
+                expr_vec: expr_vec.into_iter().map(|x| x.inner_map(f)).collect(),
             },
             Self::Loop { statements } => Statement::Loop {
                 statements: statements.inner_map(f),
@@ -170,7 +171,7 @@ pub struct StatNode<T>{
 impl<T,U> Mappable<T,U> for ExprNode<T> {
     type Mapped = ExprNode<U>;
 
-    fn inner_map<F>(self, mut f: F) -> Self::Mapped
+    fn inner_map<F>(self, f:&mut F) -> Self::Mapped
     where
         F: FnMut(T) -> U {
             Self::Mapped {
@@ -181,14 +182,14 @@ impl<T,U> Mappable<T,U> for ExprNode<T> {
 }
 impl<T,U> Mappable<T,U> for Expression<T> {
     type Mapped = Expression<U>;
-    fn inner_map<F>(self, mut f: F) -> Self::Mapped
+    fn inner_map<F>(self, f:&mut F) -> Self::Mapped
         where
             F: FnMut(T) -> U {
         match self {
             Self::Literal(literal) => Self::Mapped::Literal(literal),
             Self::Binary { operator, left, right } => {
-                let mapped_left = left.inner_map(&mut f);
-                let mapped_right = right.inner_map(&mut f);
+                let mapped_left = left.inner_map(f);
+                let mapped_right = right.inner_map(f);
                 Self::Mapped::Binary {
                     operator,
                     left: Box::new(mapped_left),
@@ -196,34 +197,34 @@ impl<T,U> Mappable<T,U> for Expression<T> {
                 }
             },
             Self::Unary { operator, operand } => {
-                let mapped_operand = operand.inner_map(&mut f);
+                let mapped_operand = operand.inner_map(f);
                 Self::Mapped::Unary {
                     operator,
                     operand: Box::new(mapped_operand),
                 }
             },
             Self::Grouping { expression } => {
-                let mapped_expression = expression.inner_map(&mut f);
+                let mapped_expression = expression.inner_map(f);
                 Self::Mapped::Grouping {
                     expression: Box::new(mapped_expression),
                 }
             },
             Self::MemberAccess { object, member } => {
-                let mapped_object = object.inner_map(&mut f);
+                let mapped_object = object.inner_map(f);
                 Self::Mapped::MemberAccess {
                     object: Box::new(mapped_object),
                     member,
                 }
             },
             Self::Product { data } => Self::Mapped::Product {
-                data: data.inner_map(|expr_node| expr_node.inner_map(&mut f)),
+                data: data.into_iter().map(|(id, expr_node)| (id, expr_node.inner_map(f))).collect(),
             },
             Self::Sum { data } => Self::Mapped::Sum {
-                data: data.inner_map(|expr_node| expr_node.inner_map(&mut f)),
+                data: data.into_iter().map(|expr_node| expr_node.inner_map(f)).collect(),
             },
             Self::Function { input, output, statements } => {
-                let mapped_input = input.inner_map(&mut f);
-                let mapped_output = output.map(|out| Box::new(out.inner_map(&mut f)));
+                let mapped_input = input.inner_map(f);
+                let mapped_output = output.map(|out| Box::new(out.inner_map(f)));
                 let mapped_statements = statements.inner_map(f);
                 Self::Mapped::Function {
                     input: Box::new(mapped_input),
@@ -290,7 +291,7 @@ pub enum Expression<T> {
 }
 
 impl fmt::Display for Literal {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f:&mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Literal::Integer(i) => write!(f, "{i}"),
             Literal::Float(fl) => write!(f, "{fl}"),
@@ -302,7 +303,7 @@ impl fmt::Display for Literal {
 }
 
 impl fmt::Display for BinaryOperator {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f:&mut fmt::Formatter<'_>) -> fmt::Result {
         let symbol = match self {
             BinaryOperator::Plus => "+",
             BinaryOperator::Minus => "-",
@@ -323,7 +324,7 @@ impl fmt::Display for BinaryOperator {
 }
 
 impl fmt::Display for UnaryOperator {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self,f:&mut fmt::Formatter<'_>) -> fmt::Result {
         let symbol = match self {
             UnaryOperator::Minus => "-",
             UnaryOperator::Not => "not",
@@ -641,6 +642,16 @@ impl<T> Statement<T> {
             data,
             stat: self,
         }
+    }
+}
+impl<T> StatNode<T>{
+    pub fn to_null(self)->StatNode<()>{
+        self.inner_map(&mut |_x|())
+    }
+}
+impl<T> ExprNode<T>{
+    pub fn to_null(self)->ExprNode<()>{
+        self.inner_map(&mut |_x|())
     }
 }
 pub type StatementNode<'a>=StatNode<&'a TokenSlice<'a>>;

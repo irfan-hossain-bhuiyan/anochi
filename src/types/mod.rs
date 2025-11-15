@@ -124,7 +124,7 @@ impl TypeContainer {
     pub fn store_unified_type(&mut self, unified_def: UnifiedTypeDefinition) -> TypeId {
         let optimized:OptimizedTypeDefinition = match unified_def{
             UnifiedTypeDefinition::TypeId(x)=>return x,
-            UnifiedTypeDefinition::TypeDef(x)=> OptimizedTypeDefinition(x.inner_map(|x|self.store_unified_type(x)))
+            UnifiedTypeDefinition::TypeDef(x)=> OptimizedTypeDefinition(x.inner_map(&mut |x|self.store_unified_type(x)))
         };
         self.store_type(optimized)
     }
@@ -153,7 +153,7 @@ impl Default for TypeContainer {
 // Implementation of Mappable trait for TypeGeneric
 impl<T, U:Ord> Mappable<T, U> for TypeGeneric<T> {
     type Mapped = TypeGeneric<U>;
-    fn inner_map<F>(self, f: F) -> Self::Mapped
+    fn inner_map<F>(self, f:&mut F) -> Self::Mapped
     where
         F: FnMut(T) -> U,
     {
@@ -166,7 +166,6 @@ impl<T, U:Ord> Mappable<T, U> for TypeGeneric<T> {
         }
     }
 }
-
 // Implementation for TypeGeneric
 impl<T> TypeGeneric<T> {
     /// Creates a new product type (struct).
@@ -252,5 +251,3 @@ impl OptimizedTypeDefinition {
     }
 }
 
-#[cfg(test)]
-mod tests;

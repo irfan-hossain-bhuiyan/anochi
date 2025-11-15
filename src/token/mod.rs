@@ -498,7 +498,7 @@ impl<'a> Tokenizer<'a> {
     /// Skips whitespace characters (except newlines which might be significant)
     fn skip_whitespace(&mut self) {
         while let Some(ch) = self.peek() {
-            if ch.is_ascii_whitespace() && ch != '\n' {
+            if ch.is_ascii_whitespace() {
                 self.advance();
             } else {
                 break;
@@ -548,7 +548,7 @@ impl<'a> Deref for TokenContainer<'a> {
         TokenSlice::from_slice(&self.0)
     }
 }
-
+#[derive(Debug)]
 #[repr(transparent)]
 pub struct TokenSlice<'a>([Token<'a>]);
 
