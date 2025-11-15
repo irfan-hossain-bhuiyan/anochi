@@ -23,23 +23,31 @@
         - In loop,I am thinking about loop being a wrapper around goto,Let's just ignore that for now.
         now continue and break this statement can be called inside loop.
 - [x] Change the representation Expression and Statement to be generic
-## Doing:
-- [ ] fixing loop
+- [x] fixed loop
     - A way to fix this issue,Iis to add return type in the execute statement if break or continue is called,the loop will evaluate the decision and check if it is okay.to break or continue.
+
+## Doing:
+- [ ] add struct destructuring,a operation that destrucure the struct and push it to scope
+- [ ] add struct parsing so now {a,b=10,c} are allowed.
+    - this will help for struct like {self,a,b} in function input.
+- [ ] changing the tree_vm to just check type and verify the types are valid.
+    - [ ] having both comptime types and runtime types as well
+- [ ] add function and run it.
+    - [ ] 
 - [ ] adding function for my language
     - Like in the language,VmValue will have funcId,It is more like a pointer for now.
     - As the statement in the function will not be hashed.
-    - 
 
 - [ ] Currently I have assignment ast that use expression on the right hand side,for say x.a=10; etc,but that is only used 
     for when the object is already created,I am returning the expression from that,not when I am creating a new variable.
 - [ ] checks if the test are right
     - [x] checks token test
-    - [ ] checks parser test
+    - [x] checks parser test
     - [ ] vm_test
-    - [ ] typing test
-        - [ ] make it simplfy
+    - [x] typing test
+        - [x] make it simplfy
         - [ ] make it 
+- [ ] Changing the tokenization code simplify.
 ## Todo:
 - [ ] dereference struct,create a function for it.that will extract all the variable from struct and push to stack.
 - [ ] A operation that will extract it,Add it in the ast,but not decide what will it be,make it "**" for now.
