@@ -71,5 +71,5 @@ fn test_loop(){
         if (x>30) {break;}
     }").unwrap();
     let output=runner.evaluate_expr("x").unwrap();
-    assert_eq!(output,VmValue::from_i64(30))
+    assert_eq!(output,VmValue::from_i64(31))
 }

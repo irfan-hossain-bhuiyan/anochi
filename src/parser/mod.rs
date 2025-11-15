@@ -225,6 +225,7 @@ impl<'a> Parser<'a> {
                     return Err(StatementParseError::BreakOutsideLoop.into());
                 }
                 self.advance();
+                match_token_or_err!(self,TokenType::Semicolon)?;
                 let stmt = Statement::Break;
                 Ok(self.make_stat_node(stmt, start))
             }
@@ -234,6 +235,7 @@ impl<'a> Parser<'a> {
                 }
                 self.advance();
                 let stmt = Statement::Continue;
+                match_token_or_err!(self,TokenType::Semicolon)?;
                 Ok(self.make_stat_node(stmt, start))
             }
             _ => Err(StatementParseError::NoStatement.into()),
