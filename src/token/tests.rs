@@ -13,9 +13,7 @@ fn test_basic_tokenization() {
     let expected_type = vec![
         TokenType::Integer(BigInt::from(42)),
         TokenType::Semicolon,
-        TokenType::Newline,
         TokenType::Keyword(True),
-        TokenType::Newline,
         TokenType::Identifier(Identifier::new("x")),
         TokenType::Equal,
         TokenType::Integer(BigInt::from(1)),

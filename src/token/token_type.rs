@@ -110,7 +110,7 @@ pub enum TokenType {
     Less,
     LessEqual,
     Arrow,
-    Newline,
+    //Newline,
     Error(TokenizerError),
 }
 #[derive(Debug,Clone,PartialEq,Error)]

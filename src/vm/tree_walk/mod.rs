@@ -208,7 +208,13 @@ impl<Backend: VmBackend> Vm<Backend> {
                 self.insert_variable(target.clone(), value);
                 // Use insert_variable for automatic type inference
                 Ok(())
-            }
+            },
+            Statement::Statements(block)=>{
+                for x in block.statements.iter(){
+                    self.execute_statement(x)?;
+                }
+                Ok(())
+            },
             Statement::MutableAssignment { target, value } => {
                 match &target.exp {
                     Expression::Literal(Literal::Identifier(identifier)) => {

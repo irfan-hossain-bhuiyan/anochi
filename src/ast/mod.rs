@@ -82,6 +82,7 @@ impl<T,U> Mappable<T,U> for Statement<T> {
                 r#type: r#type.map(|t| t.inner_map(&mut f)),
                 value: value.inner_map(&mut f),
             },
+            Self::Statements(block) => Statement::Statements(block.inner_map(&mut f)),
             Self::MutableAssignment { target, value } => Statement::MutableAssignment {
                 target: target.inner_map(&mut f),
                 value: value.inner_map(&mut f),
@@ -486,6 +487,7 @@ pub enum Statement<T> {
         target: ExprNode<T>,
         value: ExprNode<T>,
     },
+    Statements(StatementBlock<T>),
     StatementBlock(StatementBlock<T>),
     If {
         condition: ExprNode<T>,

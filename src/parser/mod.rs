@@ -472,7 +472,7 @@ impl<'a> Parser<'a> {
             let stmt = self.parse_statement()?;
             vec.push(stmt);
         }
-        let stmt=Statement::StatementBlock(StatementBlock::new(vec));
+        let stmt=Statement::Statements(StatementBlock::new(vec));
         let stmt=self.make_stat_node(stmt, start);
         Ok(stmt)
     }

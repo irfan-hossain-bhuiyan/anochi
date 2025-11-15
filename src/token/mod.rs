@@ -376,7 +376,7 @@ impl<'a> Tokenizer<'a> {
                 '/' => self.make_single_char_token(TokenType::Slash, start_line, start_column, start_pos),
                 '*' => self.make_single_char_token(TokenType::Star, start_line, start_column, start_pos),
                 '|' => self.make_single_char_token(TokenType::Pipe, start_line, start_column, start_pos),
-                '\n' => self.make_single_char_token(TokenType::Newline, start_line, start_column, start_pos),
+                //'\n' =>{self.advance()}
                 _ => self.make_single_char_token(TokenType::Error(TokenizerError::UnknownSpeicalChar), start_line, start_column, start_pos),
             }
         } else {
