@@ -99,7 +99,7 @@ impl<Backend: VmBackend> CodeRunner<Backend> {
     /// # Returns
     ///
     /// A `CodeRunnerResult` containing the execution result or an error.
-    pub fn run_statement(&mut self, source: &str) -> Result<(), CodeRunnerError> {
+    pub fn run_statements(&mut self, source: &str) -> Result<(), CodeRunnerError> {
         // Step 1: Tokenize the source code
         let tokenizer = Tokenizer::new(source);
         let tokens = tokenizer.tokenize();
@@ -112,7 +112,7 @@ impl<Backend: VmBackend> CodeRunner<Backend> {
         }
         // Step 2: Parse tokens into AST
         let mut parser = Parser::new(&tokens);
-        let stmt_node = parser.parse_statement()?;
+        let stmt_node = parser.parse_statements()?;
         // Step 3: Execute the statement
         self.vm.execute_statement(&stmt_node)?;
         Ok(())// Return unit type for statements

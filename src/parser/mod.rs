@@ -464,4 +464,16 @@ impl<'a> Parser<'a> {
     fn previous(&self) -> &Token {
         &self.tokens[self.current - 1]
     }
+
+    pub(crate) fn parse_statements(&mut self) -> ReStatNode<'a> {
+        let start=self.current;
+        let mut vec=Vec::new();
+        while !self.is_at_end() {
+            let stmt = self.parse_statement()?;
+            vec.push(stmt);
+        }
+        let stmt=Statement::StatementBlock(StatementBlock::new(vec));
+        let stmt=self.make_stat_node(stmt, start);
+        Ok(stmt)
+    }
 }

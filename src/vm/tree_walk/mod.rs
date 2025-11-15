@@ -2,13 +2,13 @@
 
 use std::collections::HashMap;
 mod vm_value;
-pub use vm_value::{ValuePrimitive, VmValue};
+pub use vm_value::{ValuePrimitive, VmValue,StructValue};
 
 use crate::{
     ast::{
         Expression, ExpressionNode, Identifier, Literal, Statement, StatementBlock,
         StatementNode,
-    }, types::{TypeContainer, TypeId, UnifiedTypeDefinition}, vm::{backend::{IoBackend, VmBackend}, tree_walk::vm_value::StructValue}
+    }, types::{TypeContainer, TypeId, UnifiedTypeDefinition}, vm::{backend::{IoBackend, VmBackend}}
 };
 
 use thiserror::Error;
@@ -95,12 +95,16 @@ impl<Backend: VmBackend> Vm<Backend> {
             );
         }
     }
-
+    pub fn extract_struct(&mut self,strct:StructValue){
+        for (k,v) in strct.into_iter(){
+            self.insert_variable(k, v);
+        }
+    }
     pub fn evaluate_expr(&mut self, expression_node: &ExpNode) -> VmResult {
         let expression = &expression_node.exp;
         match expression {
             Expression::Literal(literal) => match literal {
-                Literal::Identifier(x) => self.variables.get_variable_or_err(&x),
+                Literal::Identifier(x) => self.variables.get_variable_or_err(x),
                 Literal::Bool(_) | Literal::Float(_) | Literal::Integer(_) => Ok(
                     VmValue::ValuePrimitive(ValuePrimitive::from(literal.clone())),
                 ),
@@ -116,16 +120,16 @@ impl<Backend: VmBackend> Vm<Backend> {
                 operator,
                 right,
             } => {
-                let left_val = self.evaluate_expr(&left)?;
-                let right_val = self.evaluate_expr(&right)?;
+                let left_val = self.evaluate_expr(left)?;
+                let right_val = self.evaluate_expr(right)?;
 
-                vm_value::evaluate_binary_op(&left_val, &operator, &right_val)
+                vm_value::evaluate_binary_op(&left_val, operator, &right_val)
             }
             Expression::Unary { operator, operand } => {
-                let operand_val = self.evaluate_expr(&operand)?;
+                let operand_val = self.evaluate_expr(operand)?;
                 vm_value::evaluate_unary_op(operator, &operand_val)
             }
-            Expression::Grouping { expression } => self.evaluate_expr(&expression),
+            Expression::Grouping { expression } => self.evaluate_expr(expression),
             Expression::Product { data } => {
                 let mut product = HashMap::new();
                 for (key, value) in data.iter() {
@@ -289,6 +293,16 @@ impl<Backend: VmBackend> Vm<Backend> {
 
     pub(crate) fn print_stack(&self) {
         println!("{}",self.variables);
+    }
+
+    pub fn insert_variable_check(
+            &mut self,
+            identifier: Identifier,
+            value: VmValue,
+            expected_type_id: TypeId,
+            type_container: &mut crate::types::TypeContainer,
+        ) -> Result<(), VmError> {
+        self.variables.insert_variable_check(identifier, value, expected_type_id, type_container)
     }
 }
 

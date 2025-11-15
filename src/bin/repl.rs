@@ -8,7 +8,6 @@
 //! - Type 'reset' to reset the CodeRunner state
 //! - Type 'help' for more commands
 
-use std::io;
 use rustyline::{Editor, Result as RustyResult, DefaultEditor};
 use rustyline::error::ReadlineError;
 use anochi::code_runner::CodeRunner;
@@ -107,7 +106,7 @@ fn execute_code(code_runner: &mut CodeRunner, input: &str) {
     let input = input.trim();
     
     // Try to run as statement first (for declarations, assignments, etc.)
-    match code_runner.run_statement(input) {
+    match code_runner.run_statements(input) {
         Ok(_) => {
             println!("✅ Statement executed successfully");
         }
@@ -115,11 +114,11 @@ fn execute_code(code_runner: &mut CodeRunner, input: &str) {
             // If statement fails, try as expression
             match code_runner.evaluate_expr(input) {
                 Ok(result) => {
-                    println!("✅ Result: {:?}", result);
+                    println!("✅ Result: {result:?}");
                 }
                 Err(expr_err) => {
-                    println!("❌ Statement error: {}", statement_err);
-                    println!("❌ Expression error: {}", expr_err);
+                    println!("❌ Statement error: {statement_err}");
+                    println!("❌ Expression error: {expr_err}");
                 }
             }
         }

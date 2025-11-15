@@ -465,6 +465,12 @@ pub struct StatementBlock<T> {
     pub statements: Vec<StatNode<T>>,
 }
 
+impl<T> StatementBlock<T> {
+    pub fn new(statements: Vec<StatNode<T>>) -> Self {
+        Self { statements }
+    }
+}
+
 
 
 #[derive(Debug, Clone, PartialEq)]
@@ -498,6 +504,12 @@ pub enum Statement<T> {
     },
     Break,
     Continue,
+}
+
+impl<T> From<StatementBlock<T>> for Statement<T> {
+    fn from(v: StatementBlock<T>) -> Self {
+        Self::StatementBlock(v)
+    }
 }
 #[derive(Clone, Debug, PartialEq)]
 pub struct AstNode<'a, T> {
