@@ -17,6 +17,7 @@ pub enum CharType {
     Numeric,
     Special,
     Whitespace,
+    Skippable,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -69,26 +70,44 @@ impl<'a> Tokenizer<'a> {
             column: 1,
         }
     }
-    
+
     // Helper methods to reduce boilerplate
-    fn make_token(&self, token_type: TokenType, start_line: usize, start_column: usize, start_pos: usize) -> Token<'a> {
+    fn make_token(
+        &self,
+        token_type: TokenType,
+        start_line: usize,
+        start_column: usize,
+        start_pos: usize,
+    ) -> Token<'a> {
         let slice = &self.source[start_pos..self.current];
         Token::new(
             token_type,
             Position::new(start_line, start_column, slice).unwrap(),
         )
     }
-    
+
     fn make_token_at_current(&self, token_type: TokenType) -> Token<'a> {
         self.make_token(token_type, self.line, self.column, self.current)
     }
-    
-    fn make_single_char_token(&mut self, token_type: TokenType, start_line: usize, start_column: usize, start_pos: usize) -> Token<'a> {
+
+    fn make_single_char_token(
+        &mut self,
+        token_type: TokenType,
+        start_line: usize,
+        start_column: usize,
+        start_pos: usize,
+    ) -> Token<'a> {
         self.advance();
         self.make_token(token_type, start_line, start_column, start_pos)
     }
-    
-    fn make_two_char_token(&mut self, token_type: TokenType, start_line: usize, start_column: usize, start_pos: usize) -> Token<'a> {
+
+    fn make_two_char_token(
+        &mut self,
+        token_type: TokenType,
+        start_line: usize,
+        start_column: usize,
+        start_pos: usize,
+    ) -> Token<'a> {
         self.advance(); // First char
         self.advance(); // Second char
         self.make_token(token_type, start_line, start_column, start_pos)
@@ -153,7 +172,7 @@ impl<'a> Tokenizer<'a> {
                 Some(CharType::Alpha)
             } else if ch.is_ascii_digit() {
                 Some(CharType::Numeric)
-            } else if ch == ' ' || ch == '\t' || ch == '\r' {
+            } else if ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n' {
                 Some(CharType::Whitespace)
             } else {
                 // Characters like +, -, *, /, =, ", etc.
@@ -244,7 +263,7 @@ impl<'a> Tokenizer<'a> {
                 Err(_) => TokenType::Error(TokenizerError::InvalidInt),
             }
         };
-        
+
         self.make_token(token_type, start_line, start_column, start_pos)
     }
 
@@ -254,17 +273,22 @@ impl<'a> Tokenizer<'a> {
         let start_column = self.column;
         let start_pos = self.current;
         let mut string_value = String::new();
-        
+
         if Some('"') == self.peek() {
             self.advance();
         } else {
             unreachable!("Should be checked before.")
         }
-        
+
         while let Some(ch) = self.peek() {
             if ch == '"' {
                 self.advance();
-                return self.make_token(TokenType::String(string_value), start_line, start_column, start_pos);
+                return self.make_token(
+                    TokenType::String(string_value),
+                    start_line,
+                    start_column,
+                    start_pos,
+                );
             } else if ch == '\\' {
                 self.advance();
                 if let Some(escaped) = self.peek() {
@@ -300,14 +324,24 @@ impl<'a> Tokenizer<'a> {
                     string_value.push('\\');
                 }
             } else if ch == '\n' {
-                return self.make_token(TokenType::Error(TokenizerError::StringInNewLine), start_line, start_column, start_pos);
+                return self.make_token(
+                    TokenType::Error(TokenizerError::StringInNewLine),
+                    start_line,
+                    start_column,
+                    start_pos,
+                );
             } else {
                 string_value.push(ch);
                 self.advance();
             }
         }
 
-        self.make_token(TokenType::Error(TokenizerError::NoClosingBracket), start_line, start_column, start_pos)
+        self.make_token(
+            TokenType::Error(TokenizerError::NoClosingBracket),
+            start_line,
+            start_column,
+            start_pos,
+        )
     }
 
     /// Parses special characters and operators
@@ -322,7 +356,12 @@ impl<'a> Tokenizer<'a> {
                 '!' => {
                     self.advance();
                     if self.peek() == Some('=') {
-                        self.make_two_char_token(TokenType::BangEqual, start_line, start_column, start_pos)
+                        self.make_two_char_token(
+                            TokenType::BangEqual,
+                            start_line,
+                            start_column,
+                            start_pos,
+                        )
                     } else {
                         self.make_token(TokenType::Bang, start_line, start_column, start_pos)
                     }
@@ -340,7 +379,12 @@ impl<'a> Tokenizer<'a> {
                     self.advance();
                     if self.peek() == Some('=') {
                         self.advance();
-                        self.make_token(TokenType::GreaterEqual, start_line, start_column, start_pos)
+                        self.make_token(
+                            TokenType::GreaterEqual,
+                            start_line,
+                            start_column,
+                            start_pos,
+                        )
                     } else {
                         self.make_token(TokenType::Greater, start_line, start_column, start_pos)
                     }
@@ -364,23 +408,90 @@ impl<'a> Tokenizer<'a> {
                     }
                 }
                 // Single-character tokens
-                '(' => self.make_single_char_token(TokenType::LeftParen, start_line, start_column, start_pos),
-                ')' => self.make_single_char_token(TokenType::RightParen, start_line, start_column, start_pos),
-                '{' => self.make_single_char_token(TokenType::LeftBrace, start_line, start_column, start_pos),
-                '}' => self.make_single_char_token(TokenType::RightBrace, start_line, start_column, start_pos),
-                ',' => self.make_single_char_token(TokenType::Comma, start_line, start_column, start_pos),
-                '.' => self.make_single_char_token(TokenType::Dot, start_line, start_column, start_pos),
-                ':' => self.make_single_char_token(TokenType::Colon, start_line, start_column, start_pos),
-                '+' => self.make_single_char_token(TokenType::Plus, start_line, start_column, start_pos),
-                ';' => self.make_single_char_token(TokenType::Semicolon, start_line, start_column, start_pos),
-                '/' => self.make_single_char_token(TokenType::Slash, start_line, start_column, start_pos),
-                '*' => self.make_single_char_token(TokenType::Star, start_line, start_column, start_pos),
-                '|' => self.make_single_char_token(TokenType::Pipe, start_line, start_column, start_pos),
+                '(' => self.make_single_char_token(
+                    TokenType::LeftParen,
+                    start_line,
+                    start_column,
+                    start_pos,
+                ),
+                ')' => self.make_single_char_token(
+                    TokenType::RightParen,
+                    start_line,
+                    start_column,
+                    start_pos,
+                ),
+                '{' => self.make_single_char_token(
+                    TokenType::LeftBrace,
+                    start_line,
+                    start_column,
+                    start_pos,
+                ),
+                '}' => self.make_single_char_token(
+                    TokenType::RightBrace,
+                    start_line,
+                    start_column,
+                    start_pos,
+                ),
+                ',' => self.make_single_char_token(
+                    TokenType::Comma,
+                    start_line,
+                    start_column,
+                    start_pos,
+                ),
+                '.' => {
+                    self.make_single_char_token(TokenType::Dot, start_line, start_column, start_pos)
+                }
+                ':' => self.make_single_char_token(
+                    TokenType::Colon,
+                    start_line,
+                    start_column,
+                    start_pos,
+                ),
+                '+' => self.make_single_char_token(
+                    TokenType::Plus,
+                    start_line,
+                    start_column,
+                    start_pos,
+                ),
+                ';' => self.make_single_char_token(
+                    TokenType::Semicolon,
+                    start_line,
+                    start_column,
+                    start_pos,
+                ),
+                '/' => self.make_single_char_token(
+                    TokenType::Slash,
+                    start_line,
+                    start_column,
+                    start_pos,
+                ),
+                '*' => self.make_single_char_token(
+                    TokenType::Star,
+                    start_line,
+                    start_column,
+                    start_pos,
+                ),
+                '|' => self.make_single_char_token(
+                    TokenType::Pipe,
+                    start_line,
+                    start_column,
+                    start_pos,
+                ),
                 //'\n' =>{self.advance()}
-                _ => self.make_single_char_token(TokenType::Error(TokenizerError::UnknownSpeicalChar), start_line, start_column, start_pos),
+                _ => self.make_single_char_token(
+                    TokenType::Error(TokenizerError::UnknownSpeicalChar),
+                    start_line,
+                    start_column,
+                    start_pos,
+                ),
             }
         } else {
-            self.make_token(TokenType::Error(TokenizerError::NoRightQuote), start_line, start_column, start_pos)
+            self.make_token(
+                TokenType::Error(TokenizerError::NoRightQuote),
+                start_line,
+                start_column,
+                start_pos,
+            )
         }
     }
 

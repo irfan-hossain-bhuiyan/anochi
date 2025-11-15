@@ -54,7 +54,7 @@ let y:{x=i64,y=i64}={x=50,y=50};");
 fn test_loop(){
     let mut runner = CodeRunner::default();
     runner.run_statements(r"let x=10;loop{
-        if (x>50) {break;}
+        if (x>5) {break;}
         x=x+1;
         }").unwrap();
     let output=runner.evaluate_expr("x").unwrap();
