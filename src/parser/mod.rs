@@ -207,6 +207,7 @@ impl<'a> Parser<'a> {
                     }
                 }
                 let _ = match_token_or_err!(self, TokenType::RightParen)?;
+                let _ = match_token_or_err!(self,TokenType::Semicolon)?;
                 let stmt = Statement::debug(expr_vec);
                 Ok(self.make_stat_node(stmt, start))
             }
