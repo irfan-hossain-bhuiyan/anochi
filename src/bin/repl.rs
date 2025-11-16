@@ -29,7 +29,7 @@ fn main() -> RustyResult<()> {
         let prompt = if accumulated_input.is_empty() {
             ">>> ".to_string()
         } else {
-            format!("{}| ", line_number)
+            format!("{line_number}| ")
         };
 
         match rl.readline(&prompt) {
@@ -90,7 +90,7 @@ fn main() -> RustyResult<()> {
                 }
             }
             Err(err) => {
-                println!("❌ Error reading input: {}", err);
+                println!("❌ Error reading input: {err}");
                 break;
             }
         }
@@ -100,7 +100,7 @@ fn main() -> RustyResult<()> {
 }
 
 fn execute_code(code_runner: &mut CodeRunner, input: &str) {
-    println!("🔄 Executing:\n{}", input);
+    println!("🔄 Executing:\n{input}");
     println!("{}", "─".repeat(50));
 
     let input = input.trim();

@@ -143,6 +143,7 @@ impl VmValue {
     /// - Type(id) - direct type reference
     /// - {a=Type(i64), b=Type(i64)} - product of types
     /// - {a={x=Type(i64),y=Type(i64)}, b=Type(i64)} - nested type expressions
+    ///
     /// Returns None if the value is not a valid type expression.
     pub fn into_unified_type_definition(self) -> Option<UnifiedTypeDefinition> {
         match self {

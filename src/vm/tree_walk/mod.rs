@@ -2,13 +2,14 @@
 
 use std::collections::HashMap;
 mod vm_value;
-pub use vm_value::{ValuePrimitive, VmValue,StructValue};
+pub use vm_value::{StructValue, ValuePrimitive, VmValue};
 
 use crate::{
     ast::{
-        Expression, ExpressionNode, Identifier, Literal, Statement, StatementBlock,
-        StatementNode,
-    }, types::{TypeContainer, TypeId, UnifiedTypeDefinition}, vm::{backend::{IoBackend, VmBackend}}
+        Expression, ExpressionNode, Identifier, Literal, Statement, StatementBlock, StatementNode,
+    },
+    types::{TypeContainer, TypeId, UnifiedTypeDefinition},
+    vm::backend::{IoBackend, VmBackend},
 };
 
 use thiserror::Error;
@@ -32,8 +33,9 @@ pub enum VmError {
     Unsupported(String),
     #[error("Error for that are not supported yet.")]
     InvalidTypeDefination,
+    #[error("Having same name in scope")]
+    SameVariableName,
 }
-
 
 impl VmError {
     /// Returns `true` if the vm error is [`TypeMismatch`].
@@ -43,7 +45,6 @@ impl VmError {
     pub fn is_type_mismatch(&self) -> bool {
         matches!(self, Self::TypeMismatch(..))
     }
-       
 }
 
 /// Result type for VM evaluation operations.
@@ -84,12 +85,11 @@ impl<Backend: VmBackend> Vm<Backend> {
         vm.load_builtin_types();
         vm
     }
-    fn get_type_def(&self,id:&TypeId) -> Option<crate::types::TypeDefinition> {
+    fn get_type_def(&self, id: &TypeId) -> Option<crate::types::TypeDefinition> {
         self.types.get_type_def(id)
     }
-    //fn extract_struct(&mut self,value:)
     fn load_builtin_types(&mut self) {
-        use crate::types::{BuiltinKind };
+        use crate::types::BuiltinKind;
 
         let builtin_types = [
             ("i64", BuiltinKind::I64),
@@ -108,10 +108,11 @@ impl<Backend: VmBackend> Vm<Backend> {
             );
         }
     }
-    pub fn extract_struct(&mut self,strct:StructValue){
-        for (k,v) in strct.into_iter(){
-            self.insert_variable(k, v);
+    pub fn extract_struct(&mut self, strct: StructValue) -> Result<(), VmError> {
+        for (k, v) in strct.into_iter() {
+            self.insert_variable(k, v)?;
         }
+        Ok(())
     }
     pub fn evaluate_expr(&mut self, expression_node: &ExpNode) -> VmResult {
         let expression = &expression_node.exp;
@@ -196,41 +197,46 @@ impl<Backend: VmBackend> Vm<Backend> {
             .into_type_id(&mut self.types)
             .ok_or(VmError::InvalidTypeDefination)
     }
-    fn insert_variable(&mut self,target:Identifier,value:VmValue){
-        self.variables.insert_variable(target, value,&mut self.types);
+    fn insert_variable(&mut self, target: Identifier, value: VmValue) -> Result<(), VmError> {
+        if self.variables.has_variable_current(&target) {
+            return Err(VmError::SameVariableName);
+        }
+        self.variables
+            .insert_variable(target, value, &mut self.types);
+        Ok(())
     }
-      pub fn execute_statement(&mut self, stat_node: &StmtNode) -> StatementResult {
-          let stmt = &stat_node.stat;
-          match stmt {
-              Statement::Assignment {
-                  target,
-                  r#type,
-                  value,
-              } => {
-                  let value = self.evaluate_expr(&value)?;
-                  if let Some(type_expr) = r#type {
-                      let type_value = self.evaluate_expr(&type_expr)?;
-                      let expected_type_id = type_value
-                          .into_type_id(&mut self.types)
-                          .ok_or(VmError::InvalidTypeDefination)?;
-                      if !value.of_type(expected_type_id, &mut self.types) {
-                          return Err(VmError::TypeMismatch(""));
-                      }
-                      // Use insert_variable_check for type verification
-                  }
-                  self.insert_variable(target.clone(), value);
-                  // Use insert_variable for automatic type inference
-                  Ok(StatementEvent::None)
-              },
-              Statement::Statements(block)=>{
-                  for x in block.statements.iter(){
-                      match self.execute_statement(x)? {
-                          StatementEvent::None => continue,
-                          event => return Ok(event), // Propagate break, continue, return
-                      }
-                  }
-                  Ok(StatementEvent::None)
-              },
+    pub fn execute_statement(&mut self, stat_node: &StmtNode) -> StatementResult {
+        let stmt = &stat_node.stat;
+        match stmt {
+            Statement::Assignment {
+                target,
+                r#type,
+                value,
+            } => {
+                let value = self.evaluate_expr(value)?;
+                if let Some(type_expr) = r#type {
+                    let type_value = self.evaluate_expr(type_expr)?;
+                    let expected_type_id = type_value
+                        .into_type_id(&mut self.types)
+                        .ok_or(VmError::InvalidTypeDefination)?;
+                    if !value.of_type(expected_type_id, &mut self.types) {
+                        return Err(VmError::TypeMismatch(""));
+                    }
+                    // Use insert_variable_check for type verification
+                }
+                self.insert_variable(target.clone(), value)?;
+                // Use insert_variable for automatic type inference
+                Ok(StatementEvent::None)
+            }
+            Statement::Statements(block) => {
+                for x in block.statements.iter() {
+                    match self.execute_statement(x)? {
+                        StatementEvent::None => continue,
+                        event => return Ok(event), // Propagate break, continue, return
+                    }
+                }
+                Ok(StatementEvent::None)
+            }
             Statement::MutableAssignment { target, value } => {
                 match &target.exp {
                     Expression::Literal(Literal::Identifier(identifier)) => {
@@ -251,20 +257,7 @@ impl<Backend: VmBackend> Vm<Backend> {
                     }
                 }
             }
-            Statement::StatementBlock(StatementBlock { statements }) => {
-                self.variables.create_scope();
-                for stmt in statements.iter() {
-                    match self.execute_statement(stmt)? {
-                        StatementEvent::None => continue,
-                        event => {
-                            self.variables.drop_scope();
-                            return Ok(event); // Propagate control flow events
-                        }
-                    }
-                }
-                self.variables.drop_scope();
-                Ok(StatementEvent::None)
-            }
+            Statement::StatementBlock(stmtblock) => self.run_block(stmtblock),
             Statement::If { condition, on_true } => {
                 let VmValue::ValuePrimitive(ValuePrimitive::Bool(x)) =
                     self.evaluate_expr(condition)?
@@ -307,32 +300,61 @@ impl<Backend: VmBackend> Vm<Backend> {
             Statement::Continue => Ok(StatementEvent::Continue),
             Statement::Break => Ok(StatementEvent::Break),
             Statement::Loop { statements } => {
-                loop {
-                    for statement in statements.statements.iter() {
-                        match self.execute_statement(statement)? {
-                            StatementEvent::None => {},
-                            StatementEvent::Break => return Ok(StatementEvent::None), // Break out of loop
-                            StatementEvent::Continue => break, // Continue to next iteration
-                            StatementEvent::Return(value) => return Ok(StatementEvent::Return(value)), // Propagate return
+                self.create_scope();
+                let mut inside_loop = || {
+                    loop {
+                        for statement in statements.statements.iter() {
+                            match self.execute_statement(statement)? {
+                                StatementEvent::None => {}
+                                StatementEvent::Break => return Ok(StatementEvent::None), // Break out of loop
+                                StatementEvent::Continue => break, // Continue to next iteration
+                                StatementEvent::Return(value) => {
+                                    return Ok(StatementEvent::Return(value));
+                                } // Propagate return
+                            }
                         }
                     }
-                }
-            },
+                };
+                let output=inside_loop();
+                self.drop_scope();
+                output
+            }
         }
     }
 
     pub(crate) fn print_stack(&self) {
-        println!("{}",self.variables);
+        println!("{}", self.variables);
     }
 
     pub fn insert_variable_check(
-            &mut self,
-            identifier: Identifier,
-            value: VmValue,
-            expected_type_id: TypeId,
-            type_container: &mut crate::types::TypeContainer,
-        ) -> Result<(), VmError> {
-        self.variables.insert_variable_check(identifier, value, expected_type_id, type_container)
+        &mut self,
+        identifier: Identifier,
+        value: VmValue,
+        expected_type_id: TypeId,
+        type_container: &mut crate::types::TypeContainer,
+    ) -> Result<(), VmError> {
+        self.variables
+            .insert_variable_check(identifier, value, expected_type_id, type_container)
+    }
+
+    fn run_block(
+        &mut self,
+        stmtblock: &StatementBlock<&crate::token::TokenSlice<'_>>,
+    ) -> Result<StatementEvent, VmError> {
+        self.variables.create_scope();
+        for stmt in stmtblock.statements.iter() {
+            self.execute_statement(stmt)?;
+        }
+        self.variables.drop_scope();
+        Ok(StatementEvent::None)
+    }
+
+    fn create_scope(&mut self) {
+        self.variables.create_scope();
+    }
+
+    fn drop_scope(&mut self) {
+        self.variables.drop_scope();
     }
 }
 

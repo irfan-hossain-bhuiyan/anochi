@@ -100,7 +100,7 @@ impl<'a> Parser<'a> {
         Ok(self.make_stat_node(stmt, start))
     }
 
-    // Logical OR: expr || expr
+    // Logical OR: expr or expr
     fn parse_logical_or(&mut self) -> ReExpNode<'a> {
         let start = self.current;
         let mut node = self.parse_logical_and()?;
@@ -207,7 +207,7 @@ impl<'a> Parser<'a> {
                     }
                 }
                 let _ = match_token_or_err!(self, TokenType::RightParen)?;
-                let _ = match_token_or_err!(self,TokenType::Semicolon)?;
+                let _ = match_token_or_err!(self, TokenType::Semicolon)?;
                 let stmt = Statement::debug(expr_vec);
                 Ok(self.make_stat_node(stmt, start))
             }
@@ -226,7 +226,7 @@ impl<'a> Parser<'a> {
                     return Err(StatementParseError::BreakOutsideLoop.into());
                 }
                 self.advance();
-                match_token_or_err!(self,TokenType::Semicolon)?;
+                match_token_or_err!(self, TokenType::Semicolon)?;
                 let stmt = Statement::Break;
                 Ok(self.make_stat_node(stmt, start))
             }
@@ -236,7 +236,7 @@ impl<'a> Parser<'a> {
                 }
                 self.advance();
                 let stmt = Statement::Continue;
-                match_token_or_err!(self,TokenType::Semicolon)?;
+                match_token_or_err!(self, TokenType::Semicolon)?;
                 Ok(self.make_stat_node(stmt, start))
             }
             _ => Err(StatementParseError::NoStatement.into()),
@@ -469,14 +469,14 @@ impl<'a> Parser<'a> {
     }
 
     pub(crate) fn parse_statements(&mut self) -> ReStatNode<'a> {
-        let start=self.current;
-        let mut vec=Vec::new();
+        let start = self.current;
+        let mut vec = Vec::new();
         while !self.is_at_end() {
             let stmt = self.parse_statement()?;
             vec.push(stmt);
         }
-        let stmt=Statement::Statements(StatementBlock::new(vec));
-        let stmt=self.make_stat_node(stmt, start);
+        let stmt = Statement::Statements(StatementBlock::new(vec));
+        let stmt = self.make_stat_node(stmt, start);
         Ok(stmt)
     }
 }

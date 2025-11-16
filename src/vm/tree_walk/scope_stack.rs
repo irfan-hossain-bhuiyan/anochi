@@ -70,11 +70,11 @@ impl VariableEntry {
         }
     }
 }
-
+type ScopeValues=HashMap<Identifier,VariableEntry>;
 /// Stack-based scope management for variables
 #[derive(Debug)]
 pub struct ScopeStack {
-    scopes: VecDeque<HashMap<Identifier, VariableEntry>>,
+    scopes: VecDeque<ScopeValues>,
 }
 
 impl ScopeStack {
@@ -189,6 +189,14 @@ impl ScopeStack {
     /// Checks if variable exists in any scope
     pub fn has_variable(&self, identifier: &Identifier) -> bool {
         self.get_variable(identifier).is_some()
+    }
+    /// Check if variable exists in current scope
+    pub(crate) fn has_variable_current(&self, target: &Identifier) -> bool {
+        self.current_scope().get(target).is_some()
+    }
+
+    fn current_scope(&self) -> &ScopeValues {
+        self.scopes.front().unwrap()
     }
 }
 

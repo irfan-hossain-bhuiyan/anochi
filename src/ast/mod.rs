@@ -16,6 +16,7 @@ use std::fmt::{self};
 
 use crate::prelude::Mappable;
 pub use crate::token::token_type::Identifier;
+use crate::vm::tree_walk::Vm;
 pub type IdentifierMap<T> = HashMap<Identifier, T>;
 //pub type IdentifierToValue = IdentifierMap<VmValue>;
 pub type IdentifierToExp<T> = IdentifierMap<ExprNode<T>>;
