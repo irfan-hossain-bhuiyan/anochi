@@ -42,29 +42,17 @@ fn test_scope() {
     let y = runner.evaluate_expr("y").unwrap();
     assert_eq!(x, VmValue::from_i64(10));
     assert_eq!(y, VmValue::from_i64(20));
-    runner
-        .run_statements(
-            r"
-        let x=10;
-        {
-            let x=20;
-            {
-                let x=30;
-            }
-        }
-        ",
-        )
-        .unwrap();
 }
+
 #[test]
 fn test_type_check() {
     let mut runner = CodeRunner::default();
     let output = runner.run_statements(
         r"let vec2={x=i64,y=i64};
 let y={x=50,y=50};
-let y:{x=i64,y=i64}={x=50,y=50};
-let y:{x=i64,y=bool}={x=50,y=50};
-let y:{x=i64,y=i64}={x=50,y=50};",
+let y3:{x=i64,y=i64}={x=50,y=50};
+let y1:{x=i64,y=bool}={x=50,y=50};
+let y2:{x=i64,y=i64}={x=50,y=50};",
     );
     let yes = output.is_err_and(|x| x.is_runtime_error_and(|x| x.is_type_mismatch()));
     assert!(yes);

@@ -291,33 +291,32 @@ impl<Backend: VmBackend> Vm<Backend> {
                 }
             }
             Statement::Debug { expr_vec } => {
-                for expr in expr_vec.iter() {
-                    let expr = self.evaluate_expr(expr)?;
-                    self.backend.debug_print(&expr.to_string()).unwrap();
+                if expr_vec.is_empty() {
+                    self.print_stack();
+                } else {
+                    for expr in expr_vec.iter() {
+                        let expr = self.evaluate_expr(expr)?;
+                        self.backend.debug_print(&expr.to_string()).unwrap();
+                    }
                 }
                 Ok(StatementEvent::None)
             }
             Statement::Continue => Ok(StatementEvent::Continue),
             Statement::Break => Ok(StatementEvent::Break),
             Statement::Loop { statements } => {
-                self.create_scope();
-                let mut inside_loop = || {
-                    loop {
-                        for statement in statements.statements.iter() {
-                            match self.execute_statement(statement)? {
-                                StatementEvent::None => {}
-                                StatementEvent::Break => return Ok(StatementEvent::None), // Break out of loop
-                                StatementEvent::Continue => break, // Continue to next iteration
-                                StatementEvent::Return(value) => {
-                                    return Ok(StatementEvent::Return(value));
-                                } // Propagate return
-                            }
+                loop {
+                    match self.run_block(statements)? {
+                        StatementEvent::None => {}
+                        StatementEvent::Break => {
+                            break;
                         }
+                        StatementEvent::Continue => {
+                            continue;
+                        }
+                        StatementEvent::Return(x) => return Ok(StatementEvent::Return(x)),
                     }
-                };
-                let output=inside_loop();
-                self.drop_scope();
-                output
+                }
+                Ok(StatementEvent::None)
             }
         }
     }
@@ -341,12 +340,20 @@ impl<Backend: VmBackend> Vm<Backend> {
         &mut self,
         stmtblock: &StatementBlock<&crate::token::TokenSlice<'_>>,
     ) -> Result<StatementEvent, VmError> {
-        self.variables.create_scope();
-        for stmt in stmtblock.statements.iter() {
-            self.execute_statement(stmt)?;
-        }
-        self.variables.drop_scope();
-        Ok(StatementEvent::None)
+        self.create_scope();
+        let mut inner_code = || {
+            for stmt in stmtblock.statements.iter() {
+                let output = self.execute_statement(stmt)?;
+                match output {
+                    StatementEvent::None => {}
+                    _ => return Ok(output),
+                }
+            }
+            Ok(StatementEvent::None)
+        };
+        let output = inner_code();
+        self.drop_scope();
+        output
     }
 
     fn create_scope(&mut self) {

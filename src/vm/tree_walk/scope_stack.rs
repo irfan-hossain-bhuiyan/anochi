@@ -196,7 +196,7 @@ impl ScopeStack {
     }
 
     fn current_scope(&self) -> &ScopeValues {
-        self.scopes.front().unwrap()
+        self.scopes.back().unwrap()
     }
 }
 
