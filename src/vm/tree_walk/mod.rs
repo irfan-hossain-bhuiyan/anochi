@@ -7,9 +7,7 @@ pub use vm_value::{StructValue, ValuePrimitive, VmValue};
 use crate::{
     ast::{
         Expression, ExpressionNode, Identifier, Literal, Statement, StatementBlock, StatementNode,
-    },
-    types::{TypeContainer, TypeId, UnifiedTypeDefinition},
-    vm::backend::{IoBackend, VmBackend},
+    }, prelude::IndexCons, types::{TypeContainer, TypeId, UnifiedTypeDefinition}, vm::{backend::{IoBackend, VmBackend}, tree_walk::vm_value::{FuncId, VmFunc}}
 };
 
 use thiserror::Error;
@@ -35,6 +33,10 @@ pub enum VmError {
     InvalidTypeDefination,
     #[error("Having same name in scope")]
     SameVariableName,
+    #[error("Calling a non funciton with function")]
+    CallingNonFunc,
+    #[error("Function input parameter is not struct.")]
+    FuncInvalidInput,
 }
 
 impl VmError {
@@ -47,9 +49,13 @@ impl VmError {
     }
 }
 
+
 /// Result type for VM evaluation operations.
-pub type VmResult = Result<VmValue, VmError>;
+pub type VmExprResult = Result<VmValue, VmError>;
 pub type VmResultMut<'a> = Result<&'a mut VmValue, VmError>;
+
+/// Result type for statement execution
+pub type StatementResult = Result<StatementEvent, VmError>;
 
 /// Statement execution events for control flow
 #[derive(Debug, Clone, PartialEq)]
@@ -60,8 +66,7 @@ pub enum StatementEvent {
     None,
 }
 
-/// Result type for statement execution
-pub type StatementResult = Result<StatementEvent, VmError>;
+pub type FunctionContainer = IndexCons<vm_value::VmFunc>;
 /// Variable entry storing both value and type information
 mod scope_stack;
 use scope_stack::ScopeStack;
@@ -69,6 +74,7 @@ use scope_stack::ScopeStack;
 pub struct Vm<Backend = IoBackend> {
     variables: ScopeStack,
     types: TypeContainer,
+    funcs: FunctionContainer,
     backend: Backend,
 }
 
@@ -80,6 +86,7 @@ impl<Backend: VmBackend> Vm<Backend> {
         let mut vm = Self {
             variables: ScopeStack::new(),
             types: crate::types::TypeContainer::new(),
+            funcs: FunctionContainer::new(),
             backend,
         };
         vm.load_builtin_types();
@@ -114,7 +121,7 @@ impl<Backend: VmBackend> Vm<Backend> {
         }
         Ok(())
     }
-    pub fn evaluate_expr(&mut self, expression_node: &ExpNode) -> VmResult {
+    pub fn evaluate_expr(&mut self, expression_node: &ExpNode) -> VmExprResult {
         let expression = &expression_node.exp;
         match expression {
             Expression::Literal(literal) => match literal {
@@ -186,12 +193,34 @@ impl<Backend: VmBackend> Vm<Backend> {
                 Ok(VmValue::Type(type_id))
             }
             Expression::MemberAccess {
-                object: _,
-                member: _,
+                object,
+                member,
             } => todo!(),
-            Expression::Function { .. } => todo!(),
+            Expression::Function { input, output, statements } => {
+                let input=self.evaluate_expr(&input)?;
+                let input_type=self.to_type(input)?;
+                let output_type=match output {
+                    None=>None,
+                    Some(x)=>{
+                        let output=self.evaluate_expr(&x)?;
+                        let output_type=self.to_type(output)?;
+                        Some(output_type)
+                    }
+                };
+                let func=VmFunc::new_checked(input_type,output_type,*statements.clone(),&self.types)
+                    .ok_or(VmError::FuncInvalidInput)?;
+                let func_id=self.add_function(func);
+                Ok(VmValue::from_func(func_id))
+            },
+            Expression::FnCall { caller, callee }=>{
+                let caller=self.evaluate_expr(&caller)?;
+                let callee=self.evaluate_expr(&callee)?;
+                let VmValue::Func(func_id)=caller else{return Err(VmError::CallingNonFunc);};
+                self.execute_function(&func_id, callee)
+            }
         }
     }
+
     fn to_type(&mut self, value: VmValue) -> Result<TypeId, VmError> {
         value
             .into_type_id(&mut self.types)
@@ -362,6 +391,35 @@ impl<Backend: VmBackend> Vm<Backend> {
 
     fn drop_scope(&mut self) {
         self.variables.drop_scope();
+    }
+
+    fn add_function(&mut self, func: VmFunc) -> FuncId {
+        self.funcs.push(func)
+    }
+    /// It type check the function that is currently passed,and execute it.
+    fn execute_function(&mut self,func_id:&FuncId,inputs:VmValue)->VmExprResult{
+        // function type checking
+        let func:&VmFunc=self.get_func(func_id);
+        self.type_match(func.get_param(),inputs)?;
+        
+        self.create_scope();
+        let inside_fn=||{
+            self.extract_struct(inputs)?;
+            let func=self.get_func(func_id);
+            
+        };
+        self.drop_scope();
+    }
+    fn get_func(&self,func_id:&FuncId)->&VmFunc{
+        self.funcs.get(func_id).unwrap()
+    }
+    fn get_func_mut(&mut self,func_id:&FuncId)->&mut VmFunc{
+        self.funcs.get_mut(func_id).unwrap()
+    }
+
+    fn type_match(&mut self, r#type: TypeId, object: VmValue) -> Result<(),VmError> {
+        if self.to_type(object)?==r#type {return Ok(());}
+        Err(VmError::TypeMismatch(""))
     }
 }
 

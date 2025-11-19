@@ -39,6 +39,65 @@ impl<T:?Sized> Clone for HashPtr<T>{
 }
 impl<T:?Sized> Copy for HashPtr<T>{}
 
+#[derive(Debug, Clone,PartialEq, Eq)]
+pub struct IndexPtr<T> {
+    index: usize,
+    _marker: std::marker::PhantomData<T>,
+}
+
+impl<T> IndexPtr<T> {
+    pub fn as_index(&self) -> usize {
+        self.index
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct IndexCons<T> {
+    storage: Vec<T>,
+}
+
+impl<T> IndexCons<T> {
+    pub fn new() -> Self {
+        IndexCons {
+            storage: Vec::new(),
+        }
+    }
+
+    pub fn push(&mut self, obj: T) -> IndexPtr<T> {
+        self.storage.push(obj);
+        IndexPtr {
+            index: self.storage.len() - 1,
+            _marker: std::marker::PhantomData,
+        }
+    }
+
+    pub fn get(&self, index_ptr: &IndexPtr<T>) -> Option<&T> {
+        self.storage.get(index_ptr.index)
+    }
+
+    pub fn get_mut(&mut self, index_ptr: &IndexPtr<T>) -> Option<&mut T> {
+        self.storage.get_mut(index_ptr.index)
+    }
+
+    pub fn len(&self) -> usize {
+        self.storage.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.storage.is_empty()
+    }
+
+    pub fn clear(&mut self) {
+        self.storage.clear();
+    }
+}
+
+impl<T> Default for IndexCons<T> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct HashCons<T: Eq + Hash + Clone> {
     /// Maps hash values to their corresponding objects
@@ -154,3 +213,4 @@ impl<K: Hash + Eq,T,U> Mappable<T,U> for HashMap<K,T>{
         self.into_iter().map(|(key,data)|(key,f(data))).collect()
     }
 }
+

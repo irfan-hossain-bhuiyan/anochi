@@ -94,7 +94,11 @@ impl From<TypeGeneric<Self>> for UnifiedTypeDefinition {
 /// OptimizedTypeDefinition uses only TypeId references for efficient storage
 #[derive(Debug,Ord,PartialEq, PartialOrd,Hash,Eq,Clone)]
 pub struct OptimizedTypeDefinition(TypeGeneric<TypeId>);
-
+impl OptimizedTypeDefinition {
+    pub fn is_product(&self)->bool{
+        self.0.as_product().is_some()
+    }
+}
 
 
 /// TypeContainer provides optimization and deduplication for types.
@@ -128,7 +132,7 @@ impl TypeContainer {
         };
         self.store_type(optimized)
     }
-    fn get_type(&self, hash_ptr: &TypeId) -> Option<&OptimizedTypeDefinition> {
+    pub fn get_type(&self, hash_ptr: &TypeId) -> Option<&OptimizedTypeDefinition> {
         self.storage.get(hash_ptr)
     }
     pub fn get_type_def(&self, hash_ptr: &TypeId) -> Option<TypeDefinition> {

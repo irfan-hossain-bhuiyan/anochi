@@ -58,9 +58,8 @@ impl<'a> Parser<'a> {
     // Function ::= "|" Identifier "|" ("->" Expression)? "{" Statement "}"
     fn parse_function(&mut self) -> ReExpNode<'a> {
         let start = self.current;
-        match_token_or_err!(self, TokenType::Pipe)?;
+        match_token_or_err!(self, TokenType::Keyword(Keyword::Fn))?;
         let input = self.parse_expr()?;
-        match_token_or_err!(self, TokenType::Pipe)?;
         let output = if match_token!(self, TokenType::Arrow).is_err() {
             None
         } else {
@@ -360,7 +359,12 @@ impl<'a> Parser<'a> {
     fn parse_member_access(&mut self) -> ReExpNode<'a> {
         let start = self.current;
         let mut node = self.parse_primary()?;
-
+        if match_token!(self,TokenType::Bang).is_ok(){
+            let expr=self.parse_expression()?;
+            let fn_call=Expression::fn_call(node,expr);
+            let fn_call=self.make_expr_node(fn_call,start);
+            return Ok(fn_call)
+        }
         while match_token!(self, TokenType::Dot).is_ok() {
             let TokenType::Identifier(member) =
                 match_token_or_err!(self, TokenType::Identifier(_))?
@@ -378,7 +382,6 @@ impl<'a> Parser<'a> {
     fn parse_primary(&mut self) -> ReExpNode<'a> {
         let start = self.current;
         match self.peek_type().ok_or(ParserError::NO_EXPN_FOUND)? {
-            TokenType::Pipe => self.parse_function(),
             TokenType::LeftBrace => self.parse_struct(),
             TokenType::LeftParen => {
                 self.advance(); // consume '('
@@ -391,7 +394,8 @@ impl<'a> Parser<'a> {
                         TokenType::RightParen,
                     ))
                 }
-            }
+            },
+            TokenType::Keyword(Keyword::Fn) => self.parse_function(),
             any => {
                 let expression =
                     Expression::from_token_type(any.clone()).ok_or(ParserError::NO_EXPN_FOUND)?;

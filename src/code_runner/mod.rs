@@ -14,7 +14,6 @@ use crate::{
 };
 use std::fmt;
 use thiserror::Error;
-
 /// Errors that can occur during code execution.
 #[derive(Error, Debug)]
 pub enum CodeRunnerError {

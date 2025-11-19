@@ -6,7 +6,7 @@ use thiserror::Error;
 use crate::{
     ast::Identifier,
     types::{TypeContainer, TypeId},
-    vm::tree_walk::{VmError, VmResult, VmValue},
+    vm::tree_walk::{VmError, VmExprResult, VmValue},
 };
 
 #[derive(Debug,Clone,Error)]
@@ -180,7 +180,7 @@ impl ScopeStack {
         }
         None
     }
-    pub fn get_variable_or_err(&self, identifier: &Identifier) -> VmResult {
+    pub fn get_variable_or_err(&self, identifier: &Identifier) -> VmExprResult {
         self.get_variable(identifier)
             .cloned()
             .ok_or(VmError::UndefinedIdentifier(identifier.clone()))

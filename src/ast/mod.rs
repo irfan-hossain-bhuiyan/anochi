@@ -233,6 +233,14 @@ impl<T,U> Mappable<T,U> for Expression<T> {
                     statements: Box::new(mapped_statements),
                 }
             },
+            Self::FnCall { caller, callee }=>{
+                let mapped_caller = caller.inner_map(f);
+                let mapped_callee = callee.inner_map(f);
+                Self::Mapped::FnCall {
+                    caller: Box::new(mapped_caller),
+                    callee: Box::new(mapped_callee),
+                }
+            }
         }
     }
 }
@@ -288,6 +296,10 @@ pub enum Expression<T> {
         input: Box<ExprNode<T>>,
         output: Option<Box<ExprNode<T>>>,
         statements: Box<StatNode<T>>,
+    },
+    FnCall {
+        caller:Box<ExprNode<T>>,
+        callee:Box<ExprNode<T>>,
     }
 }
 
@@ -371,10 +383,15 @@ impl<T> Expression<T> {
     pub fn string(value: String) -> Self {
         Expression::Literal(Literal::String(value))
     }
-    pub fn identifier(name: Identifier) -> Self {
+pub fn identifier(name: Identifier) -> Self {
         Expression::Literal(Literal::Identifier(name))
     }
-
+    pub fn fn_call(caller: ExprNode<T>, callee:ExprNode<T>) -> Self {
+        Expression::FnCall {
+            caller: Box::new(caller.into()),
+            callee:Box::new(callee.into()),
+        }
+    }
     pub fn binary(
         left: impl Into<ExprNode<T>>,
         operator: BinaryOperator,
@@ -461,6 +478,7 @@ impl<T> Expression<T> {
             exp: self,
         }
     }
+
 }
 
 #[derive(Debug, Clone, PartialEq)]

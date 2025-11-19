@@ -1,4 +1,5 @@
-use crate::ast::{BinaryOperator, Identifier, Literal, UnaryOperator};
+use crate::ast::{BinaryOperator, Identifier, Literal, StatNode, UnaryOperator};
+use crate::prelude::IndexPtr;
 use crate::types::{
     BuiltinKind, TypeContainer, TypeDefinition, TypeGeneric, TypeId, UnifiedTypeDefinition,
 };
@@ -9,6 +10,41 @@ use std::{collections::HashMap, fmt::Display};
 mod function;
 #[cfg(test)]
 mod tests;
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct VmFunc {
+    param: TypeId,
+    output: Option<TypeId>,
+    body: StatNode<()>,
+}
+
+impl VmFunc {
+    pub fn new_checked<T>(
+        param: TypeId,
+        output: Option<TypeId>,
+        body: StatNode<T>,
+        type_container: &TypeContainer,
+    ) -> Option<Self> {
+        if !type_container.get_type(&param)?.is_product() {
+            return None;
+        }
+        Some(Self {
+            param,
+            output,
+            body: body.to_null(),
+        })
+    }
+    pub fn new<T>(param: TypeId,
+        output: Option<TypeId>,
+        body: StatNode<T>,
+        type_container: &TypeContainer,
+    )->Self{
+        Self::new_checked(param, output, body, type_container).unwrap()
+    }
+    pub fn get_param(&self) -> TypeId {
+        self.param
+    }
+}
+pub type FuncId = IndexPtr<VmFunc>;
 /// Primitive values that can be stored in the VM
 #[derive(Debug, Clone, PartialEq)]
 pub enum ValuePrimitive {
@@ -72,6 +108,7 @@ pub enum VmValue {
     ValuePrimitive(ValuePrimitive),
     Product(StructValue),
     Type(TypeId),
+    Func(FuncId),
 }
 
 impl Display for VmValue {
@@ -92,6 +129,7 @@ impl Display for VmValue {
                 Ok(())
             }
             Self::Type(_) => write!(f, "Type"),
+            Self::Func(fun) => write!(f, "Func({fun:?})"),
         }
     }
 }
@@ -107,7 +145,6 @@ impl From<Literal> for VmValue {
         }
     }
 }
-
 impl VmValue {
     /// Create VmValue from i64
     pub fn from_i64(value: i64) -> Self {
@@ -168,6 +205,7 @@ impl VmValue {
                 // A Type value represents a type expression
                 Some(UnifiedTypeDefinition::TypeId(type_id))
             }
+            VmValue::Func(func) => None,
         }
     }
     pub fn into_type_definition(self, container: &mut TypeContainer) -> Option<TypeDefinition> {
@@ -207,7 +245,7 @@ impl VmValue {
                         VmValue::Type(_) => {
                             return UnifiedTypeDefinition::builtin(BuiltinKind::Type);
                         }
-                        VmValue::ValuePrimitive(_) | VmValue::Product(_) => {}
+                        VmValue::ValuePrimitive(_) | VmValue::Product(_) | VmValue::Func(_) => {}
                     }
                 }
                 // Create product type from field types
@@ -228,6 +266,10 @@ impl VmValue {
         let id = self.get_type_id_of_value(type_container);
         id == expected_type_id
     }
+
+    pub(crate) fn from_func(func: FuncId) -> Self {
+        Self::Func(func)
+    }
 }
 
 use super::*;
@@ -244,7 +286,7 @@ use super::*;
 /// # Returns
 ///
 /// A `VmResult` containing the computed result or an error.
-pub fn evaluate_unary_op(operator: &UnaryOperator, operand: &VmValue) -> VmResult {
+pub fn evaluate_unary_op(operator: &UnaryOperator, operand: &VmValue) -> VmExprResult {
     match (operator, operand) {
         (UnaryOperator::Minus, VmValue::ValuePrimitive(ValuePrimitive::Integer(i))) => {
             Ok(VmValue::ValuePrimitive(ValuePrimitive::Integer(-i)))
@@ -279,7 +321,11 @@ pub fn evaluate_unary_op(operator: &UnaryOperator, operand: &VmValue) -> VmResul
 /// # Returns
 ///
 /// A `VmResult` containing the computed result or an error.
-pub fn evaluate_binary_op(left: &VmValue, operator: &BinaryOperator, right: &VmValue) -> VmResult {
+pub fn evaluate_binary_op(
+    left: &VmValue,
+    operator: &BinaryOperator,
+    right: &VmValue,
+) -> VmExprResult {
     match (left, right) {
         // Bool operations
         (
