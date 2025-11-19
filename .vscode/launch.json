@@ -5,7 +5,7 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "type": "vscode-chat-replay",
+            "type": "lldb",
             "request": "launch",
             "name": "Debug Chat Replay",
             "program": "${file}",

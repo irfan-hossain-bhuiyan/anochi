@@ -7,7 +7,13 @@ pub use vm_value::{StructValue, ValuePrimitive, VmValue};
 use crate::{
     ast::{
         Expression, ExpressionNode, Identifier, Literal, Statement, StatementBlock, StatementNode,
-    }, prelude::IndexCons, types::{TypeContainer, TypeId, UnifiedTypeDefinition}, vm::{backend::{IoBackend, VmBackend}, tree_walk::vm_value::{FuncId, VmFunc}}
+    },
+    prelude::IndexCons,
+    types::{TypeContainer, TypeId, UnifiedTypeDefinition},
+    vm::{
+        backend::{IoBackend, VmBackend},
+        tree_walk::vm_value::{FuncId, VmFunc},
+    },
 };
 
 use thiserror::Error;
@@ -48,7 +54,6 @@ impl VmError {
         matches!(self, Self::TypeMismatch(..))
     }
 }
-
 
 /// Result type for VM evaluation operations.
 pub type VmExprResult = Result<VmValue, VmError>;
@@ -192,30 +197,34 @@ impl<Backend: VmBackend> Vm<Backend> {
                 let type_id = self.types.store_unified_type(unified);
                 Ok(VmValue::Type(type_id))
             }
-            Expression::MemberAccess {
-                object,
-                member,
-            } => todo!(),
-            Expression::Function { input, output, statements } => {
-                let input=self.evaluate_expr(&input)?;
-                let input_type=self.to_type(input)?;
-                let output_type=match output {
-                    None=>None,
-                    Some(x)=>{
-                        let output=self.evaluate_expr(&x)?;
-                        let output_type=self.to_type(output)?;
+            Expression::MemberAccess { object, member } => todo!(),
+            Expression::Function {
+                input,
+                output,
+                statements,
+            } => {
+                let input = self.evaluate_expr(&input)?;
+                let input_type = self.to_type(input)?;
+                let output_type = match output {
+                    None => None,
+                    Some(x) => {
+                        let output = self.evaluate_expr(&x)?;
+                        let output_type = self.to_type(output)?;
                         Some(output_type)
                     }
                 };
-                let func=VmFunc::new_checked(input_type,output_type,*statements.clone(),&self.types)
-                    .ok_or(VmError::FuncInvalidInput)?;
-                let func_id=self.add_function(func);
+                let func =
+                    VmFunc::new_checked(input_type, output_type, *statements.clone(), &self.types)
+                        .ok_or(VmError::FuncInvalidInput)?;
+                let func_id = self.add_function(func);
                 Ok(VmValue::from_func(func_id))
-            },
-            Expression::FnCall { caller, callee }=>{
-                let caller=self.evaluate_expr(&caller)?;
-                let callee=self.evaluate_expr(&callee)?;
-                let VmValue::Func(func_id)=caller else{return Err(VmError::CallingNonFunc);};
+            }
+            Expression::FnCall { caller, callee } => {
+                let caller = self.evaluate_expr(&caller)?;
+                let callee = self.evaluate_expr(&callee)?;
+                let VmValue::Func(func_id) = caller else {
+                    return Err(VmError::CallingNonFunc);
+                };
                 self.execute_function(&func_id, callee)
             }
         }
@@ -397,28 +406,30 @@ impl<Backend: VmBackend> Vm<Backend> {
         self.funcs.push(func)
     }
     /// It type check the function that is currently passed,and execute it.
-    fn execute_function(&mut self,func_id:&FuncId,inputs:VmValue)->VmExprResult{
+    fn execute_function(&mut self, func_id: &FuncId, inputs: VmValue) -> VmExprResult {
         // function type checking
-        let func:&VmFunc=self.get_func(func_id);
-        self.type_match(func.get_param(),inputs)?;
-        
+        let func: &VmFunc = self.get_func(func_id);
+        self.type_match(func.get_param(), inputs)?;
+        let inputs=inputs.as_product().unwrap();
         self.create_scope();
-        let inside_fn=||{
+        let inside_fn = || {
             self.extract_struct(inputs)?;
-            let func=self.get_func(func_id);
-            
+            let func = self.get_func(func_id);
+            self.execute_statement(func.get_statement())
         };
         self.drop_scope();
     }
-    fn get_func(&self,func_id:&FuncId)->&VmFunc{
+    fn get_func(&self, func_id: &FuncId) -> &VmFunc {
         self.funcs.get(func_id).unwrap()
     }
-    fn get_func_mut(&mut self,func_id:&FuncId)->&mut VmFunc{
+    fn get_func_mut(&mut self, func_id: &FuncId) -> &mut VmFunc {
         self.funcs.get_mut(func_id).unwrap()
     }
 
-    fn type_match(&mut self, r#type: TypeId, object: VmValue) -> Result<(),VmError> {
-        if self.to_type(object)?==r#type {return Ok(());}
+    fn type_match(&mut self, r#type: TypeId, object: VmValue) -> Result<(), VmError> {
+        if self.to_type(object)? == r#type {
+            return Ok(());
+        }
         Err(VmError::TypeMismatch(""))
     }
 }

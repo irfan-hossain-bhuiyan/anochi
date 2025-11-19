@@ -43,6 +43,17 @@ impl VmFunc {
     pub fn get_param(&self) -> TypeId {
         self.param
     }
+    pub fn update_output_type(&mut self,output:TypeId)->Result<(), VmError>{
+        match self.output {
+            None=> {self.output=Some(output);Ok(())},
+            Some(x) if x==output=>{self.output=Some(output);Ok(())},
+            _ =>{return Err(VmError::TypeMismatch(""))}
+        }
+    }
+
+    pub(crate) fn get_statement(&self) -> &StatNode<()> {
+        &self.body
+    }
 }
 pub type FuncId = IndexPtr<VmFunc>;
 /// Primitive values that can be stored in the VM
@@ -259,6 +270,7 @@ impl VmValue {
                     fields: type_fields,
                 })
             }
+            VmValue::Func(func)=>UnifiedTypeDefinition::builtin(BuiltinKind::Type),
         }
     }
 
@@ -269,6 +281,13 @@ impl VmValue {
 
     pub(crate) fn from_func(func: FuncId) -> Self {
         Self::Func(func)
+    }
+
+    pub(crate) fn as_product(self) -> Option<StructValue> {
+        match self {
+            VmValue::Product(product) => Some(product),
+            _ => None,
+        }
     }
 }
 

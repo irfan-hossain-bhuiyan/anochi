@@ -27,9 +27,10 @@
     - A way to fix this issue,Iis to add return type in the execute statement if break or continue is called,the loop will evaluate the decision and check if it is okay.to break or continue.
 
 ## Doing:
+- [ ] each code get on two phases,checking and running phase,in checking phase,their will be type checking,which will validate if all the code written is right,and the error will be given with VmError,than in runtime error,that think will be managed later,as a compiled binary,itis different and can be used without using file
 - [ ] create function and call them,dynamically for now.
-    - [ ] Add function type in VmValue,Let's make it id for now.
-    - [ ] 
+    - [x] Add function type in VmValue,Let's make it id for now.
+    - [ ] Have two types of data type,one is runtime,one is comptime,the comptime will be evaluated  
 - [ ] add struct destructuring,a operation that destrucure the struct and push it to scope
 - [ ] add struct parsing so now {a,b=10,c} are allowed.
     - this will help for struct like {self,a,b} in function input.
