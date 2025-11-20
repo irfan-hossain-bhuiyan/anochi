@@ -3,12 +3,13 @@ use std::fmt::Display;
 
 use thiserror::Error;
 
+use crate::vm::tree_walk::VmErrorTypeType;
 use crate::{
     ast::Identifier,
     types::{TypeContainer, TypeId},
-    vm::tree_walk::{VmError, VmExprResult, VmValue},
+    vm::tree_walk::{VmErrorType, VmValue},
 };
-
+type ExprResult=Result<VmValue,VmErrorTypeType>;
 #[derive(Debug,Clone,Error)]
 enum Error{
     #[error("You can't mutate a constant variable")]
@@ -119,9 +120,9 @@ impl ScopeStack {
         value: VmValue,
         expected_type_id: TypeId,
         type_container: &mut crate::types::TypeContainer,
-    ) -> Result<(), VmError> {
+    ) -> Result<(), VmErrorTypeType> {
         let Some(entry) = VariableEntry::new_checked(value, expected_type_id, VariableState::Immutable, type_container) else {
-            return Err(VmError::TypeMismatch("Value type does not match expected type"));
+            return Err(VmErrorTypeType::TypeMismatch("Value type does not match expected type"));
         };
         
         if let Some(current_scope) = self.scopes.back_mut() {
@@ -136,17 +137,17 @@ impl ScopeStack {
         identifier: &Identifier,
         value: VmValue,
         type_container: &mut crate::types::TypeContainer,
-    ) -> Result<(), VmError> {
+    ) -> Result<(), VmErrorType> {
         // First, find the existing variable to get its expected type
         let Some(existing_entry) = self.get_variable_entry(identifier) else {
-            return Err(VmError::UndefinedIdentifier(identifier.clone()));
+            return Err(VmErrorType::UndefinedIdentifier(identifier.clone()));
         };
         let expected_type_id = existing_entry.type_id;
 
         // Check if the new value matches the expected type
         let value_type_id = value.get_type_id_of_value(type_container);
         if value_type_id != expected_type_id {
-            return Err(VmError::TypeMismatch(
+            return Err(VmErrorType::TypeMismatch(
                 "Value type does not match variable type",
             ));
         }
@@ -158,7 +159,7 @@ impl ScopeStack {
                 return Ok(());
             }
         }
-        Err(VmError::UndefinedIdentifier(identifier.clone()))
+        Err(VmErrorType::UndefinedIdentifier(identifier.clone()))
     }
 
     /// Gets a variable by searching from current scope to global
@@ -180,10 +181,10 @@ impl ScopeStack {
         }
         None
     }
-    pub fn get_variable_or_err(&self, identifier: &Identifier) -> VmExprResult {
+    pub fn get_variable_or_err(&self, identifier: &Identifier) -> ExprResult {
         self.get_variable(identifier)
             .cloned()
-            .ok_or(VmError::UndefinedIdentifier(identifier.clone()))
+            .ok_or(VmErrorType::UndefinedIdentifier(identifier.clone()))
     }
 
     /// Checks if variable exists in any scope

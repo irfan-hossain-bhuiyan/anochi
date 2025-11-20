@@ -43,11 +43,11 @@ impl VmFunc {
     pub fn get_param(&self) -> TypeId {
         self.param
     }
-    pub fn update_output_type(&mut self,output:TypeId)->Result<(), VmError>{
+    pub fn update_output_type(&mut self,output:TypeId)->Result<(), VmErrorType>{
         match self.output {
             None=> {self.output=Some(output);Ok(())},
             Some(x) if x==output=>{self.output=Some(output);Ok(())},
-            _ =>{return Err(VmError::TypeMismatch(""))}
+            _ =>{return Err(VmErrorType::TypeMismatch(""))}
         }
     }
 
@@ -305,7 +305,7 @@ use super::*;
 /// # Returns
 ///
 /// A `VmResult` containing the computed result or an error.
-pub fn evaluate_unary_op(operator: &UnaryOperator, operand: &VmValue) -> VmExprResult {
+pub fn evaluate_unary_op(operator: &UnaryOperator, operand: &VmValue) -> Result<VmValue, VmErrorType> {
     match (operator, operand) {
         (UnaryOperator::Minus, VmValue::ValuePrimitive(ValuePrimitive::Integer(i))) => {
             Ok(VmValue::ValuePrimitive(ValuePrimitive::Integer(-i)))
@@ -316,10 +316,10 @@ pub fn evaluate_unary_op(operator: &UnaryOperator, operand: &VmValue) -> VmExprR
         (UnaryOperator::Not, VmValue::ValuePrimitive(ValuePrimitive::Bool(b))) => {
             Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(!b)))
         }
-        (_, VmValue::Product(_)) => Err(VmError::InvalidOperation(
+        (_, VmValue::Product(_)) => Err(VmErrorType::InvalidOperation(
             "Product operations not yet implemented".to_string(),
         )),
-        _ => Err(VmError::InvalidOperation(format!(
+        _ => Err(VmErrorType::InvalidOperation(format!(
             "Cannot apply {operator:?} to {operand:?}",
         ))),
     }
@@ -344,7 +344,7 @@ pub fn evaluate_binary_op(
     left: &VmValue,
     operator: &BinaryOperator,
     right: &VmValue,
-) -> VmExprResult {
+) -> Result<VmValue, VmErrorType> {
     match (left, right) {
         // Bool operations
         (
@@ -363,7 +363,7 @@ pub fn evaluate_binary_op(
             BinaryOperator::GreaterEqual => {
                 Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(*l || !*r)))
             } // true >= false, true >= true
-            _ => Err(VmError::InvalidOperation(format!(
+            _ => Err(VmErrorType::InvalidOperation(format!(
                 "Cannot apply {operator:?} to Bool"
             ))),
         },
@@ -377,14 +377,14 @@ pub fn evaluate_binary_op(
             BinaryOperator::Multiply => Ok(VmValue::ValuePrimitive(ValuePrimitive::Integer(l * r))),
             BinaryOperator::Divide => {
                 if *r == BigInt::from(0) {
-                    Err(VmError::DivisionByZero)
+                    Err(VmErrorType::DivisionByZero)
                 } else {
                     Ok(VmValue::ValuePrimitive(ValuePrimitive::Integer(l / r)))
                 }
             }
             BinaryOperator::Modulo => {
                 if *r == BigInt::from(0) {
-                    Err(VmError::DivisionByZero)
+                    Err(VmErrorType::DivisionByZero)
                 } else {
                     Ok(VmValue::ValuePrimitive(ValuePrimitive::Integer(l % r)))
                 }
@@ -397,7 +397,7 @@ pub fn evaluate_binary_op(
             BinaryOperator::GreaterEqual => {
                 Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(l >= r)))
             }
-            _ => Err(VmError::InvalidOperation(format!(
+            _ => Err(VmErrorType::InvalidOperation(format!(
                 "Cannot apply {operator:?} to integer"
             ))),
         },
@@ -411,14 +411,14 @@ pub fn evaluate_binary_op(
             BinaryOperator::Multiply => Ok(VmValue::ValuePrimitive(ValuePrimitive::Float(l * r))),
             BinaryOperator::Divide => {
                 if *r == BigRational::from(BigInt::from(0)) {
-                    Err(VmError::DivisionByZero)
+                    Err(VmErrorType::DivisionByZero)
                 } else {
                     Ok(VmValue::ValuePrimitive(ValuePrimitive::Float(l / r)))
                 }
             }
             BinaryOperator::Modulo => {
                 if *r == BigRational::from(BigInt::from(0)) {
-                    Err(VmError::DivisionByZero)
+                    Err(VmErrorType::DivisionByZero)
                 } else {
                     Ok(VmValue::ValuePrimitive(ValuePrimitive::Float(l % r)))
                 }
@@ -431,18 +431,18 @@ pub fn evaluate_binary_op(
             BinaryOperator::GreaterEqual => {
                 Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(l >= r)))
             }
-            _ => Err(VmError::InvalidOperation(format!(
+            _ => Err(VmErrorType::InvalidOperation(format!(
                 "Cannot apply {operator:?} to float"
             ))),
         },
 
         // Handle Product types - all operations return error for now
-        (VmValue::Product(_), _) | (_, VmValue::Product(_)) => Err(VmError::InvalidOperation(
+        (VmValue::Product(_), _) | (_, VmValue::Product(_)) => Err(VmErrorType::InvalidOperation(
             "Product operations not yet implemented".to_string(),
         )),
 
         // Type mismatch for other combinations
-        _ => Err(VmError::InvalidOperation(
+        _ => Err(VmErrorType::InvalidOperation(
             "The operation is not implemented yet".into(),
         )),
     }

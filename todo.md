@@ -82,6 +82,7 @@ Add struct based type in Literal,where I can create {x=10,y=10},
 
 ## Ideas:
     How I code is compiled,My code and type checking are all dynamic,
+1. I have finally found what is the way my architecture need to go to,I was confused like do I need StatementNode<'a> for typechecking and StatNode<()> to execute the code,How do I error report than,Now I understand running the StatNode have nothing to do with the token,So the best practice is to have evaluate_expresion run_statement generic,and if error it will return T of StatNode<T>,the T from the error occurs
 ## Design Problem:
     Problem with type as expression and it's optimization,Now the 
 

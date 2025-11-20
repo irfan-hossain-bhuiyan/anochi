@@ -219,4 +219,8 @@ impl<T> StatNode<T>{
     pub fn to_null(self)->StatNode<()>{
         self.inner_map(&mut |_x|())
     }
+
+    pub fn data(&self) -> &T {
+        &self.data
+    }
 }

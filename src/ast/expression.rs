@@ -34,6 +34,10 @@ impl<T> ExprNode<T>{
     pub fn to_null(self)->ExprNode<()>{
         self.inner_map(&mut |_x|())
     }
+
+    pub fn data(&self) -> &T {
+        &self.data
+    }
 }
 
 use enum_as_inner::EnumAsInner;
