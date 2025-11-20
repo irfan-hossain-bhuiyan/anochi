@@ -202,7 +202,7 @@ impl<'a> Tokenizer<'a> {
 
         if !identifier.is_empty() {
             // Check if identifier is a keyword
-            let token_type = match Keyword::try_from(identifier.clone()) {
+            let token_type = match identifier.parse::<Keyword>() {
                 Ok(keyword) => TokenType::Keyword(keyword),
                 Err(_) => TokenType::Identifier(Identifier::new(identifier)),
             };

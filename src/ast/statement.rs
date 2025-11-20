@@ -2,13 +2,17 @@ use crate::prelude::Mappable;
 use crate::token::token_type::Identifier;
 use super::expression::ExprNode;
 
-#[derive(Debug, Clone, PartialEq)]
+use derive_more::{Deref, DerefMut};
+
+#[derive(Debug, Clone, PartialEq, Deref, DerefMut)]
 pub struct StatNode<T>{
     data:T,
+    #[deref]
+    #[deref_mut]
     pub stat:Statement<T>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Deref, DerefMut)]
 pub struct StatementBlock<T> {
     pub statements: Vec<StatNode<T>>,
 }
@@ -19,7 +23,9 @@ impl<T> StatementBlock<T> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+use enum_as_inner::EnumAsInner;
+
+#[derive(Debug, Clone, PartialEq, EnumAsInner)]
 pub enum Statement<T> {
     /// Assignment for creating new variables with `let` keyword
     Assignment {
@@ -199,21 +205,7 @@ impl<T> Statement<T> {
         Self::Debug { expr_vec }
     }
 
-    /// Returns `true` if the statement is [`Break`].
-    ///
-    /// [`Break`]: Statement::Break
-    #[must_use]
-    pub fn is_break(&self) -> bool {
-        matches!(self, Self::Break)
-    }
 
-    /// Returns `true` if the statement is [`Continue`].
-    ///
-    /// [`Continue`]: Statement::Continue
-    #[must_use]
-    pub fn is_continue(&self) -> bool {
-        matches!(self, Self::Continue)
-    }
 
     pub fn to_node(self, data: T) -> StatNode<T> {
         StatNode {

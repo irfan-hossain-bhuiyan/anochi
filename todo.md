@@ -27,7 +27,13 @@
     - A way to fix this issue,Iis to add return type in the execute statement if break or continue is called,the loop will evaluate the decision and check if it is okay.to break or continue.
 
 ## Doing:
-- [ ] each code get on two phases,checking and running phase,in checking phase,their will be type checking,which will validate if all the code written is right,and the error will be given with VmError,than in runtime error,that think will be managed later,as a compiled binary,itis different and can be used without using file
+- [ ] Having type checking and code running side by side.
+    - [ ] make the implementation of function to todo
+    - [ ] adding type for both runtime and compile time
+    - [ ] Separate the type to comptime and their is also runtime situation
+        - The issue in my programming language is 
+            fn {x=i32,}
+in checking phase,their will be type checking,and the container will have which will validate if all the code written is right,and the error will be given with VmError,than in runtime error,that think will be managed later,as a compiled binary,as binary can be used without having to track the orginal file.
 - [ ] create function and call them,dynamically for now.
     - [x] Add function type in VmValue,Let's make it id for now.
     - [ ] Have two types of data type,one is runtime,one is comptime,the comptime will be evaluated  
@@ -61,8 +67,6 @@
 - [ ] Change the assignment to have comptime,let,None
     - [ ] It will check for keyword first before the assignment.
 - [ ] Change the ast to encompass it,to know what kind of assignment is this 
-- [ ] Add Option<TypeDefination>,int eh assignment ast,To do static type checking,
-    - [ ] I need to transfer the ast as mut,in typechecker function,which will update the necessary types in there
 
 ## QnA:
 > Why use third bracket for statement,not first bracket?
@@ -77,14 +81,7 @@ Add struct based type in Literal,where I can create {x=10,y=10},
 > Why the duplication like TypeDefinition,OptimizedTypeDefinition,UnifiedTypeDefinition?
 
 ## Ideas:
-    Types are values as well,they are object in vmvalue
-    So I can add them as expresssion,and generate them from struct,
-    In expression I need to add set as expression as well,So they can be 
-    so all the variable that takes I can give it 
-    Every objects are global,localization is in the name,the name is connected to a scope,or a path.
-    All the type that get created,It will work like python,the typeId will be pushed to the hashmap,Now there are 2 problem,
-        - How do I define type that hints to type that are not known in that time,
-        - One example is to create a new type for that
+    How I code is compiled,My code and type checking are all dynamic,
 ## Design Problem:
     Problem with type as expression and it's optimization,Now the 
 

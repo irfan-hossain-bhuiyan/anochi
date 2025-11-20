@@ -130,7 +130,7 @@ impl<Backend: VmBackend> Vm<Backend> {
         let expression = &expression_node.exp;
         match expression {
             Expression::Literal(literal) => match literal {
-                Literal::Identifier(x) => self.variables.get_variable_or_err(x),
+                Literal::Identifier(x) => self.variables.get_variable_or_err(&x),
                 Literal::Bool(_) | Literal::Float(_) | Literal::Integer(_) => Ok(
                     VmValue::ValuePrimitive(ValuePrimitive::from(literal.clone())),
                 ),
@@ -149,11 +149,11 @@ impl<Backend: VmBackend> Vm<Backend> {
                 let left_val = self.evaluate_expr(left)?;
                 let right_val = self.evaluate_expr(right)?;
 
-                vm_value::evaluate_binary_op(&left_val, operator, &right_val)
+                vm_value::evaluate_binary_op(&left_val, &operator, &right_val)
             }
             Expression::Unary { operator, operand } => {
                 let operand_val = self.evaluate_expr(operand)?;
-                vm_value::evaluate_unary_op(operator, &operand_val)
+                vm_value::evaluate_unary_op(&operator, &operand_val)
             }
             Expression::Grouping { expression } => self.evaluate_expr(expression),
             Expression::Product { data } => {
@@ -295,7 +295,7 @@ impl<Backend: VmBackend> Vm<Backend> {
                     }
                 }
             }
-            Statement::StatementBlock(stmtblock) => self.run_block(stmtblock),
+            Statement::StatementBlock(stmtblock) => self.run_block(&stmtblock),
             Statement::If { condition, on_true } => {
                 let VmValue::ValuePrimitive(ValuePrimitive::Bool(x)) =
                     self.evaluate_expr(condition)?
@@ -343,7 +343,7 @@ impl<Backend: VmBackend> Vm<Backend> {
             Statement::Break => Ok(StatementEvent::Break),
             Statement::Loop { statements } => {
                 loop {
-                    match self.run_block(statements)? {
+                    match self.run_block(&statements)? {
                         StatementEvent::None => {}
                         StatementEvent::Break => {
                             break;
@@ -406,18 +406,8 @@ impl<Backend: VmBackend> Vm<Backend> {
         self.funcs.push(func)
     }
     /// It type check the function that is currently passed,and execute it.
-    fn execute_function(&mut self, func_id: &FuncId, inputs: VmValue) -> VmExprResult {
-        // function type checking
-        let func: &VmFunc = self.get_func(func_id);
-        self.type_match(func.get_param(), inputs)?;
-        let inputs=inputs.as_product().unwrap();
-        self.create_scope();
-        let inside_fn = || {
-            self.extract_struct(inputs)?;
-            let func = self.get_func(func_id);
-            self.execute_statement(func.get_statement())
-        };
-        self.drop_scope();
+    fn execute_function(&mut self, _func_id: &FuncId, _inputs: VmValue) -> VmExprResult {
+        todo!()
     }
     fn get_func(&self, func_id: &FuncId) -> &VmFunc {
         self.funcs.get(func_id).unwrap()

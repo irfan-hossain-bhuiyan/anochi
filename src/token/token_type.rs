@@ -1,6 +1,10 @@
 /// A validated identifier following C-style naming rules.
 /// Must start with a letter or underscore, and contain only alphanumeric characters and underscores.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+use derive_more::{Display, Deref, Into};
+
+/// A validated identifier following C-style naming rules.
+/// Must start with a letter or underscore, and contain only alphanumeric characters and underscores.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Display, Deref, Into)]
 pub struct Identifier(String);
 
 impl Identifier {
@@ -13,28 +17,9 @@ impl Identifier {
     pub fn new(s: impl ToString) -> Self {
         Self::try_from(s.to_string()).expect("Invalid identifier")
     }
-    
-    /// Get the inner string value.
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-    
-    /// Get the inner string value as a string reference.
-    pub fn to_str_ref(&self) -> &str {
-        &self.0
-    }
-    
-    /// Convert to the inner string.
-    pub fn into_string(self) -> String {
-        self.0
-    }
 }
 
-impl std::fmt::Display for Identifier {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
+
 
 impl std::convert::TryFrom<String> for Identifier {
     type Error = String;
@@ -80,8 +65,10 @@ impl std::convert::TryFrom<&str> for Identifier {
 use thiserror::Error;
 use num_bigint::BigInt;
 use num_rational::BigRational;
+use enum_as_inner::EnumAsInner;
+
 // Token types for the Anochi language.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, EnumAsInner)]
 pub enum TokenType {
     Identifier(Identifier),
     Integer(BigInt),
@@ -129,7 +116,10 @@ pub enum TokenizerError{
     UnknownSpeicalChar,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+use strum::{EnumString, Display as StrumDisplay, IntoStaticStr};
+
+#[derive(Debug, Clone, PartialEq, EnumString, StrumDisplay, IntoStaticStr)]
+#[strum(serialize_all = "lowercase")]
 pub enum Keyword {
     Break,
     Continue,
@@ -145,48 +135,4 @@ pub enum Keyword {
     Debug,
     Let,
     Fn
-}
-
-impl std::convert::TryFrom<String> for Keyword {
-    type Error = ();
-    fn try_from(value: String) -> Result<Self, Self::Error> {
-        match value.as_str() {
-            "loop" => Ok(Keyword::Loop),
-            "continue" => Ok(Keyword::Continue),
-            "break"=> Ok(Keyword::Break),
-            "for" => Ok(Keyword::For),
-            "or" => Ok(Keyword::Or),
-            "and" => Ok(Keyword::And),
-            "not" => Ok(Keyword::Not),
-            "true" => Ok(Keyword::True),
-            "false" => Ok(Keyword::False),
-            "if" => Ok(Keyword::If),
-            "else" => Ok(Keyword::Else),
-            "debug" => Ok(Keyword::Debug),
-            "let" => Ok(Keyword::Let),
-            "fn" => Ok(Keyword::Fn),
-            _ => Err(()),
-        }
-    }
-}
-
-impl Keyword {
-    pub fn into_str(&self) -> &'static str {
-        match self {
-            Keyword::Loop => "loop",
-            Keyword::For => "for",
-            Keyword::Or => "or",
-            Keyword::And => "and",
-            Keyword::Not => "not",
-            Keyword::True => "true",
-            Keyword::False => "false",
-            Keyword::If => "if",
-            Keyword::Else => "else",
-            Keyword::Debug => "debug",
-            Keyword::Let => "let",
-            Keyword::Break=>"break",
-            Keyword::Continue=>"continue",
-            Keyword::Fn =>"fn",
-        }
-    }
 }

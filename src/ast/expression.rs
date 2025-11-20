@@ -7,9 +7,13 @@ use super::literal::Literal;
 use super::operators::{BinaryOperator, UnaryOperator};
 use super::{IdentifierToExp, StatNode};
 
-#[derive(Debug, Clone, PartialEq)]
+use derive_more::{Deref, DerefMut, From};
+
+#[derive(Debug, Clone, PartialEq, Deref, DerefMut)]
 pub struct ExprNode<T>{
     data:T,
+    #[deref]
+    #[deref_mut]
     pub exp:Expression<T>,
 }
 
@@ -32,11 +36,13 @@ impl<T> ExprNode<T>{
     }
 }
 
+use enum_as_inner::EnumAsInner;
+
 /// The main AST node type representing all possible expressions.
 ///
 /// This enum encompasses all types of expressions that can appear in
 /// Anochi source code, from simple literals to complex nested expressions.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, EnumAsInner, From)]
 pub enum Expression<T> {
     /// A literal value (number, string, identifier)
     Literal(Literal),
@@ -230,7 +236,7 @@ impl<T> Expression<T> {
 
     /// Converts a Literal token into an Expression::Literal.
     pub fn from_literal(literal: Literal) -> Self {
-        Expression::Literal(literal)
+        literal.into()
     }
 
     /// Returns a Token to an Expression if it is a literal token.
