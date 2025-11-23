@@ -6,6 +6,12 @@ use super::tokenizer::Token;
 #[repr(transparent)]
 pub struct TokenSlice<'a>([Token<'a>]);
 
+impl<'a> AsRef<str> for TokenSlice<'a> {
+    fn as_ref(&self) -> &str {
+        self.get_str_slice()
+    }
+}
+
 impl<'a> TokenSlice<'a> {
     pub(crate) fn from_slice<'b>(tokens: &'b [Token<'a>]) -> &'b Self {
         // SAFETY: TokenSlice is repr(transparent) over [Token]

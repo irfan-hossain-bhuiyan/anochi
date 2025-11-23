@@ -3,13 +3,13 @@ use std::fmt::Display;
 
 use thiserror::Error;
 
-use crate::vm::tree_walk::VmErrorTypeType;
+
 use crate::{
     ast::Identifier,
     types::{TypeContainer, TypeId},
     vm::tree_walk::{VmErrorType, VmValue},
 };
-type ExprResult=Result<VmValue,VmErrorTypeType>;
+type ExprResult=Result<VmValue,VmErrorType>;
 #[derive(Debug,Clone,Error)]
 enum Error{
     #[error("You can't mutate a constant variable")]
@@ -120,9 +120,9 @@ impl ScopeStack {
         value: VmValue,
         expected_type_id: TypeId,
         type_container: &mut crate::types::TypeContainer,
-    ) -> Result<(), VmErrorTypeType> {
+    ) -> Result<(), VmErrorType> {
         let Some(entry) = VariableEntry::new_checked(value, expected_type_id, VariableState::Immutable, type_container) else {
-            return Err(VmErrorTypeType::TypeMismatch("Value type does not match expected type"));
+            return Err(VmErrorType::TypeMismatch("Value type does not match expected type"));
         };
         
         if let Some(current_scope) = self.scopes.back_mut() {

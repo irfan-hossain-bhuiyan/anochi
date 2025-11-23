@@ -1,4 +1,4 @@
-    use crate::{ast::Identifier, typing::TypeContainer, vm::tree_walk::{ScopeStack, ValuePrimitive, VmError, VmValue}};
+    use crate::{ast::Identifier, typing::TypeContainer, vm::tree_walk::{ScopeStack, ValuePrimitive, VmErrorType, VmValue}};
     use num_bigint::BigInt;
 
     /// Test basic scope operations: create variable, create scope, access from inner scope
@@ -95,7 +95,7 @@
         
         // Test error method
         let result = stack.get_variable_or_err(&nonexistent_var);
-        assert!(matches!(result, Err(VmError::UndefinedIdentifier(_))));
+        assert!(matches!(result, Err(VmErrorType::UndefinedIdentifier(_))));
     }
 
     /// Test mutable access error handling for undefined variables
@@ -109,7 +109,7 @@
         
         // Test error method
         let result = stack.get_variable_mut_or_err(&nonexistent_var);
-        assert!(matches!(result, Err(VmError::UndefinedIdentifier(_))));
+        assert!(matches!(result, Err(VmErrorType::UndefinedIdentifier(_))));
     }
 
     /// Test has_variable method across multiple scopes

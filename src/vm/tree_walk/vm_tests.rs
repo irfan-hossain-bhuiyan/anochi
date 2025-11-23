@@ -1,4 +1,4 @@
-use ast::{AstNode, BinaryOperator, Expression, Statement};
+use ast::{BinaryOperator, Expression, Statement};
 use token::Identifier;
 use vm::backend::IoBackend;
 use vm::tree_walk::{Vm, VmValue};
@@ -10,25 +10,25 @@ fn test_vm_basic_operations() {
     let mut vm = Vm::new(IoBackend::new());
 
     // Test assignment and variable lookup
-    let assignment = Statement::assignment_no_type(Identifier::new("x"), Expression::from_i64(42));
-    vm.execute_statement(&AstNode::new_temp(assignment))
+    let assignment = Statement::assignment_no_type(Identifier::new("x"), Expression::from_i64(42).to_node(()));
+    vm.execute_statement(&assignment.to_node(()))
         .unwrap();
 
     let var_expr = Expression::identifier(Identifier::new("x".to_string()));
-    let result = vm.evaluate_expr(&AstNode::new_temp(var_expr)).unwrap();
+    let result = vm.evaluate_expr(&var_expr.to_node(())).unwrap();
     assert_eq!(result, VmValue::from_i64(42));
 
     // Test boolean operations
     let undefined_expr = Expression::identifier(Identifier::new("undefined_variable".to_string()));
-    let undefined_result = vm.evaluate_expr(&AstNode::new_temp(undefined_expr));
+    let undefined_result = vm.evaluate_expr(&undefined_expr.to_node(()));
     assert!(undefined_result.is_err()); // Should error for undefined variable
 
     let and_expr = Expression::binary(
-        Expression::from_bool(true),
+        Expression::from_bool(true).to_node(()),
         BinaryOperator::And,
-        Expression::from_bool(false),
+        Expression::from_bool(false).to_node(()),
     );
-    let result = vm.evaluate_expr(&AstNode::new_temp(and_expr)).unwrap();
+    let result = vm.evaluate_expr(&and_expr.to_node(())).unwrap();
     assert_eq!(result, VmValue::from_bool(false));
 }
 
@@ -38,7 +38,7 @@ fn test_vm_error_handling() {
 
     // Test undefined variable error
     let undefined_expr = Expression::identifier(Identifier::new("undefined_variable".to_string()));
-    let result = vm.evaluate_expr(&AstNode::new_temp(undefined_expr));
+    let result = vm.evaluate_expr(&undefined_expr.to_node(()));
     assert!(result.is_err());
 }
 
@@ -49,8 +49,8 @@ fn test_debug_statement_single_value() {
     let mut vm: Vm<TestBackend> = Vm::new(backend);
 
     // Create a debug statement with a single integer expression
-    let expr = AstNode::new_temp(Expression::from_i64(42));
-    let debug_stmt = AstNode::new_temp(Statement::debug(vec![expr]));
+    let expr = Expression::from_i64(42).to_node(());
+    let debug_stmt = Statement::debug(vec![expr]).to_node(());
 
     // Execute the debug statement
     vm.execute_statement(&debug_stmt).unwrap();
