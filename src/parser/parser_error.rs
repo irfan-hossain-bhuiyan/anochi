@@ -18,8 +18,8 @@ impl NoTokenFound {
     }
 
     /// Fast direct conversion to ParserError, bypassing StatementParseError
-    pub fn into_parser_error(self) -> ParserError {
-        ParserError::Stat(self.into_statement_error())
+    pub fn into_parser_error(self) -> ParserErrorType {
+        ParserErrorType::Stat(self.into_statement_error())
     }
 
     /// Fast conversion to ExpressionParseError::TokenNotFound
@@ -39,8 +39,8 @@ pub enum ExpressionParseError {
 
 impl ExpressionParseError {
     /// Fast conversion to ParserError::Expr
-    pub fn into_parser_error(self) -> ParserError {
-        ParserError::Expr(self)
+    pub fn into_parser_error(self) -> ParserErrorType {
+        ParserErrorType::Expr(self)
     }
 }
 #[derive(Error, Debug)]
@@ -56,19 +56,19 @@ pub enum StatementParseError {
 }
 impl StatementParseError {
     /// Fast conversion to ParserError::Stat
-    pub fn into_parser_error(self) -> ParserError {
-        ParserError::Stat(self)
+    pub fn into_parser_error(self) -> ParserErrorType {
+        ParserErrorType::Stat(self)
     }
 }
 #[derive(Error, Debug)]
-pub enum ParserError {
+pub enum ParserErrorType {
     #[error("Expression can't be evaluated: {0}")]
     Expr(#[from] ExpressionParseError),
     #[error("Statement can't be evaluated: {0}")]
     Stat(#[from] StatementParseError),
 }
 
-impl ParserError {
+impl ParserErrorType {
     pub const NO_STAT_FOUND: Self = Self::Stat(StatementParseError::NoStatement);
     pub const NO_EXPN_FOUND: Self = Self::Expr(ExpressionParseError::NoExpression);
     pub fn expected_token_in_statement(tokentype:TokenType)->Self{

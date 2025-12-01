@@ -1,22 +1,16 @@
 use crate::ast::{Expression, Identifier, StatNode, Statement, StatementBlock};
 use crate::parser::Parser;
 use crate::prelude::Mappable;
-use crate::token::{Position, TokenContainer, Tokenizer};
-use std::num::NonZeroUsize;
+use crate::token::{ TokenContainer, Tokenizer};
 
 /// Helper function to create tokens from source code
 fn create_tokens_from_source(source: &str) -> TokenContainer {
-    Tokenizer::new(source).tokenize()
+    let (tokens,errors)=Tokenizer::new(source).tokenize();
+    if !errors.is_empty(){panic!("Tokenizer has error")}
+    tokens
 }
 
-/// Helper function to create a simple position for testing
-fn create_test_position(slice: &str) -> Position {
-    Position {
-        line: NonZeroUsize::new(1).unwrap(),
-        column: NonZeroUsize::new(1).unwrap(),
-        slice,
-    }
-}
+
 
 /// Helper function to parse AST from source
 fn parse_ast_from_source(source: &str) -> StatNode<()> {

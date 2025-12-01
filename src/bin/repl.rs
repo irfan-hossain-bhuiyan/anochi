@@ -117,7 +117,7 @@ fn execute_code(code_runner: &mut CodeRunner, input: &str) {
                     println!("✅ Result: {result:?}");
                 }
                 Err(expr_err) => {
-                    println!("❌ Statement error: {statement_err}");
+                    println!("❌ Statement error: {statement_err}",statement_err=statement_err);
                     println!("❌ Expression error: {expr_err}");
                 }
             }

@@ -54,7 +54,7 @@ let y3:{x=i64,y=i64}={x=50,y=50};
 let y1:{x=i64,y=bool}={x=50,y=50};
 let y2:{x=i64,y=i64}={x=50,y=50};",
     );
-    let yes = output.is_err_and(|x| x.is_runtime_error_and(|x| x.is_type_mismatch()));
+    let yes = output.is_err_and(|x| x.is_runtime_error_and(|x| x.error_type().is_type_mismatch()));
     assert!(yes);
     runner
         .run_statements("let now_type={x=164,y=bool};")

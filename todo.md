@@ -27,6 +27,7 @@
     - A way to fix this issue,Iis to add return type in the execute statement if break or continue is called,the loop will evaluate the decision and check if it is okay.to break or continue.
 
 ## Doing:
+- [ ] change the VmError to be VmErrorGeneric<CodeSlice>,now having an into implementation from VmErrorGeneric<()> to VmErrorGeneric<CodeSlice>
 - [ ] Having type checking and code running side by side.
     - [ ] make the implementation of function to todo
     - [ ] adding type for both runtime and compile time

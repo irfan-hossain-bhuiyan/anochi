@@ -1,6 +1,10 @@
-use std::num::NonZeroUsize;
-use crate::token::token_type::{Identifier, Keyword, TokenizerError, TokenType};
-
+use crate::{
+    code_error::CodeError,
+    token::token_type::{Identifier, Keyword, TokenType, TokenizerErrorType},
+};
+use derive_more::{ Deref};
+use macros::generate_unchecked;
+use std::{num::NonZeroUsize, ops::Range};
 #[derive(Debug, Clone, PartialEq)]
 pub enum CharType {
     Alpha,
@@ -9,42 +13,109 @@ pub enum CharType {
     Whitespace,
     Skippable,
 }
-
+pub type TokenizerError = CodeError<TokenizerErrorType>;
 #[derive(Debug, Clone, PartialEq)]
-pub struct Position<'a> {
+pub struct Position {
     pub line: NonZeroUsize,
     pub column: NonZeroUsize,
-    pub slice: &'a str,
+    pub range: Range<usize>,
 }
-
-impl<'a> Position<'a> {
-    pub fn new(line: usize, column: usize, slice: &'a str) -> Option<Self> {
-        Some(Self {
-            line: NonZeroUsize::new(line)?,
-            column: NonZeroUsize::new(column)?,
-            slice,
-        })
+impl Default for Position {
+    fn default() -> Self {
+        Self {
+            line: NonZeroUsize::new(1).unwrap(),
+            column: NonZeroUsize::new(1).unwrap(),
+            range: 0..0,
+        }
     }
 }
 
+impl Position {
+    #[generate_unchecked]
+    pub fn new_checked(line: usize, column: usize, range: Range<usize>) -> Option<Self> {
+        Some(Self {
+            line: NonZeroUsize::new(line)?,
+            column: NonZeroUsize::new(column)?,
+            range,
+        })
+    }
+
+    pub fn start(&self) -> usize {
+        self.range.start
+    }
+    pub fn end(&self) -> usize {
+        self.range.end
+    }
+
+    fn new_current(line: usize, column: usize, current: usize) -> Self {
+        Self::new(
+            line,
+            column,
+            Range {
+                start: current,
+                end: current,
+            },
+        )
+    }
+    pub fn code_str(&self,code:&str)->String{
+        let start_idx = self.start();
+        let end_idx = self.end();
+        if start_idx >= code.len() || end_idx > code.len() || start_idx > end_idx {
+            return "[Error: Invalid CodeSlice range]".to_string();
+        }
+        let slice = &code[start_idx..end_idx];
+        let start_line = self.line;
+        let start_col = self.column;
+        format!(
+            "[Error at {}:{}  ({}..{})]: {}",
+            start_line, start_col, start_idx, end_idx, slice
+        )
+    }
+    pub fn is_empty(&self) -> bool {
+        *self == Self::default()
+    }
+    #[generate_unchecked]
+    pub fn extend_checked(self, end: Self) -> Option<Self> {
+        if end.range.start < self.range.start || end.range.end < self.range.end {
+            return None;
+        }
+
+        Some(Self {
+            range: Range {
+                start: self.range.start,
+                end: end.range.end,
+            },
+            ..self
+        })
+    }
+}
+pub trait HasPosition{
+    fn get_position(&self)->&Position;
+}
+impl HasPosition for Position{
+    fn get_position(&self)->&Position {
+        self
+    }
+}
 #[derive(Debug, Clone, PartialEq)]
-pub struct Token<'a> {
+pub struct Token {
     pub token_type: TokenType,
-    pub position: Position<'a>,
+    pub position: Position,
 }
 
-impl<'a> Token<'a> {
-    pub fn new(token_type: TokenType, position: Position<'a>) -> Self {
+impl Token {
+    pub fn new(token_type: TokenType, position: Position) -> Self {
         Self {
             token_type,
             position,
         }
     }
 }
-
+pub type TokenizerValue = Result<Token, TokenizerError>;
 pub struct Tokenizer<'a> {
     source: &'a str,
-    tokens: Vec<Token<'a>>,
+    tokens: Vec<Token>,
+    errors: Vec<TokenizerError>,
     current: usize,
     line: usize,
     column: usize,
@@ -55,10 +126,21 @@ impl<'a> Tokenizer<'a> {
         Self {
             source,
             tokens: Vec::new(),
+            errors: Vec::new(),
             current: 0,
             line: 1,
             column: 1,
         }
+    }
+    fn current_position(&self) -> Position {
+        Position::new_current(self.line, self.column, self.current)
+    }
+
+    pub fn push_error(&mut self, error: TokenizerError) {
+        self.errors.push(error);
+    }
+    pub fn create_error(&self, error_type: TokenizerErrorType) -> TokenizerError {
+        TokenizerError::new(error_type, self.current_position())
     }
 
     // Helper methods to reduce boilerplate
@@ -68,15 +150,15 @@ impl<'a> Tokenizer<'a> {
         start_line: usize,
         start_column: usize,
         start_pos: usize,
-    ) -> Token<'a> {
-        let slice = &self.source[start_pos..self.current];
+    ) -> Token {
+        let range = start_pos..self.current;
         Token::new(
             token_type,
-            Position::new(start_line, start_column, slice).unwrap(),
+            Position::new_checked(start_line, start_column, range).unwrap(),
         )
     }
 
-    fn make_token_at_current(&self, token_type: TokenType) -> Token<'a> {
+    fn make_token_at_current(&self, token_type: TokenType) -> Token {
         self.make_token(token_type, self.line, self.column, self.current)
     }
 
@@ -86,7 +168,7 @@ impl<'a> Tokenizer<'a> {
         start_line: usize,
         start_column: usize,
         start_pos: usize,
-    ) -> Token<'a> {
+    ) -> Token {
         self.advance();
         self.make_token(token_type, start_line, start_column, start_pos)
     }
@@ -97,41 +179,42 @@ impl<'a> Tokenizer<'a> {
         start_line: usize,
         start_column: usize,
         start_pos: usize,
-    ) -> Token<'a> {
+    ) -> Token {
         self.advance(); // First char
         self.advance(); // Second char
         self.make_token(token_type, start_line, start_column, start_pos)
     }
+    fn push_value(&mut self, value: TokenizerValue) {
+        match value {
+            Ok(x) => self.tokens.push(x),
+            Err(x) => self.errors.push(x),
+        }
+    }
 
-    pub fn tokenize(mut self) -> TokenContainer<'a> {
-        while self.peek().is_some() {
-            match self.char_type() {
-                Some(CharType::Alpha) => {
-                    let token = self.parse_identifier_or_keyword();
-                    self.tokens.push(token);
-                }
-                Some(CharType::Numeric) => {
-                    let token = self.parse_numeric();
-                    self.tokens.push(token);
-                }
-                Some(CharType::Whitespace) => {
+    pub fn tokenize(mut self) -> (TokenContainer,TokenizerErrors) {
+        while let Some(value) = self.char_type() {
+            let value = match value {
+                CharType::Alpha => self.parse_identifier_or_keyword(),
+                CharType::Numeric => self.parse_numeric(),
+                CharType::Whitespace => {
                     self.skip_whitespace();
+                    continue;
                 }
-                Some(CharType::Special) => {
+                CharType::Special => {
                     if self.peek() == Some('"') {
-                        let token = self.parse_string();
-                        self.tokens.push(token);
+                        self.parse_string()
                     } else {
-                        let token = self.parse_special_char();
-                        self.tokens.push(token);
+                        self.parse_special_char()
                     }
                 }
-                _ => {
+                CharType::Skippable => {
                     self.advance();
+                    continue;
                 }
-            }
+            };
+            self.push_value(value);
         }
-        TokenContainer::new(self.tokens)
+        (TokenContainer::new(self.tokens),TokenizerErrors(self.errors))
     }
 
     fn peek(&self) -> Option<char> {
@@ -174,7 +257,7 @@ impl<'a> Tokenizer<'a> {
     }
 
     /// Parses an identifier or keyword token
-    fn parse_identifier_or_keyword(&mut self) -> Token<'a> {
+    fn parse_identifier_or_keyword(&mut self) -> TokenizerValue {
         let start_line = self.line;
         let start_column = self.column;
         let start_pos = self.current;
@@ -206,14 +289,14 @@ impl<'a> Tokenizer<'a> {
                 Ok(keyword) => TokenType::Keyword(keyword),
                 Err(_) => TokenType::Identifier(Identifier::new(identifier)),
             };
-            self.make_token(token_type, start_line, start_column, start_pos)
+            Ok(self.make_token(token_type, start_line, start_column, start_pos))
         } else {
             unreachable!("Parse identifier should be called on alpha,So it can't be null")
         }
     }
 
     /// Parses a numeric token (integer or float)
-    fn parse_numeric(&mut self) -> Token<'a> {
+    fn parse_numeric(&mut self) -> Result<Token, TokenizerError> {
         let start_line = self.line;
         let start_column = self.column;
         let start_pos = self.current;
@@ -245,20 +328,20 @@ impl<'a> Tokenizer<'a> {
         let token_type = if is_float {
             match number.parse::<num_rational::BigRational>() {
                 Ok(value) => TokenType::Float(value),
-                Err(_) => TokenType::Error(TokenizerError::InvalidFloat),
+                Err(_) => return Err(self.create_error(TokenizerErrorType::InvalidFloat)),
             }
         } else {
             match number.parse::<num_bigint::BigInt>() {
                 Ok(value) => TokenType::Integer(value),
-                Err(_) => TokenType::Error(TokenizerError::InvalidInt),
+                Err(_) => return Err(self.create_error(TokenizerErrorType::InvalidInt)),
             }
         };
 
-        self.make_token(token_type, start_line, start_column, start_pos)
+        Ok(self.make_token(token_type, start_line, start_column, start_pos))
     }
 
     /// Parses a string literal token
-    fn parse_string(&mut self) -> Token<'a> {
+    fn parse_string(&mut self) -> TokenizerValue {
         let start_line = self.line;
         let start_column = self.column;
         let start_pos = self.current;
@@ -273,12 +356,12 @@ impl<'a> Tokenizer<'a> {
         while let Some(ch) = self.peek() {
             if ch == '"' {
                 self.advance();
-                return self.make_token(
+                return Ok(self.make_token(
                     TokenType::String(string_value),
                     start_line,
                     start_column,
                     start_pos,
-                    );
+                ));
             } else if ch == '\\' {
                 self.advance();
                 if let Some(escaped) = self.peek() {
@@ -314,34 +397,23 @@ impl<'a> Tokenizer<'a> {
                     string_value.push('\\');
                 }
             } else if ch == '\n' {
-                return self.make_token(
-                    TokenType::Error(TokenizerError::StringInNewLine),
-                    start_line,
-                    start_column,
-                    start_pos,
-                    );
+                return Err(self.create_error(TokenizerErrorType::StringInNewLine));
             } else {
                 string_value.push(ch);
                 self.advance();
             }
         }
-
-        self.make_token(
-            TokenType::Error(TokenizerError::NoClosingBracket),
-            start_line,
-            start_column,
-            start_pos,
-            )
+        Err(self.create_error(TokenizerErrorType::NoClosingBracket))
     }
 
     /// Parses special characters and operators
-    fn parse_special_char(&mut self) -> Token<'a> {
+    fn parse_special_char(&mut self) -> Result<Token, TokenizerError> {
         let start_line = self.line;
         let start_column = self.column;
         let start_pos = self.current;
 
         if let Some(ch) = self.peek() {
-            match ch {
+            let token = match ch {
                 // Two-character tokens
                 '!' => {
                     self.advance();
@@ -351,7 +423,7 @@ impl<'a> Tokenizer<'a> {
                             start_line,
                             start_column,
                             start_pos,
-                            )
+                        )
                     } else {
                         self.make_token(TokenType::Bang, start_line, start_column, start_pos)
                     }
@@ -374,7 +446,7 @@ impl<'a> Tokenizer<'a> {
                             start_line,
                             start_column,
                             start_pos,
-                            )
+                        )
                     } else {
                         self.make_token(TokenType::Greater, start_line, start_column, start_pos)
                     }
@@ -403,31 +475,31 @@ impl<'a> Tokenizer<'a> {
                     start_line,
                     start_column,
                     start_pos,
-                    ),
+                ),
                 ')' => self.make_single_char_token(
                     TokenType::RightParen,
                     start_line,
                     start_column,
                     start_pos,
-                    ),
+                ),
                 '{' => self.make_single_char_token(
                     TokenType::LeftBrace,
                     start_line,
                     start_column,
                     start_pos,
-                    ),
+                ),
                 '}' => self.make_single_char_token(
                     TokenType::RightBrace,
                     start_line,
                     start_column,
                     start_pos,
-                    ),
+                ),
                 ',' => self.make_single_char_token(
                     TokenType::Comma,
                     start_line,
                     start_column,
                     start_pos,
-                    ),
+                ),
                 '.' => {
                     self.make_single_char_token(TokenType::Dot, start_line, start_column, start_pos)
                 }
@@ -436,52 +508,46 @@ impl<'a> Tokenizer<'a> {
                     start_line,
                     start_column,
                     start_pos,
-                    ),
+                ),
                 '+' => self.make_single_char_token(
                     TokenType::Plus,
                     start_line,
                     start_column,
                     start_pos,
-                    ),
+                ),
                 ';' => self.make_single_char_token(
                     TokenType::Semicolon,
                     start_line,
                     start_column,
                     start_pos,
-                    ),
+                ),
                 '/' => self.make_single_char_token(
                     TokenType::Slash,
                     start_line,
                     start_column,
                     start_pos,
-                    ),
+                ),
                 '*' => self.make_single_char_token(
                     TokenType::Star,
                     start_line,
                     start_column,
                     start_pos,
-                    ),
+                ),
                 '|' => self.make_single_char_token(
                     TokenType::Pipe,
                     start_line,
                     start_column,
                     start_pos,
-                    ),
+                ),
                 //'\n' =>{self.advance()}
-                _ => self.make_single_char_token(
-                    TokenType::Error(TokenizerError::UnknownSpeicalChar),
-                    start_line,
-                    start_column,
-                    start_pos,
-                    ),
-            }
+                _ => {
+                    self.advance();
+                    return Err(self.create_error(TokenizerErrorType::UnknownSpeicalChar));
+                }
+            };
+            Ok(token)
         } else {
-            self.make_token(
-                TokenType::Error(TokenizerError::NoRightQuote),
-                start_line,
-                start_column,
-                start_pos,
-                )
+            return Err(self.create_error(TokenizerErrorType::NoRightQuote));
         }
     }
 
@@ -498,18 +564,24 @@ impl<'a> Tokenizer<'a> {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct TokenContainer<'a>(Vec<Token<'a>>);
-
-impl<'a> TokenContainer<'a> {
-    fn new(tokens: Vec<Token<'a>>) -> Self {
+pub struct TokenContainer(Vec<Token>);
+#[derive(Debug,Deref)]
+struct TokenizerErrors(Vec<TokenizerError>);
+impl TokenizerErrors {
+    pub fn err_str(&self,code:&str)->String{
+        self.iter().map(|x|x.err_str(code)).collect()
+    }
+}
+impl TokenContainer {
+    fn new(tokens: Vec<Token>) -> Self {
         Self(tokens)
     }
 
-    pub fn slice(&self, start: usize, end: usize) -> &TokenSlice<'a> {
+    pub fn slice(&self, start: usize, end: usize) -> &TokenSlice {
         TokenSlice::from_slice(&self.0[start..end])
     }
 
-    pub fn full_slice(&self) -> &TokenSlice<'a> {
+    pub fn full_slice(&self) -> &TokenSlice {
         TokenSlice::from_slice(&self.0[..])
     }
 
@@ -523,20 +595,20 @@ impl<'a> TokenContainer<'a> {
 }
 
 // IntoIterator implementation for TokenContainer
-impl<'a> IntoIterator for TokenContainer<'a> {
-    type Item = Token<'a>;
-    type IntoIter = std::vec::IntoIter<Token<'a>>;
+impl IntoIterator for TokenContainer {
+    type Item = Token;
+    type IntoIter = std::vec::IntoIter<Token>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.into_iter()
     }
 }
 
-use std::ops::Deref;
 use crate::token::TokenSlice;
+use std::ops::Deref;
 
-impl<'a> Deref for TokenContainer<'a> {
-    type Target = TokenSlice<'a>;
+impl Deref for TokenContainer {
+    type Target = TokenSlice;
 
     fn deref(&self) -> &Self::Target {
         TokenSlice::from_slice(&self.0)

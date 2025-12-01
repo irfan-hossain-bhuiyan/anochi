@@ -2,11 +2,11 @@ use crate::{ast::StatementNode, types::TypeId};
 
 struct Function{
     func_sig:FunctionSignature,
-    statement:StatementNode<'static>
+    statement: StatementNode
 }
 
 impl Function {
-    fn new(func_sig: FunctionSignature, statement: StatementNode<'static>) -> Self {
+    fn new(func_sig: FunctionSignature, statement: StatementNode) -> Self {
         Self { func_sig, statement }
     }
 }

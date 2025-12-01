@@ -3,6 +3,7 @@ use crate::prelude::IndexPtr;
 use crate::types::{
     BuiltinKind, TypeContainer, TypeDefinition, TypeGeneric, TypeId, UnifiedTypeDefinition,
 };
+use crate::vm::tree_walk::vm_error::VmErrorType;
 use num_bigint::BigInt;
 use num_rational::BigRational;
 use std::ops::Deref;

@@ -20,7 +20,7 @@ fn test_basic_tokenization() {
         TokenType::Semicolon,
     ];
     
-    let tokens = Tokenizer::new(source).tokenize();
+    let (tokens,errors) = Tokenizer::new(source).tokenize();
     let actual: Vec<TokenType> = tokens.into_iter().map(|t| t.token_type.clone()).collect();
     
     assert_eq!(actual, expected_type);

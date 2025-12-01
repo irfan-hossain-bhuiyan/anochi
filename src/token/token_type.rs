@@ -35,8 +35,7 @@ impl std::convert::TryFrom<String> for Identifier {
         // First character must be a letter or underscore
         if !first_char.is_ascii_alphabetic() && first_char != '_' {
             return Err(format!(
-                "Identifier '{}' must start with a letter or underscore, not '{}'",
-                value, first_char
+                "Identifier '{value}' must start with a letter or underscore, not '{first_char}'"
             ));
         }
         
@@ -44,8 +43,7 @@ impl std::convert::TryFrom<String> for Identifier {
         for ch in chars {
             if !ch.is_ascii_alphanumeric() && ch != '_' {
                 return Err(format!(
-                    "Identifier '{}' contains invalid character '{}'. Only letters, digits, and underscores are allowed",
-                    value, ch
+                    "Identifier '{value}' contains invalid character '{ch}'. Only letters, digits, and underscores are allowed",
                 ));
             }
         }
@@ -97,11 +95,10 @@ pub enum TokenType {
     Less,
     LessEqual,
     Arrow,
-    //Newline,
-    Error(TokenizerError),
+    //Newline
 }
 #[derive(Debug,Clone,PartialEq,Error)]
-pub enum TokenizerError{
+pub enum TokenizerErrorType{
     #[error("Can't convert float from the string")]
     InvalidFloat,
     #[error("Can't convert integer from string")]
@@ -115,8 +112,11 @@ pub enum TokenizerError{
     #[error("Unknown special character")]
     UnknownSpeicalChar,
 }
+pub type TokenizerError=CodeError<TokenizerErrorType>;
 
 use strum::{EnumString, Display as StrumDisplay, IntoStaticStr};
+
+use crate::code_error::CodeError;
 
 #[derive(Debug, Clone, PartialEq, EnumString, StrumDisplay, IntoStaticStr)]
 #[strum(serialize_all = "lowercase")]

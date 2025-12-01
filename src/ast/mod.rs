@@ -12,10 +12,10 @@
 //! - **Literal expressions**: Direct values (numbers, strings, identifiers)
 //! - **Grouping expressions**: Parenthesized expressions for precedence control
 
-use std::collections::HashMap;
+use std::{collections::HashMap};
 
 pub use crate::token::token_type::Identifier;
-use crate::token::{Position, TokenSlice};
+use crate::token::{Position};
 
 pub mod literal;
 pub mod operators;
@@ -23,6 +23,7 @@ pub mod expression;
 pub mod statement;
 
 pub use literal::Literal;
+use macros::generate_unchecked;
 pub use operators::{BinaryOperator, UnaryOperator};
 pub use expression::{Expression, ExprNode};
 pub use statement::{Statement, StatementBlock, StatNode};
@@ -31,12 +32,12 @@ pub type IdentifierMap<T> = HashMap<Identifier, T>;
 pub type IdentifierToExp<T> = IdentifierMap<ExprNode<T>>;
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct AstNode<'a, T> {
+pub struct AstNode<T> {
     pub node: T,
-    pub position: Option<Position<'a>>,
+    pub position: Option<Position>,
 }
-impl<'a, T> AstNode<'a, T> {
-    pub fn new(node: T, position: Position<'a>) -> Self {
+impl<T> AstNode<T> {
+    pub fn new(node: T, position: Position) -> Self {
         Self {
             node,
             position: Some(position),
@@ -50,12 +51,14 @@ impl<'a, T> AstNode<'a, T> {
     }
 }
 
-impl<'a, T> From<T> for AstNode<'a, T> {
+impl<'a, T> From<T> for AstNode< T> {
     fn from(value: T) -> Self {
         AstNode::new_temp(value)
     }
 }
 
-pub type StatementNode<'a>=StatNode<&'a TokenSlice<'a>>;
-pub type StatmentBlockNode<'a>=StatementBlock<&'a TokenSlice<'a>>;
-pub type ExpressionNode<'a>=ExprNode<&'a TokenSlice<'a>>;
+    
+
+pub type StatementNode=StatNode<Position>;
+pub type StatmentBlockNode=StatementBlock<Position>;
+pub type ExpressionNode=ExprNode<Position>;

@@ -12,7 +12,7 @@ pub mod types;
 pub mod vm;
 pub mod code_runner;
 pub mod prelude;
-
+pub mod code_error;
 pub use token::{Token, TokenType, Tokenizer};
 //pub use code_runner::CodeRunner;
 

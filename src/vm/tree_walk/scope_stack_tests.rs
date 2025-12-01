@@ -1,4 +1,4 @@
-    use crate::{ast::Identifier, typing::TypeContainer, vm::tree_walk::{ScopeStack, ValuePrimitive, VmErrorType, VmValue}};
+    use crate::{ast::Identifier, types::TypeContainer, vm::tree_walk::{ScopeStack, ValuePrimitive, VmErrorType, VmValue}};
     use num_bigint::BigInt;
 
     /// Test basic scope operations: create variable, create scope, access from inner scope

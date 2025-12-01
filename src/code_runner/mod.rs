@@ -5,41 +5,49 @@
 //! and return the result.
 
 use crate::{
-    parser::{Parser, ParserError},
-    token::{token_type::TokenizerError, Tokenizer},
+    parser::{Parser, ParserErrorType},
+    token::{token_type::TokenizerErrorType, Tokenizer},
     vm::{
         backend::VmBackend,
         tree_walk::{Vm, VmError, VmValue},
     },
 };
 use std::fmt;
-use thiserror::Error;
+use derive_more::From;
 /// Errors that can occur during code execution.
-#[derive(Error, Debug)]
+#[derive(Debug,From)]
 pub enum CodeRunnerError {
     /// Error occurred during tokenization
-    #[error("Tokenization error: {0}")]
-    TokenizationError(#[from] TokenizerError),
+    TokenizationError(#[from] TokenizerErrorType),
 
     /// Error occurred during parsing
-    #[error("Parse error: could not parse the input {0:?}")]
-    ParseError(#[from] ParserError),
+    ParseError(#[from] ParserErrorType),
 
     /// Error occurred during VM execution
-    #[error("Runtime error: {0}")]
     RuntimeError(#[from] crate::vm::tree_walk::VmError),
 }
 
 impl CodeRunnerError {
-    pub fn as_tokenization_error(&self) -> Option<&TokenizerError> {
+    pub fn as_tokenization_error(&self) -> Option<&TokenizerErrorType> {
         if let Self::TokenizationError(v) = self {
             Some(v)
         } else {
             None
         }
     }
-
-    pub fn as_parse_error(&self) -> Option<&ParserError> {
+    pub fn as_error_str(&self,code_str:&str)->String{
+        let error=self.error_type_str();
+        todo!();
+        format!("{} \n error is: {}",error,error)
+    }
+    pub fn error_type_str(&self)->&'static str{
+        match self {
+            Self::TokenizationError(_)=>"tokenization error",
+            Self::ParseError(_)=>"parser error",
+            Self::RuntimeError(_)=>"runtime error",
+        }
+    }
+    pub fn as_parse_error(&self) -> Option<&ParserErrorType> {
         if let Self::ParseError(v) = self {
             Some(v)
         } else {
@@ -101,14 +109,10 @@ impl<Backend: VmBackend> CodeRunner<Backend> {
     pub fn run_statements(&mut self, source: &str) -> Result<(), CodeRunnerError> {
         // Step 1: Tokenize the source code
         let tokenizer = Tokenizer::new(source);
-        let tokens = tokenizer.tokenize();
+        let (tokens,errors) = tokenizer.tokenize();
 
         // Check for tokenization errors
-        for token in tokens.iter() {
-            if let crate::token::TokenType::Error(err) = &token.token_type {
-                return Err(CodeRunnerError::TokenizationError(err.clone()));
-            }
-        }
+        println!("{}",errors.err_str(source));
         // Step 2: Parse tokens into AST
         let mut parser = Parser::new(&tokens);
         let stmt_node = parser.parse_statements()?;
@@ -120,14 +124,9 @@ impl<Backend: VmBackend> CodeRunner<Backend> {
     pub fn evaluate_expr(&mut self, source: &str) -> Result<VmValue, CodeRunnerError> {
         // Step 1: Tokenize the source code
         let tokenizer = Tokenizer::new(source);
-        let tokens = tokenizer.tokenize();
+        let (tokens,errors) = tokenizer.tokenize();
 
-        // Check for tokenization errors
-        for token in tokens.iter() {
-            if let crate::token::TokenType::Error(err) = &token.token_type {
-                return Err(CodeRunnerError::TokenizationError(err.clone()));
-            }
-        }
+        println!("{}",errors.err_str(source));
         // Step 2: Parse tokens into AST
         let mut parser = Parser::new(&tokens);
         let stmt_node = parser.parse_expression()?;

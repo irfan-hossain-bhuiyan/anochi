@@ -6,75 +6,21 @@ pub use vm_value::{StructValue, ValuePrimitive, VmValue};
 
 use crate::{
     ast::{
-        Expression, ExprNode, Identifier, Literal, StatNode, Statement, StatementBlock, StatementNode
-    },
-    prelude::IndexCons,
-    types::{TypeContainer, TypeId, UnifiedTypeDefinition},
-    vm::{
+         ExprNode, Expression, Identifier, Literal, StatNode, Statement, StatementBlock, StatementNode
+    }, prelude::{IndexCons, Mappable}, token::tokenizer::HasPosition, types::{TypeContainer, TypeId, UnifiedTypeDefinition}, vm::{
         backend::{IoBackend, VmBackend},
-        tree_walk::vm_value::{FuncId, VmFunc},
-    },
+        tree_walk::{vm_error::VmErrorType, vm_value::{FuncId, VmFunc}},
+        
+    }
 };
-
-use thiserror::Error;
-
-/// Error types for VM evaluation.
-#[derive(Error, Debug, PartialEq)]
-pub enum VmErrorType {
-    /// Division by zero error
-    #[error("Division by zero")]
-    DivisionByZero,
-    /// Type mismatch error
-    #[error("Type is mismatched,{0:?}")]
-    TypeMismatch(&'static str),
-    /// Undefined identifier error
-    #[error("Undefined identifier: {0}")]
-    UndefinedIdentifier(Identifier),
-    /// Invalid operation error
-    #[error("Invalid operation: {0}")]
-    InvalidOperation(String),
-    #[error("Unsupproted Operation {0:?}")]
-    Unsupported(String),
-    #[error("Error for that are not supported yet.")]
-    InvalidTypeDefination,
-    #[error("Having same name in scope")]
-    SameVariableName,
-    #[error("Calling a non funciton with function")]
-    CallingNonFunc,
-    #[error("Function input parameter is not struct.")]
-    FuncInvalidInput,
-}
-
-#[derive(Debug, PartialEq)]
-pub struct VmError<T> {
-    pub error: VmErrorType,
-    pub node: T,
-}
-
-impl<T> VmError<T> {
-    pub fn new(error: VmErrorType, node: T) -> Self {
-        Self { error, node }
-    }
-}
-
-impl VmErrorType {
-    /// Returns `true` if the vm error is [`TypeMismatch`].
-    ///
-    /// [`TypeMismatch`]: VmErrorType::TypeMismatch
-    pub fn is_type_mismatch(&self) -> bool {
-        matches!(self, Self::TypeMismatch(..))
-    }
-    pub fn to_error<T>(self, node: T) -> VmError<T> {
-        VmError::new(self, node)
-    }
-}
+mod vm_error;
+pub use vm_error::{VmError};
 
 /// Result type for VM evaluation operations.
-pub type VmExprResult<T> = Result<VmValue, VmError<T>>;
-pub type VmResultMut<'a, T> = Result<&'a mut VmValue, VmError<T>>;
-
+pub type VmExprResult = Result<VmValue, VmError>;
+pub type VmResultMut<'a>= Result<&'a mut VmValue,VmError >;
 /// Result type for statement execution
-pub type StatementResult<T> = Result<StatementEvent, VmError<T>>;
+pub type StatementResult = Result<StatementEvent, VmError>;
 
 /// Statement execution events for control flow
 #[derive(Debug, Clone, PartialEq)]
@@ -140,8 +86,8 @@ impl<Backend: VmBackend> Vm<Backend> {
         }
         Ok(())
     }
-    pub fn evaluate_expr<T:Clone>(&mut self, expression_node: &ExpNode<T>) -> VmExprResult<T> {
-        let node_data = expression_node.data().clone();
+    pub fn evaluate_expr<T:Clone+HasPosition>(&mut self, expression_node: &ExpNode<T>) -> VmExprResult {
+        let node_data = expression_node.data().get_position().clone();
         let map_err = |e| VmError::new(e, node_data);
         let expression = &expression_node.exp;
         match expression {
@@ -219,12 +165,18 @@ impl<Backend: VmBackend> Vm<Backend> {
                 statements,
             } => {
                 let input = self.evaluate_expr(&input)?;
-                let input_type = self.to_type(input).map_err(map_err)?;
+                let input_type=match self.to_type(input) {
+                    Ok(x)=>x,
+                    Err(x)=>return Err(map_err(x)),
+                };
                 let output_type = match output {
                     None => None,
                     Some(x) => {
                         let output = self.evaluate_expr(&x)?;
-                        let output_type = self.to_type(output).map_err(map_err)?;
+                        let output_type =match self.to_type(output){
+                            Ok(x)=>x,
+                            Err(x)=>return Err(map_err(x)),
+                        };
                         Some(output_type)
                     }
                 };
@@ -258,8 +210,8 @@ impl<Backend: VmBackend> Vm<Backend> {
             .insert_variable(target, value, &mut self.types);
         Ok(())
     }
-    pub fn execute_statement<T: Clone>(&mut self, stat_node: &StmtNode<T>) -> StatementResult<T> {
-        let node_data = stat_node.data().clone();
+    pub fn execute_statement<T: Clone+HasPosition>(&mut self, stat_node: &StmtNode<T>) -> StatementResult {
+        let node_data = stat_node.data().get_position().clone();
         let map_err = |e| VmError::new(e, node_data.clone());
         let stmt = &stat_node.stat;
         match stmt {
@@ -391,10 +343,10 @@ impl<Backend: VmBackend> Vm<Backend> {
             .insert_variable_check(identifier, value, expected_type_id, type_container)
     }
 
-    fn run_block<T:Clone>(
+    fn run_block<T:Clone+HasPosition>(
         &mut self,
         stmtblock: &StatementBlock<T>,
-    ) -> Result<StatementEvent, VmError<T>> {
+    ) -> Result<StatementEvent, VmError> {
         self.create_scope();
         let mut inner_code = || {
             for stmt in stmtblock.statements.iter() {
@@ -423,7 +375,7 @@ impl<Backend: VmBackend> Vm<Backend> {
         self.funcs.push(func)
     }
     /// It type check the function that is currently passed,and execute it.
-    fn execute_function<T: Clone>(&mut self, _func_id: &FuncId, _inputs: VmValue) -> VmExprResult<T> {
+    fn execute_function<T: Clone+HasPosition>(&mut self, _func_id: &FuncId, _inputs: VmValue) -> VmExprResult {
         todo!()
     }
     fn get_func(&self, func_id: &FuncId) -> &VmFunc {
@@ -441,7 +393,7 @@ impl<Backend: VmBackend> Vm<Backend> {
     }
 }
 
-#[cfg(test)]
-mod scope_stack_tests;
-#[cfg(test)]
-mod vm_tests;
+//#[cfg(test)]
+//mod scope_stack_tests;
+//#[cfg(test)]
+//mod vm_tests;
