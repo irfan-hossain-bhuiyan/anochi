@@ -547,7 +547,7 @@ impl<'a> Tokenizer<'a> {
             };
             Ok(token)
         } else {
-            return Err(self.create_error(TokenizerErrorType::NoRightQuote));
+            Err(self.create_error(TokenizerErrorType::NoRightQuote))
         }
     }
 

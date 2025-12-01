@@ -292,7 +292,6 @@ impl VmValue {
     }
 }
 
-use super::*;
 /// Evaluates a unary operation on a VmValue.
 ///
 /// This is a standalone function that handles negation and logical NOT operations

@@ -2,7 +2,7 @@
 
 use thiserror::Error;
 
-use crate::{ast::{ Identifier}, code_error::CodeError, prelude::Mappable};
+use crate::{ast::{ Identifier}, code_error::CodeError};
 #[derive(Error, Debug, PartialEq)]
 pub enum VmErrorType {
     /// Division by zero error

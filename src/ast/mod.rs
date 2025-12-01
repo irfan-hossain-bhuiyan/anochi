@@ -23,7 +23,6 @@ pub mod expression;
 pub mod statement;
 
 pub use literal::Literal;
-use macros::generate_unchecked;
 pub use operators::{BinaryOperator, UnaryOperator};
 pub use expression::{Expression, ExprNode};
 pub use statement::{Statement, StatementBlock, StatNode};

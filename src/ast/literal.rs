@@ -1,4 +1,3 @@
-use std::fmt;
 use num_bigint::BigInt;
 use num_rational::BigRational;
 use crate::token::token_type::Identifier;
