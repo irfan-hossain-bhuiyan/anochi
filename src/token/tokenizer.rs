@@ -566,7 +566,7 @@ impl<'a> Tokenizer<'a> {
 #[derive(Debug, Clone, PartialEq)]
 pub struct TokenContainer(Vec<Token>);
 #[derive(Debug,Deref)]
-struct TokenizerErrors(Vec<TokenizerError>);
+pub struct TokenizerErrors(Vec<TokenizerError>);
 impl TokenizerErrors {
     pub fn err_str(&self,code:&str)->String{
         self.iter().map(|x|x.err_str(code)).collect()

@@ -3,6 +3,8 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::mem::size_of;
 
+use enum_dispatch::enum_dispatch;
+
 /// Type alias for hash values - can be easily changed to u128 or larger in the future
 pub type HashValue = u64;
 
@@ -213,5 +215,7 @@ impl<K: Hash + Eq,T,U> Mappable<T,U> for HashMap<K,T>{
         self.into_iter().map(|(key,data)|(key,f(data))).collect()
     }
 }
-
-
+#[enum_dispatch]
+pub trait CodeError{
+    fn err_str(code:&str)->String;
+}

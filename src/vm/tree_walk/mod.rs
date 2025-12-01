@@ -192,7 +192,8 @@ impl<Backend: VmBackend> Vm<Backend> {
                 let VmValue::Func(func_id) = caller else {
                     return Err(VmErrorType::CallingNonFunc).map_err(map_err);
                 };
-                self.execute_function(&func_id, callee)
+                todo!()
+                //self.execute_function(&func_id, callee)
             }
         }
     }
@@ -210,7 +211,7 @@ impl<Backend: VmBackend> Vm<Backend> {
             .insert_variable(target, value, &mut self.types);
         Ok(())
     }
-    pub fn execute_statement<T: Clone+HasPosition>(&mut self, stat_node: &StmtNode<T>) -> StatementResult {
+    pub fn execute_statement<T:Clone+HasPosition>(&mut self, stat_node: &StmtNode<T>) -> StatementResult {
         let node_data = stat_node.data().get_position().clone();
         let map_err = |e| VmError::new(e, node_data.clone());
         let stmt = &stat_node.stat;
@@ -375,7 +376,7 @@ impl<Backend: VmBackend> Vm<Backend> {
         self.funcs.push(func)
     }
     /// It type check the function that is currently passed,and execute it.
-    fn execute_function<T: Clone+HasPosition>(&mut self, _func_id: &FuncId, _inputs: VmValue) -> VmExprResult {
+    fn execute_function<T: HasPosition>(&mut self, _func_id: &FuncId, _inputs: VmValue) -> VmExprResult {
         todo!()
     }
     fn get_func(&self, func_id: &FuncId) -> &VmFunc {
