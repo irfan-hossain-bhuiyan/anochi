@@ -112,11 +112,9 @@ pub enum TokenizerErrorType{
     #[error("Unknown special character")]
     UnknownSpeicalChar,
 }
-pub type TokenizerError=CodeError<TokenizerErrorType>;
 
 use strum::{EnumString, Display as StrumDisplay, IntoStaticStr};
 
-use crate::code_error::CodeError;
 
 #[derive(Debug, Clone, PartialEq, EnumString, StrumDisplay, IntoStaticStr)]
 #[strum(serialize_all = "lowercase")]

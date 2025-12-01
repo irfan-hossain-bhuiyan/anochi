@@ -6,7 +6,7 @@ pub use vm_value::{StructValue, ValuePrimitive, VmValue};
 
 use crate::{
     ast::{
-         ExprNode, Expression, Identifier, Literal, StatNode, Statement, StatementBlock
+         ExprNode, Identifier, StatNode, StatementBlock
     }, prelude::IndexCons, token::tokenizer::HasPosition, types::{TypeContainer, TypeId, UnifiedTypeDefinition}, vm::{
         backend::{IoBackend, VmBackend},
         tree_walk::{vm_error::VmErrorType, vm_value::{FuncId, VmFunc}},
@@ -37,14 +37,17 @@ mod scope_stack;
 use scope_stack::ScopeStack;
 #[derive(Debug, Default)]
 pub struct Vm<Backend = IoBackend> {
-    variables: ScopeStack,
-    types: TypeContainer,
-    funcs: FunctionContainer,
-    backend: Backend,
+    pub(super) variables: ScopeStack,
+    pub(super) types: TypeContainer,
+    pub(super) funcs: FunctionContainer,
+    pub(super) backend: Backend,
 }
 
 type ExpNode<T> = ExprNode<T>;
 type StmtNode<T> = StatNode<T>;
+
+mod evaluation;
+mod execution;
 
 impl<Backend: VmBackend> Vm<Backend> {
     pub fn new(backend: Backend) -> Self {
@@ -87,123 +90,15 @@ impl<Backend: VmBackend> Vm<Backend> {
         Ok(())
     }
     pub fn evaluate_expr<T:Clone+HasPosition>(&mut self, expression_node: &ExpNode<T>) -> VmExprResult {
-        let node_data = expression_node.data().get_position().clone();
-        let map_err = |e| VmError::new(e, node_data);
-        let expression = &expression_node.exp;
-        match expression {
-            Expression::Literal(literal) => match literal {
-                Literal::Identifier(x) => self.variables.get_variable_or_err(&x).map_err(map_err),
-                Literal::Bool(_) | Literal::Float(_) | Literal::Integer(_) => Ok(
-                    VmValue::ValuePrimitive(ValuePrimitive::from(literal.clone())),
-                ),
-                Literal::String(_) => {
-                    // TODO: Handle strings as arrays when array implementation is ready
-                    Err(VmErrorType::Unsupported(
-                        "String literals not yet supported as arrays".to_string(),
-                    )).map_err(map_err)
-                }
-            },
-            Expression::Binary {
-                left,
-                operator,
-                right,
-            } => {
-                let left_val = self.evaluate_expr(left)?;
-                let right_val = self.evaluate_expr(right)?;
-                vm_value::evaluate_binary_op(&left_val, &operator, &right_val).map_err(map_err)
-            }
-            Expression::Unary { operator, operand } => {
-                let operand_val = self.evaluate_expr(operand)?;
-                vm_value::evaluate_unary_op(&operator, &operand_val).map_err(map_err)
-            }
-            Expression::Grouping { expression } => self.evaluate_expr(expression),
-            Expression::Product { data } => {
-                let mut product = HashMap::new();
-                for (key, value) in data.iter() {
-                    product.insert(key.clone(), self.evaluate_expr(value)?);
-                }
-                Ok(VmValue::Product(StructValue::new(product)))
-            }
-            Expression::Sum { data } => {
-                use std::collections::BTreeSet;
-
-                let mut type_set = BTreeSet::new();
-                for expr in data.iter() {
-                    match self.evaluate_expr(expr)? {
-                        VmValue::Type(type_id) => {
-                            type_set.insert(type_id);
-                        }
-                        _ => {
-                            return Err(VmErrorType::InvalidOperation(
-                                "Sum types can only contain type values".to_string(),
-                            )).map_err(map_err);
-                        }
-                    }
-                }
-
-                // For sum types, we need to convert TypeIds back to TypeDefinitions to create the sum type
-                let mut variants = BTreeSet::new();
-                for type_id in type_set {
-                    if self.types.has_type(&type_id) {
-                        // Store the TypeId directly as UnifiedTypeDefinition::TypeId
-                        variants.insert(UnifiedTypeDefinition::TypeId(type_id));
-                    } else {
-                        return Err(VmErrorType::InvalidOperation(
-                            "Type not found in container".to_string(),
-                        )).map_err(map_err);
-                    }
-                }
-
-                let unified = crate::types::UnifiedTypeDefinition::sum(variants);
-                let type_id = self.types.store_unified_type(unified);
-                Ok(VmValue::Type(type_id))
-            }
-            Expression::MemberAccess { object, member } => todo!(),
-            Expression::Function {
-                input,
-                output,
-                statements,
-            } => {
-                let input = self.evaluate_expr(&input)?;
-                let input_type=match self.to_type(input) {
-                    Ok(x)=>x,
-                    Err(x)=>return Err(map_err(x)),
-                };
-                let output_type = match output {
-                    None => None,
-                    Some(x) => {
-                        let output = self.evaluate_expr(&x)?;
-                        let output_type =match self.to_type(output){
-                            Ok(x)=>x,
-                            Err(x)=>return Err(map_err(x)),
-                        };
-                        Some(output_type)
-                    }
-                };
-                let func =
-                    VmFunc::new_checked(input_type, output_type, *statements.clone(), &self.types)
-                        .ok_or(VmErrorType::FuncInvalidInput).map_err(map_err)?;
-                let func_id = self.add_function(func);
-                Ok(VmValue::from_func(func_id))
-            }
-            Expression::FnCall { caller, callee } => {
-                let caller = self.evaluate_expr(&caller)?;
-                let callee = self.evaluate_expr(&callee)?;
-                let VmValue::Func(func_id) = caller else {
-                    return Err(VmErrorType::CallingNonFunc).map_err(map_err);
-                };
-                todo!()
-                //self.execute_function(&func_id, callee)
-            }
-        }
+        evaluation::evaluate_expr(self, expression_node)
     }
 
-    fn to_type(&mut self, value: VmValue) -> Result<TypeId, VmErrorType> {
+    pub(super) fn to_type(&mut self, value: VmValue) -> Result<TypeId, VmErrorType> {
         value
             .into_type_id(&mut self.types)
             .ok_or(VmErrorType::InvalidTypeDefination)
     }
-    fn insert_variable(&mut self, target: Identifier, value: VmValue) -> Result<(), VmErrorType> {
+    pub(super) fn insert_variable(&mut self, target: Identifier, value: VmValue) -> Result<(), VmErrorType> {
         if self.variables.has_variable_current(&target) {
             return Err(VmErrorType::SameVariableName);
         }
@@ -212,121 +107,7 @@ impl<Backend: VmBackend> Vm<Backend> {
         Ok(())
     }
     pub fn execute_statement<T:Clone+HasPosition>(&mut self, stat_node: &StmtNode<T>) -> StatementResult {
-        let node_data = stat_node.data().get_position().clone();
-        let map_err = |e| VmError::new(e, node_data.clone());
-        let stmt = &stat_node.stat;
-        match stmt {
-            Statement::Assignment {
-                target,
-                r#type,
-                value,
-            } => {
-                let value = self.evaluate_expr(value)?;
-                if let Some(type_expr) = r#type {
-                    let type_value = self.evaluate_expr(type_expr)?;
-                    let expected_type_id = type_value
-                        .into_type_id(&mut self.types)
-                        .ok_or(VmErrorType::InvalidTypeDefination).map_err(map_err)?;
-                    if !value.of_type(expected_type_id, &mut self.types) {
-                        return Err(VmErrorType::TypeMismatch("")).map_err(map_err);
-                    }
-                    // Use insert_variable_check for type verification
-                }
-                self.insert_variable(target.clone(), value).map_err(map_err)?;
-                // Use insert_variable for automatic type inference
-                Ok(StatementEvent::None)
-            }
-            Statement::Statements(block) => {
-                for x in block.statements.iter() {
-                    match self.execute_statement(x)? {
-                        StatementEvent::None => continue,
-                        event => return Ok(event), // Propagate break, continue, return
-                    }
-                }
-                Ok(StatementEvent::None)
-            }
-            Statement::MutableAssignment { target, value } => {
-                match &target.exp {
-                    Expression::Literal(Literal::Identifier(identifier)) => {
-                        let evaluated_value = self.evaluate_expr(value)?;
-                        self.variables.set_variable(
-                            identifier,
-                            evaluated_value,
-                            &mut self.types,
-                        ).map_err(map_err)?;
-                        Ok(StatementEvent::None)
-                    }
-                    _ => {
-                        // For member access and other complex assignments,
-                        // return an error for now until type system is implemented
-                        Err(VmErrorType::InvalidOperation(
-                            "Complex assignment not yet supported".to_string(),
-                        )).map_err(map_err)
-                    }
-                }
-            }
-            Statement::StatementBlock(stmtblock) => self.run_block(&stmtblock),
-            Statement::If { condition, on_true } => {
-                let VmValue::ValuePrimitive(ValuePrimitive::Bool(x)) =
-                    self.evaluate_expr(condition)?
-                else {
-                    return Err(VmErrorType::TypeMismatch(
-                        "The expression in if should be boolean",
-                    )).map_err(map_err);
-                };
-                if x {
-                    self.execute_statement(on_true)
-                } else {
-                    Ok(StatementEvent::None)
-                }
-            }
-            Statement::IfElse {
-                condition,
-                on_true,
-                on_false,
-            } => {
-                let VmValue::ValuePrimitive(ValuePrimitive::Bool(x)) =
-                    self.evaluate_expr(condition)?
-                else {
-                    return Err(VmErrorType::TypeMismatch(
-                        "The expression on ifelse should be bool",
-                    )).map_err(map_err);
-                };
-                if x {
-                    self.execute_statement(on_true)
-                } else {
-                    self.execute_statement(on_false)
-                }
-            }
-            Statement::Debug { expr_vec } => {
-                if expr_vec.is_empty() {
-                    self.print_stack();
-                } else {
-                    for expr in expr_vec.iter() {
-                        let expr = self.evaluate_expr(expr)?;
-                        self.backend.debug_print(&expr.to_string()).unwrap();
-                    }
-                }
-                Ok(StatementEvent::None)
-            }
-            Statement::Continue => Ok(StatementEvent::Continue),
-            Statement::Break => Ok(StatementEvent::Break),
-            Statement::Loop { statements } => {
-                loop {
-                    match self.run_block(&statements)? {
-                        StatementEvent::None => {}
-                        StatementEvent::Break => {
-                            break;
-                        }
-                        StatementEvent::Continue => {
-                            continue;
-                        }
-                        StatementEvent::Return(x) => return Ok(StatementEvent::Return(x)),
-                    }
-                }
-                Ok(StatementEvent::None)
-            }
-        }
+        execution::execute_statement(self, stat_node)
     }
 
     pub(crate) fn print_stack(&self) {
@@ -344,7 +125,7 @@ impl<Backend: VmBackend> Vm<Backend> {
             .insert_variable_check(identifier, value, expected_type_id, type_container)
     }
 
-    fn run_block<T:Clone+HasPosition>(
+    pub(super) fn run_block<T:Clone+HasPosition>(
         &mut self,
         stmtblock: &StatementBlock<T>,
     ) -> Result<StatementEvent, VmError> {
@@ -372,7 +153,7 @@ impl<Backend: VmBackend> Vm<Backend> {
         self.variables.drop_scope();
     }
 
-    fn add_function(&mut self, func: VmFunc) -> FuncId {
+    pub(super) fn add_function(&mut self, func: VmFunc) -> FuncId {
         self.funcs.push(func)
     }
     /// It type check the function that is currently passed,and execute it.
