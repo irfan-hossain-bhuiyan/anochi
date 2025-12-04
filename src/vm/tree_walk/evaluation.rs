@@ -84,7 +84,7 @@ pub(super) fn evaluate_expr<Backend: VmBackend, T: Clone + HasPosition>(
             output,
             statements,
         } => {
-            let input = vm.evaluate_expr(&input)?;
+            let input = vm.evaluate_expr(input)?;
             let input_type=match vm.to_type(input) {
                 Ok(x)=>x,
                 Err(x)=>return Err(map_err(x)),
@@ -92,7 +92,7 @@ pub(super) fn evaluate_expr<Backend: VmBackend, T: Clone + HasPosition>(
             let output_type = match output {
                 None => None,
                 Some(x) => {
-                    let output = vm.evaluate_expr(&x)?;
+                    let output = vm.evaluate_expr(x)?;
                     let output_type =match vm.to_type(output){
                         Ok(x)=>x,
                         Err(x)=>return Err(map_err(x)),
@@ -107,8 +107,8 @@ pub(super) fn evaluate_expr<Backend: VmBackend, T: Clone + HasPosition>(
             Ok(VmValue::from_func(func_id))
         }
         Expression::FnCall { caller, callee } => {
-            let caller = vm.evaluate_expr(&caller)?;
-            let callee = vm.evaluate_expr(&callee)?;
+            let caller = vm.evaluate_expr(caller)?;
+            let callee = vm.evaluate_expr(callee)?;
             let VmValue::Func(func_id) = caller else {
                 return Err(map_err(VmErrorType::CallingNonFunc));
             };
@@ -116,10 +116,8 @@ pub(super) fn evaluate_expr<Backend: VmBackend, T: Clone + HasPosition>(
             if !callee.of_type(param_type, &mut vm.types) {
                 return Err(map_err(VmErrorType::FuncInvalidInput));
             }
-            let VmValue::Product(inputs) = callee else {
-                return Err(map_err(VmErrorType::FuncInvalidInput));
-            };
-            vm.execute_function(&func_id, inputs)
+            // type check already gaurentee that callee is of struct type
+            vm.execute_function(&func_id, callee)
         }
     }
 }

@@ -29,6 +29,17 @@
 
 ## Doing:
 - [ ] Better error reporting
+- [ ] Implementation of code validity checking and code running
+    - [ ] You don't need to run entire code to check if the code is valid,
+    - [ ] Example of code:
+        newtype=i64;
+        x:newtype=123;
+        So in this scenerio,I need to execute the newtype,So how d I know,I need to execute it,
+        A obious approach is comptime {newtype=i64},to say that this code need to run before,and also so that comptime don't 
+        access things like ptr or i32,f32 etc,I will have enum to split between the two,comptime also get type checked before than run.
+        Now a question,do comptime will do each line typecheck and execute or it will for the entire block and then execute.
+        
+        - For just get going I will propose it go one line and execute.
 - [ ] Having type checking and code running side by side.
     - [ ] make the implementation of function to todo
     - [ ] adding type for both runtime and compile time

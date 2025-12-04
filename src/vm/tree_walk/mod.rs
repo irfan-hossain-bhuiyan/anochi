@@ -168,14 +168,13 @@ impl<Backend: VmBackend> Vm<Backend> {
         self.funcs.push(func)
     }
     /// It type check the function that is currently passed,and execute it.
-    fn execute_function(&mut self, func_id: &FuncId, inputs: StructValue) -> VmExprResult {
+    fn execute_function(&mut self, func_id: &FuncId, inputs: VmValue) -> VmExprResult {
         let func = self.get_func(func_id);
         let param_type = func.get_param();
-        let input_value=VmValue::Product(inputs);
-        if !input_value.of_type(param_type, &mut self.types) {
+        if !inputs.of_type(param_type, &mut self.types) {
             panic!("The validation should checked before");
         }
-        let inputs= input_value.as_product().unwrap();
+        let inputs= inputs.as_product().unwrap();
         let body = self.get_func(func_id).get_statement().clone();
         // TODO:There is unwarp and clone of statement,I don't know,but I need to fix this
         self.create_scope();
