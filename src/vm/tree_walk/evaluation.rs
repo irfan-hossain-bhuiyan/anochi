@@ -20,9 +20,9 @@ pub(super) fn evaluate_expr<Backend: VmBackend, T: Clone + HasPosition>(
             ),
             Literal::String(_) => {
                 // TODO: Handle strings as arrays when array implementation is ready
-                Err(VmErrorType::Unsupported(
+                Err(map_err(VmErrorType::Unsupported(
                     "String literals not yet supported as arrays".to_string(),
-                )).map_err(map_err)
+                )))
             }
         },
         Expression::Binary {
@@ -54,9 +54,9 @@ pub(super) fn evaluate_expr<Backend: VmBackend, T: Clone + HasPosition>(
                         type_set.insert(type_id);
                     }
                     _ => {
-                        return Err(VmErrorType::InvalidOperation(
+                        return Err(map_err(VmErrorType::InvalidOperation(
                             "Sum types can only contain type values".to_string(),
-                        )).map_err(map_err);
+                        )));
                     }
                 }
             }
@@ -68,9 +68,9 @@ pub(super) fn evaluate_expr<Backend: VmBackend, T: Clone + HasPosition>(
                     // Store the TypeId directly as UnifiedTypeDefinition::TypeId
                     variants.insert(UnifiedTypeDefinition::TypeId(type_id));
                 } else {
-                    return Err(VmErrorType::InvalidOperation(
+                    return Err(map_err(VmErrorType::InvalidOperation(
                         "Type not found in container".to_string(),
-                    )).map_err(map_err);
+                    )));
                 }
             }
 

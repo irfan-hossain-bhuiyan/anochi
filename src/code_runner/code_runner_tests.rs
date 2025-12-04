@@ -75,7 +75,7 @@ fn test_if() {
     assert_eq!(output, VmValue::from_i64(20))
 }
 
-//#[test]
+#[test]
 fn test_loop() {
     let mut runner = CodeRunner::default();
     runner
@@ -91,3 +91,18 @@ fn test_loop() {
     let output = runner.evaluate_expr("x").unwrap();
     assert_eq!(output, VmValue::from_i64(31))
 }
+#[test]
+fn test_function_call() {
+    let mut runner = CodeRunner::default();
+    runner
+        .run_statements(
+            r"
+    let add = fn {x=i64} -> i64 { return x; };
+    let result = add!{x=5};
+    ",
+        )
+        .unwrap();
+    let output = runner.evaluate_expr("result").unwrap();
+    assert_eq!(output, VmValue::from_i64(5))
+}
+
