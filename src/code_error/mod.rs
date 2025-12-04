@@ -1,10 +1,13 @@
 use std::fmt::Display;
 
+use derive_more::Deref;
+
 use crate::{prelude::Mappable, token::Position};
 
 pub trait CodeErrorType {}
-#[derive(Debug,Default,)]
+#[derive(Debug,Default,Deref)]
 pub struct CodeError<T>{
+    #[deref]
     error_type:T,
     error_pos:Position,
 }
@@ -23,6 +26,7 @@ impl<T> CodeError<T> {
         self.error_type
     }
 }
+
 impl<T:Display> CodeError<T>{
     pub fn err_str(&self, code_str: &str) -> String {
         let position = &self.error_pos;

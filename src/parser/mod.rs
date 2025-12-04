@@ -469,7 +469,7 @@ impl<'a> Parser<'a> {
     }
 
     pub fn parse_expression(&mut self) -> ReExpNode {
-        self.parse_type_union()
+        self.parse_expr_level(ExprLevel::TypeUnion)
     }
 
     // Expr ::= Term (("+" | "-") Term)*

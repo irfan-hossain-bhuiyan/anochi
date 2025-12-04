@@ -13,8 +13,9 @@ use crate::{
 use std::fmt;
 use derive_more::From;
 use enum_dispatch::enum_dispatch;
+use enum_as_inner::EnumAsInner;
 #[enum_dispatch(CodeErrorType)]
-#[derive(Debug, From)]
+#[derive(Debug, From,EnumAsInner)]
 pub enum CodeRunnerErrorType {
     TokenizerErrorType,
     ParserErrorType,
@@ -29,37 +30,9 @@ impl<T:Into<CodeRunnerErrorType>> CodeError<T>{
     }
 }
 impl CodeRunnerErrorType {
-    pub fn as_tokenization_error(&self) -> Option<&TokenizerErrorType> {
-        if let Self::TokenizerErrorType(v) = self {
-            Some(v)
-        } else {
-            None
-        }
-    }
-    pub fn error_type_str(&self)->&'static str{
-        match self {
-            Self::TokenizerErrorType(_)=>"tokenization error",
-            Self::ParserErrorType(_)=>"parser error",
-            Self::VmErrorType(_)=>"runtime error",
-        }
-    }
-    pub fn as_parse_error(&self) -> Option<&ParserErrorType> {
-        if let Self::ParserErrorType(v) = self {
-            Some(v)
-        } else {
-            None
-        }
-    }
-
-    pub fn as_runtime_error(&self) -> Option<&VmErrorType> {
-        if let Self::VmErrorType(v) = self {
-            Some(v)
-        } else {
-            None
-        }
-    }
+    
     pub fn is_runtime_error_and(&self,f:impl Fn (&VmErrorType)->bool)->bool{
-        self.as_runtime_error().is_some_and(f)
+        self.as_vm_error_type().is_some_and(f)
     }
 }
 /// Main code runner that orchestrates tokenization, parsing, and execution.
