@@ -1,5 +1,4 @@
-use crate::ast::{BinaryOperator, Identifier, Literal, StatNode, UnaryOperator};
-use crate::prelude::IndexPtr;
+use crate::ast::{BinaryOperator, Identifier, Literal, UnaryOperator};
 use crate::types::{
     BuiltinKind, TypeContainer, TypeDefinition, TypeGeneric, TypeId, UnifiedTypeDefinition,
 };
@@ -8,55 +7,11 @@ use num_bigint::BigInt;
 use num_rational::BigRational;
 use std::ops::Deref;
 use std::{collections::HashMap, fmt::Display};
+
 mod function;
+pub use function::{VmFunc,FuncId};
 #[cfg(test)]
 mod tests;
-#[derive(Debug, Clone, PartialEq)]
-pub(crate) struct VmFunc {
-    param: TypeId,
-    output: Option<TypeId>,
-    body: StatNode<()>,
-}
-
-impl VmFunc {
-    pub fn new_checked<T>(
-        param: TypeId,
-        output: Option<TypeId>,
-        body: StatNode<T>,
-        type_container: &TypeContainer,
-    ) -> Option<Self> {
-        if !type_container.get_type(&param)?.is_product() {
-            return None;
-        }
-        Some(Self {
-            param,
-            output,
-            body: body.to_null(),
-        })
-    }
-    pub fn new<T>(param: TypeId,
-        output: Option<TypeId>,
-        body: StatNode<T>,
-        type_container: &TypeContainer,
-    )->Self{
-        Self::new_checked(param, output, body, type_container).unwrap()
-    }
-    pub fn get_param(&self) -> TypeId {
-        self.param
-    }
-    pub fn update_output_type(&mut self,output:TypeId)->Result<(), VmErrorType>{
-        match self.output {
-            None=> {self.output=Some(output);Ok(())},
-            Some(x) if x==output=>{self.output=Some(output);Ok(())},
-            _ =>{return Err(VmErrorType::TypeMismatch(""))}
-        }
-    }
-
-    pub(crate) fn get_statement(&self) -> &StatNode<()> {
-        &self.body
-    }
-}
-pub type FuncId = IndexPtr<VmFunc>;
 /// Primitive values that can be stored in the VM
 #[derive(Debug, Clone, PartialEq)]
 pub enum ValuePrimitive {
@@ -289,6 +244,12 @@ impl VmValue {
             VmValue::Product(product) => Some(product),
             _ => None,
         }
+    }
+    pub fn create_unit()->Self{
+        Self::Product(StructValue::default())
+    }
+    pub fn is_null(&self)->bool{
+        matches!(self,VmValue::Product(x) if x.is_empty())
     }
 }
 

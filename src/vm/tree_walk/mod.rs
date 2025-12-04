@@ -4,20 +4,22 @@ mod vm_value;
 pub use vm_value::{StructValue, ValuePrimitive, VmValue};
 
 use crate::{
-    ast::{
-         ExprNode, Identifier, StatNode, StatementBlock
-    }, prelude::IndexCons, token::tokenizer::HasPosition, types::{TypeContainer, TypeId, UnifiedTypeDefinition}, vm::{
+    ast::{ExprNode, Identifier, StatNode, StatementBlock},
+    prelude::IndexCons,
+    token::tokenizer::HasPosition,
+    types::{TypeContainer, TypeId, UnifiedTypeDefinition},
+    vm::{
         backend::{IoBackend, VmBackend},
-        tree_walk::{ vm_value::{FuncId, VmFunc}},
-        
-    }
+        tree_walk::vm_value::{FuncId, VmFunc},
+    },
 };
 mod vm_error;
-pub use vm_error::{VmError,VmErrorType};
+pub use vm_error::{VmError, VmErrorType};
 
 /// Result type for VM evaluation operations.
 pub type VmExprResult = Result<VmValue, VmError>;
-pub type VmResultMut<'a>= Result<&'a mut VmValue,VmError >;
+pub type VmExprResultType = Result<VmValue, VmErrorType>;
+pub type VmResultMut<'a> = Result<&'a mut VmValue, VmError>;
 /// Result type for statement execution
 pub type StatementResult = Result<StatementEvent, VmError>;
 
@@ -88,7 +90,10 @@ impl<Backend: VmBackend> Vm<Backend> {
         }
         Ok(())
     }
-    pub fn evaluate_expr<T:Clone+HasPosition>(&mut self, expression_node: &ExpNode<T>) -> VmExprResult {
+    pub fn evaluate_expr<T: Clone + HasPosition>(
+        &mut self,
+        expression_node: &ExpNode<T>,
+    ) -> VmExprResult {
         evaluation::evaluate_expr(self, expression_node)
     }
 
@@ -97,7 +102,11 @@ impl<Backend: VmBackend> Vm<Backend> {
             .into_type_id(&mut self.types)
             .ok_or(VmErrorType::InvalidTypeDefination)
     }
-    pub(super) fn insert_variable(&mut self, target: Identifier, value: VmValue) -> Result<(), VmErrorType> {
+    pub(super) fn insert_variable(
+        &mut self,
+        target: Identifier,
+        value: VmValue,
+    ) -> Result<(), VmErrorType> {
         if self.variables.has_variable_current(&target) {
             return Err(VmErrorType::SameVariableName);
         }
@@ -105,7 +114,10 @@ impl<Backend: VmBackend> Vm<Backend> {
             .insert_variable(target, value, &mut self.types);
         Ok(())
     }
-    pub fn execute_statement<T:Clone+HasPosition>(&mut self, stat_node: &StmtNode<T>) -> StatementResult {
+    pub fn execute_statement<T: Clone + HasPosition>(
+        &mut self,
+        stat_node: &StmtNode<T>,
+    ) -> StatementResult {
         execution::execute_statement(self, stat_node)
     }
 
@@ -124,7 +136,7 @@ impl<Backend: VmBackend> Vm<Backend> {
             .insert_variable_check(identifier, value, expected_type_id, type_container)
     }
 
-    pub(super) fn run_block<T:Clone+HasPosition>(
+    pub(super) fn run_block<T: Clone + HasPosition>(
         &mut self,
         stmtblock: &StatementBlock<T>,
     ) -> Result<StatementEvent, VmError> {
@@ -156,8 +168,26 @@ impl<Backend: VmBackend> Vm<Backend> {
         self.funcs.push(func)
     }
     /// It type check the function that is currently passed,and execute it.
-    fn execute_function<T: HasPosition>(&mut self, _func_id: &FuncId, _inputs: VmValue) -> VmExprResult {
-        todo!()
+    fn execute_function(&mut self, func_id: &FuncId, inputs: StructValue) -> VmExprResult {
+        let func = self.get_func(func_id);
+        let param_type = func.get_param();
+        let input_value=VmValue::Product(inputs);
+        if !input_value.of_type(param_type, &mut self.types) {
+            panic!("The validation should checked before");
+        }
+        let inputs= input_value.as_product().unwrap();
+        let body = self.get_func(func_id).get_statement().clone();
+        // TODO:There is unwarp and clone of statement,I don't know,but I need to fix this
+        self.create_scope();
+        let result = (|| {
+            self.extract_struct(inputs).unwrap();
+            match self.execute_statement(&body)? {
+                StatementEvent::Return(value) => Ok(value),
+                _ => Ok(VmValue::create_unit()),
+            }
+        })();
+        self.drop_scope();
+        result
     }
     fn get_func(&self, func_id: &FuncId) -> &VmFunc {
         self.funcs.get(func_id).unwrap()

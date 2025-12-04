@@ -375,6 +375,13 @@ impl<'a> Parser<'a> {
                 match_token_or_err!(self, TokenType::Semicolon)?;
                 Ok(self.make_stat_node(stmt, start))
             }
+TokenType::Keyword(Keyword::Return) => {
+                self.advance();
+                let expr = self.parse_expression().ok();
+                match_token_or_err!(self, TokenType::Semicolon)?;
+                let stmt = Statement::Return(expr);
+                Ok(self.make_stat_node(stmt, start))
+            }
             _ => Err(StatementParseErrorType::NoStatement.with_pos(self.peek_position())),
         }
     }

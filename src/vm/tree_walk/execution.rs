@@ -54,9 +54,9 @@ pub(super) fn execute_statement<Backend: VmBackend, T: Clone + HasPosition>(
                 _ => {
                     // For member access and other complex assignments,
                     // return an error for now until type system is implemented
-                    Err(VmErrorType::InvalidOperation(
+                    Err(map_err(VmErrorType::InvalidOperation(
                         "Complex assignment not yet supported".to_string(),
-                    )).map_err(map_err)
+                    )))
                 }
             }
         }
@@ -65,9 +65,9 @@ pub(super) fn execute_statement<Backend: VmBackend, T: Clone + HasPosition>(
             let VmValue::ValuePrimitive(ValuePrimitive::Bool(x)) =
                 vm.evaluate_expr(condition)?
             else {
-                return Err(VmErrorType::TypeMismatch(
+                return Err(map_err(VmErrorType::TypeMismatch(
                     "The expression in if should be boolean",
-                )).map_err(map_err);
+                )));
             };
             if x {
                 vm.execute_statement(on_true)
@@ -83,9 +83,9 @@ pub(super) fn execute_statement<Backend: VmBackend, T: Clone + HasPosition>(
             let VmValue::ValuePrimitive(ValuePrimitive::Bool(x)) =
                 vm.evaluate_expr(condition)?
             else {
-                return Err(VmErrorType::TypeMismatch(
+                return Err(map_err(VmErrorType::TypeMismatch(
                     "The expression on ifelse should be bool",
-                )).map_err(map_err);
+                )));
             };
             if x {
                 vm.execute_statement(on_true)
@@ -108,7 +108,7 @@ pub(super) fn execute_statement<Backend: VmBackend, T: Clone + HasPosition>(
         Statement::Break => Ok(StatementEvent::Break),
         Statement::Loop { statements } => {
             loop {
-                match vm.run_block(&statements)? {
+                match vm.run_block(statements)? {
                     StatementEvent::None => {}
                     StatementEvent::Break => {
                         break;
@@ -120,6 +120,13 @@ pub(super) fn execute_statement<Backend: VmBackend, T: Clone + HasPosition>(
                 }
             }
             Ok(StatementEvent::None)
+        }
+        Statement::Return(x)=>{
+            let return_value=match x {
+                Some(value)=>vm.evaluate_expr(value)?,
+                None=>VmValue::create_unit(),
+            };
+            Ok(StatementEvent::Return(return_value))
         }
     }
 }

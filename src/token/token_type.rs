@@ -133,5 +133,6 @@ pub enum Keyword {
     False,
     Debug,
     Let,
-    Fn
+    Fn,
+    Return,
 }

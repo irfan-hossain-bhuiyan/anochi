@@ -96,8 +96,7 @@ fn test_function_call() {
     let mut runner = CodeRunner::default();
     runner
         .run_statements(
-            r"
-    let add = fn {x=i64} -> i64 { return x; };
+            r"let add = fn {x=i64} -> i64 { return x; };
     let result = add!{x=5};
     ",
         )

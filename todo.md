@@ -25,9 +25,10 @@
 - [x] Change the representation Expression and Statement to be generic
 - [x] fixed loop
     - A way to fix this issue,Iis to add return type in the execute statement if break or continue is called,the loop will evaluate the decision and check if it is okay.to break or continue.
+- [x] Implemented CodeError<ErrorType>,this is generic over error,The position n where the error is
 
 ## Doing:
-- [ ] change the VmError to be VmErrorGeneric<CodeSlice>,now having an into implementation from VmErrorGeneric<()> to VmErrorGeneric<CodeSlice>
+- [ ] Better error reporting
 - [ ] Having type checking and code running side by side.
     - [ ] make the implementation of function to todo
     - [ ] adding type for both runtime and compile time

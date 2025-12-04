@@ -1,6 +1,6 @@
 use super::*;
 use crate::ast::{Expression, Literal};
-use crate::vm::tree_walk::vm_value::{self, ValuePrimitive, VmFunc};
+use crate::vm::tree_walk::vm_value::{self, ValuePrimitive };
 use crate::vm::tree_walk::vm_error::{VmError, VmErrorType};
 use crate::types::UnifiedTypeDefinition;
 use std::collections::{HashMap, BTreeSet};
@@ -110,10 +110,16 @@ pub(super) fn evaluate_expr<Backend: VmBackend, T: Clone + HasPosition>(
             let caller = vm.evaluate_expr(&caller)?;
             let callee = vm.evaluate_expr(&callee)?;
             let VmValue::Func(func_id) = caller else {
-                return Err(VmErrorType::CallingNonFunc).map_err(map_err);
+                return Err(map_err(VmErrorType::CallingNonFunc));
             };
-            todo!()
-            //vm.execute_function(&func_id, callee)
+            let param_type = vm.get_func(&func_id).get_param();
+            if !callee.of_type(param_type, &mut vm.types) {
+                return Err(map_err(VmErrorType::FuncInvalidInput));
+            }
+            let VmValue::Product(inputs) = callee else {
+                return Err(map_err(VmErrorType::FuncInvalidInput));
+            };
+            vm.execute_function(&func_id, inputs)
         }
     }
 }

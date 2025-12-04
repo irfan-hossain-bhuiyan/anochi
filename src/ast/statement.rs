@@ -57,6 +57,7 @@ pub enum Statement<T> {
     },
     Break,
     Continue,
+    Return(Option<ExprNode<T>>),
 }
 
 // Mappable implementations for Statement and related types
@@ -121,6 +122,7 @@ impl<T,U> Mappable<T,U> for Statement<T> {
             },
             Self::Break => Statement::Break,
             Self::Continue => Statement::Continue,
+            Self::Return(x) =>Statement::Return(x.map(|x|x.inner_map(f)))
         }
     }
 }
