@@ -1,6 +1,8 @@
 use std::fmt::Display;
 
-use crate::{ token::Position};
+use crate::{prelude::Mappable, token::Position};
+
+pub trait CodeErrorType {}
 #[derive(Debug,Default,)]
 pub struct CodeError<T>{
     error_type:T,
@@ -17,6 +19,9 @@ impl<T> CodeError<T> {
     pub fn error_type(&self) -> &T {
         &self.error_type
     }
+    pub fn into_error_type(self) -> T {
+        self.error_type
+    }
 }
 impl<T:Display> CodeError<T>{
     pub fn err_str(&self, code_str: &str) -> String {
@@ -28,3 +33,16 @@ impl<T:Display> CodeError<T>{
         error_message
     }
 }
+impl<T,U> Mappable<T,U> for CodeError<T>{
+    fn inner_map<F>(self,f:&mut F) -> Self::Mapped
+        where
+            F: FnMut(T) -> U {
+        Self::Mapped{
+            error_type:f(self.error_type),
+            error_pos:self.error_pos,
+        }
+    }
+
+    type Mapped=CodeError<U>;
+}
+

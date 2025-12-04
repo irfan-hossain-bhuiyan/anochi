@@ -1,6 +1,5 @@
 //! Virtual Machine for the Anochi programming language.
 
-use std::collections::HashMap;
 mod vm_value;
 pub use vm_value::{StructValue, ValuePrimitive, VmValue};
 
@@ -9,12 +8,12 @@ use crate::{
          ExprNode, Identifier, StatNode, StatementBlock
     }, prelude::IndexCons, token::tokenizer::HasPosition, types::{TypeContainer, TypeId, UnifiedTypeDefinition}, vm::{
         backend::{IoBackend, VmBackend},
-        tree_walk::{vm_error::VmErrorType, vm_value::{FuncId, VmFunc}},
+        tree_walk::{ vm_value::{FuncId, VmFunc}},
         
     }
 };
 mod vm_error;
-pub use vm_error::{VmError};
+pub use vm_error::{VmError,VmErrorType};
 
 /// Result type for VM evaluation operations.
 pub type VmExprResult = Result<VmValue, VmError>;

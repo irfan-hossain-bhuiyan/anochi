@@ -29,6 +29,7 @@ pub enum VmErrorType {
     FuncInvalidInput,
 }
 pub type VmError=CodeError<VmErrorType>;
+impl crate::code_error::CodeErrorType for VmErrorType {}
 
 impl VmErrorType {
     /// Returns `true` if the vm error is [`TypeMismatch`].

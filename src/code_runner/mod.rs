@@ -5,64 +5,60 @@
 //! and return the result.
 
 use crate::{
-    parser::{Parser, ParserErrorType},
-    token::{token_type::TokenizerErrorType, Tokenizer},
-    vm::{
+    code_error::CodeError, parser::{Parser, ParserErrorType}, prelude::Mappable, token::{Tokenizer, token_type::TokenizerErrorType}, vm::{
         backend::VmBackend,
-        tree_walk::{Vm, VmError, VmValue},
-    },
+        tree_walk::{Vm, VmErrorType, VmValue},
+    }
 };
 use std::fmt;
 use derive_more::From;
-/// Errors that can occur during code execution.
-#[derive(Debug,From)]
-pub enum CodeRunnerError {
-    /// Error occurred during tokenization
-    TokenizationError(#[from] TokenizerErrorType),
-
-    /// Error occurred during parsing
-    ParseError(#[from] ParserErrorType),
-
-    /// Error occurred during VM execution
-    RuntimeError(#[from] crate::vm::tree_walk::VmError),
+use enum_dispatch::enum_dispatch;
+#[enum_dispatch(CodeErrorType)]
+#[derive(Debug, From)]
+pub enum CodeRunnerErrorType {
+    TokenizerErrorType,
+    ParserErrorType,
+    VmErrorType,
 }
 
-impl CodeRunnerError {
+pub type CodeRunnerError=CodeError<CodeRunnerErrorType>;
+
+impl<T:Into<CodeRunnerErrorType>> CodeError<T>{
+    fn into_code_error(self)->CodeRunnerError{
+        self.inner_map(&mut |x|Into::into(x))
+    }
+}
+impl CodeRunnerErrorType {
     pub fn as_tokenization_error(&self) -> Option<&TokenizerErrorType> {
-        if let Self::TokenizationError(v) = self {
+        if let Self::TokenizerErrorType(v) = self {
             Some(v)
         } else {
             None
         }
-    }
-    pub fn as_error_str(&self,code_str:&str)->String{
-        let error=self.error_type_str();
-        todo!();
-        format!("{} \n error is: {}",error,error)
     }
     pub fn error_type_str(&self)->&'static str{
         match self {
-            Self::TokenizationError(_)=>"tokenization error",
-            Self::ParseError(_)=>"parser error",
-            Self::RuntimeError(_)=>"runtime error",
+            Self::TokenizerErrorType(_)=>"tokenization error",
+            Self::ParserErrorType(_)=>"parser error",
+            Self::VmErrorType(_)=>"runtime error",
         }
     }
     pub fn as_parse_error(&self) -> Option<&ParserErrorType> {
-        if let Self::ParseError(v) = self {
+        if let Self::ParserErrorType(v) = self {
             Some(v)
         } else {
             None
         }
     }
 
-    pub fn as_runtime_error(&self) -> Option<&crate::vm::tree_walk::VmError> {
-        if let Self::RuntimeError(v) = self {
+    pub fn as_runtime_error(&self) -> Option<&VmErrorType> {
+        if let Self::VmErrorType(v) = self {
             Some(v)
         } else {
             None
         }
     }
-    pub fn is_runtime_error_and(&self,f:impl Fn (&VmError)->bool)->bool{
+    pub fn is_runtime_error_and(&self,f:impl Fn (&VmErrorType)->bool)->bool{
         self.as_runtime_error().is_some_and(f)
     }
 }
@@ -115,26 +111,21 @@ impl<Backend: VmBackend> CodeRunner<Backend> {
         println!("{}",errors.err_str(source));
         // Step 2: Parse tokens into AST
         let mut parser = Parser::new(&tokens);
-        let stmt_node = parser.parse_statements()?;
+let stmt_node = parser.parse_statements().map_err(|x|x.into_code_error())?;
         // Step 3: Execute the statement
-        self.vm.execute_statement(&stmt_node)?;
+        self.vm.execute_statement(&stmt_node).map_err(|x|x.into_code_error())?;
         Ok(())// Return unit type for statements
         // If both fail, return parse error
     }
     pub fn evaluate_expr(&mut self, source: &str) -> Result<VmValue, CodeRunnerError> {
-        // Step 1: Tokenize the source code
         let tokenizer = Tokenizer::new(source);
         let (tokens,errors) = tokenizer.tokenize();
 
         println!("{}",errors.err_str(source));
-        // Step 2: Parse tokens into AST
         let mut parser = Parser::new(&tokens);
-        let stmt_node = parser.parse_expression()?;
-        // Step 3: Execute the statement
-        let value = self.vm.evaluate_expr(&stmt_node)?;
+        let stmt_node = parser.parse_expression().map_err(|x| x.into_code_error())?;
+        let value = self.vm.evaluate_expr(&stmt_node).map_err(|x| x.into_code_error())?;
         Ok(value)
-
-        // If both fail, return parse error
     }
     
 

@@ -27,9 +27,13 @@ macro_rules! match_token {
     }};
 }
 
-/// Macro for token matching with error conversion to ParserError
 macro_rules! match_token_or_err {
-    ($self:expr, $pattern:pat) => {{ match_token!($self, $pattern).map_err(|x| x.into_parser_error()) }};
+    ($self:expr, $pattern:pat) => {
+        {
+            let pos = $self.peek_position();
+            match_token!($self, $pattern).map_err(|x| x.into_parser_error(pos))
+        }
+    };
 }
 
 pub struct Parser<'a> {
@@ -43,15 +47,178 @@ pub struct Parser<'a> {
 type ExpNode = ExpressionNode;
 type Exp = Expression<Position>;
 type Stat = Statement<Position>;
-type ReExpNode = Result<ExpNode, ParserErrorType>;
+type ReExpNode = Result<ExpNode, ParserError>;
 type StatNode = StatementNode;
-type ReStatNode = Result<StatementNode, ParserErrorType>;
+type ReStatNode = Result<StatementNode, ParserError>;
 type StatBlock = StatementBlock<Position>;
+
+pub enum ExprLevel {
+    TypeUnion,
+    LogicalOr,
+    LogicalAnd,
+    Equality,
+    Comparison,
+    Additive,
+    Multiplicative,
+    Unary,
+    MemberAccess,
+    Primary,
+}
 impl<'a> Parser<'a> {
-    // Helper methods to reduce repetition
     fn make_expr_node(&self, expr: Exp, start: usize) -> ExpNode {
         let slice = self.tokens.slice(start, self.current).pos_range();
         expr.to_node(slice)
+    }
+
+    fn parse_expr_level(&mut self, level: ExprLevel) -> ReExpNode {
+        let start = self.current;
+        match level {
+            ExprLevel::TypeUnion => {
+                let mut types = vec![self.parse_expr_level(ExprLevel::LogicalOr)?];
+                while match_token!(self, TokenType::Pipe).is_ok() {
+                    types.push(self.parse_expr_level(ExprLevel::LogicalOr)?);
+                }
+                if types.len() == 1 {
+                    Ok(types.into_iter().next().unwrap())
+                } else {
+                    let expr = Expression::sum(types);
+                    Ok(self.make_expr_node(expr, start))
+                }
+            }
+            ExprLevel::LogicalOr => {
+                let mut node = self.parse_expr_level(ExprLevel::LogicalAnd)?;
+                while match_token!(self, TokenType::Keyword(Or)).is_ok() {
+                    let right = self.parse_expr_level(ExprLevel::LogicalAnd)?;
+                    let expr = Expression::binary(node, BinaryOperator::Or, right);
+                    node = self.make_expr_node(expr, start);
+                }
+                Ok(node)
+            }
+            ExprLevel::LogicalAnd => {
+                let mut node = self.parse_expr_level(ExprLevel::Equality)?;
+                while match_token!(self, TokenType::Keyword(And)).is_ok() {
+                    let right = self.parse_expr_level(ExprLevel::Equality)?;
+                    let expr = Expression::binary(node, BinaryOperator::And, right);
+                    node = self.make_expr_node(expr, start);
+                }
+                Ok(node)
+            }
+            ExprLevel::Equality => {
+                let mut node = self.parse_expr_level(ExprLevel::Comparison)?;
+                while let Ok(op) = match_token!(self, TokenType::EqualEqual | TokenType::BangEqual) {
+                    let operator = match op {
+                        TokenType::EqualEqual => BinaryOperator::Equal,
+                        TokenType::BangEqual => BinaryOperator::NotEqual,
+                        _ => unreachable!(),
+                    };
+                    let right = self.parse_expr_level(ExprLevel::Comparison)?;
+                    let expr = Expression::binary(node, operator, right);
+                    node = self.make_expr_node(expr, start);
+                }
+                Ok(node)
+            }
+            ExprLevel::Comparison => {
+                let mut node = self.parse_expr_level(ExprLevel::Additive)?;
+                while let Ok(op) = match_token!(
+                    self,
+                    TokenType::Less | TokenType::LessEqual | TokenType::Greater | TokenType::GreaterEqual
+                ) {
+                    let operator = match op {
+                        TokenType::Less => BinaryOperator::Less,
+                        TokenType::LessEqual => BinaryOperator::LessEqual,
+                        TokenType::Greater => BinaryOperator::Greater,
+                        TokenType::GreaterEqual => BinaryOperator::GreaterEqual,
+                        _ => unreachable!(),
+                    };
+                    let right = self.parse_expr_level(ExprLevel::Additive)?;
+                    let expr = Expression::binary(node, operator, right);
+                    node = self.make_expr_node(expr, start);
+                }
+                Ok(node)
+            }
+            ExprLevel::Additive => {
+                let mut node = self.parse_expr_level(ExprLevel::Multiplicative)?;
+                while let Ok(op) = match_token!(self, TokenType::Plus | TokenType::Minus) {
+                    let operator = match op {
+                        TokenType::Plus => BinaryOperator::Plus,
+                        TokenType::Minus => BinaryOperator::Minus,
+                        _ => unreachable!(),
+                    };
+                    let right = self.parse_expr_level(ExprLevel::Multiplicative)?;
+                    let expr = Expression::binary(node, operator, right);
+                    node = self.make_expr_node(expr, start);
+                }
+                Ok(node)
+            }
+            ExprLevel::Multiplicative => {
+                let mut node = self.parse_expr_level(ExprLevel::Unary)?;
+                while let Ok(op) = match_token!(self, TokenType::Star | TokenType::Slash) {
+                    let operator = match op {
+                        TokenType::Star => BinaryOperator::Multiply,
+                        TokenType::Slash => BinaryOperator::Divide,
+                        _ => unreachable!(),
+                    };
+                    let right = self.parse_expr_level(ExprLevel::Unary)?;
+                    let expr = Expression::binary(node, operator, right);
+                    node = self.make_expr_node(expr, start);
+                }
+                Ok(node)
+            }
+            ExprLevel::Unary => {
+                let operator = match self.peek_type() {
+                    Some(TokenType::Minus) => UnaryOperator::Minus,
+                    Some(TokenType::Keyword(Keyword::Not)) => UnaryOperator::Not,
+                    _ => return self.parse_expr_level(ExprLevel::MemberAccess),
+                };
+                self.advance();
+                let operand = self.parse_expr_level(ExprLevel::Unary)?;
+                let expr = Expression::unary(operator, operand);
+                Ok(self.make_expr_node(expr, start))
+            }
+            ExprLevel::MemberAccess => {
+                let mut node = self.parse_expr_level(ExprLevel::Primary)?;
+                if match_token!(self, TokenType::Bang).is_ok() {
+                    let expr = self.parse_expression()?;
+                    let fn_call = Expression::fn_call(node, expr);
+                    return Ok(self.make_expr_node(fn_call, start));
+                }
+                while match_token!(self, TokenType::Dot).is_ok() {
+                    let TokenType::Identifier(member) =
+                        match_token_or_err!(self, TokenType::Identifier(_))?
+                    else {
+                        unreachable!()
+                    };
+                    let member = member.clone();
+                    let expr = Expression::member_access(node, member);
+                    node = self.make_expr_node(expr, start);
+                }
+                Ok(node)
+            }
+            ExprLevel::Primary => {
+                match self.peek_type().ok_or_else(|| self.error(ParserErrorType::NO_EXPN_FOUND))? {
+                    TokenType::LeftBrace => self.parse_struct(),
+                    TokenType::LeftParen => {
+                        self.advance();
+                        let expr = self.parse_expression()?;
+                        if let Some(TokenType::RightParen) = self.peek_type() {
+                            self.advance();
+                            Ok(self.make_expr_node(Expression::grouping(expr), start))
+                        } else {
+                            Err(self.error(ParserErrorType::expected_token_in_expression(
+                                TokenType::RightParen,
+                            )))
+                        }
+                    }
+                    TokenType::Keyword(Keyword::Fn) => self.parse_function(),
+                    any => {
+                        let expression = Expression::from_token_type(any.clone())
+                            .ok_or_else(|| self.error(ParserErrorType::NO_EXPN_FOUND))?;
+                        self.advance();
+                        Ok(self.make_expr_node(expression, start))
+                    }
+                }
+            }
+        }
     }
 
     // Function ::= "|" Identifier "|" ("->" Expression)? "{" Statement "}"
@@ -82,7 +249,7 @@ impl<'a> Parser<'a> {
 
     fn with_expr_tracking<F>(&mut self, f: F) -> ReExpNode
     where
-        F: FnOnce(&mut Self) -> Result<Exp, ParserErrorType>,
+        F: FnOnce(&mut Self) -> Result<Exp, ParserError>,
     {
         let start = self.current;
         let expr = f(self)?;
@@ -91,7 +258,7 @@ impl<'a> Parser<'a> {
 
     fn with_stat_tracking<F>(&mut self, f: F) -> ReStatNode
     where
-        F: FnOnce(&mut Self) -> Result<Stat, ParserErrorType>,
+        F: FnOnce(&mut Self) -> Result<Stat, ParserError>,
     {
         let start = self.current;
         let stmt = f(self)?;
@@ -125,7 +292,7 @@ impl<'a> Parser<'a> {
             Ok(self.make_expr_node(expr, start))
         }
     }
-    pub fn parse_statement_block(&mut self) -> Result<StatBlock, ParserErrorType> {
+    fn parse_statement_block(&mut self) -> Result<StatBlock, ParserError> {
         match_token_or_err!(self, TokenType::LeftBrace)?;
         let mut statements = Vec::new();
         loop {
@@ -139,7 +306,8 @@ impl<'a> Parser<'a> {
         }
         Ok(StatementBlock { statements })
     }
-    pub fn parse_statement(&mut self) -> ReStatNode {
+    //fn into_parser_error(&self)
+    pub fn parse_statement(&mut self) -> ReStatNode{
         let start = self.current;
         // Assignment: identifier = expression
         match self.peek_type().unwrap().clone() {
@@ -221,7 +389,7 @@ impl<'a> Parser<'a> {
             }
             TokenType::Keyword(Keyword::Break) => {
                 if !self.is_in_loop {
-                    return Err(StatementParseError::BreakOutsideLoop.into());
+                    return Err(StatementParseErrorType::BreakOutsideLoop.with_pos(self.peek_position()));
                 }
                 self.advance();
                 match_token_or_err!(self, TokenType::Semicolon)?;
@@ -230,14 +398,14 @@ impl<'a> Parser<'a> {
             }
             TokenType::Keyword(Keyword::Continue) => {
                 if !self.is_in_loop {
-                    return Err(StatementParseError::ContinueOutsideLoop.into());
+                    return Err(StatementParseErrorType::ContinueOutsideLoop.with_pos(self.peek_position()));
                 }
                 self.advance();
                 let stmt = Statement::Continue;
                 match_token_or_err!(self, TokenType::Semicolon)?;
                 Ok(self.make_stat_node(stmt, start))
             }
-            _ => Err(StatementParseError::NoStatement.into()),
+            _ => Err(StatementParseErrorType::NoStatement.with_pos(self.peek_position())),
         }
     }
     // Logical AND: expr && expr
@@ -341,7 +509,7 @@ impl<'a> Parser<'a> {
     // Unary ::= ("+" | "-") Unary | MemberAccess
     fn parse_unary(&mut self) -> ReExpNode {
         let start = self.current;
-        let operator = match self.peek_type().ok_or(ParserErrorType::NO_EXPN_FOUND)? {
+        let operator = match self.peek_type().ok_or_else(|| self.error(ParserErrorType::NO_EXPN_FOUND))? {
             TokenType::Minus => UnaryOperator::Minus,
             TokenType::Keyword(Keyword::Not) => UnaryOperator::Not,
             _ => {
@@ -380,24 +548,24 @@ impl<'a> Parser<'a> {
     // Primary ::= Integer | Float | Identifier | "(" Expr ")" | Function
     fn parse_primary(&mut self) -> ReExpNode {
         let start = self.current;
-        match self.peek_type().ok_or(ParserErrorType::NO_EXPN_FOUND)? {
+        match self.peek_type().ok_or_else(|| self.error(ParserErrorType::NO_EXPN_FOUND))? {
             TokenType::LeftBrace => self.parse_struct(),
             TokenType::LeftParen => {
-                self.advance(); // consume '('
+                self.advance();
                 let expr = self.parse_expression()?;
                 if let Some(TokenType::RightParen) = self.peek_type() {
-                    self.advance(); // consume ')'
+                    self.advance();
                     Ok(self.make_expr_node(Expression::grouping(expr), start))
                 } else {
-                    Err(ParserErrorType::expected_token_in_expression(
+                    Err(self.error(ParserErrorType::expected_token_in_expression(
                         TokenType::RightParen,
-                    ))
+                    )))
                 }
             },
             TokenType::Keyword(Keyword::Fn) => self.parse_function(),
             any => {
                 let expression =
-                    Expression::from_token_type(any.clone()).ok_or(ParserErrorType::NO_EXPN_FOUND)?;
+                    Expression::from_token_type(any.clone()).ok_or_else(|| self.error(ParserErrorType::NO_EXPN_FOUND))?;
                 self.advance();
                 Ok(self.make_expr_node(expression, start))
             }
@@ -442,9 +610,9 @@ impl<'a> Parser<'a> {
                 Ok(TokenType::RightBrace) => break, // End of struct
                 Ok(_) => unreachable!(),            // Should never happen due to pattern
                 Err(_) => {
-                    return Err(ParserErrorType::expected_token_in_expression(
+                    return Err(self.error(ParserErrorType::expected_token_in_expression(
                         TokenType::RightBrace,
-                    ));
+                    )));
                 }
             }
         }
@@ -463,15 +631,23 @@ impl<'a> Parser<'a> {
         self.current >= self.tokens.len()
     }
 
-    fn peek(&self) -> Option<&Token> {
+fn peek(&self) -> Option<&Token> {
         self.tokens.get(self.current)
+    }
+
+    fn peek_position(&self) -> Position {
+        self.peek().map(|t| t.position.clone()).unwrap_or_default()
+    }
+
+    fn error(&self, error_type: ParserErrorType) -> ParserError {
+        error_type.with_pos(self.peek_position())
     }
 
     fn previous(&self) -> &Token {
         &self.tokens[self.current - 1]
     }
 
-    pub(crate) fn parse_statements(&mut self) -> ReStatNode {
+    pub(crate) fn parse_statements(&mut self) -> ReStatNode{
         let start = self.current;
         let mut vec = Vec::new();
         while !self.is_at_end() {

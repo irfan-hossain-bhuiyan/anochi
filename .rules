@@ -23,3 +23,4 @@ rather this
 10. Use if let other than let else
 11. Don't right comment,Try to write code with broad function name,So it is relevant,what I am doing without comment.
 12. Try to write code similarly to what was already written.
+13. On using vector tools,Don't forget to reindex everything when needed.
