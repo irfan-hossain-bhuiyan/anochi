@@ -1,9 +1,29 @@
 use super::*;
-use crate::ast::{Expression, Literal};
+use crate::ast::{Expression, Literal, UnaryOperator};
 use crate::vm::tree_walk::vm_value::{self, ValuePrimitive, VmVal};
 use crate::vm::tree_walk::vm_error::{VmError, VmErrorType};
+use crate::vm::tree_walk::scope_stack::VariableEntry;
+use crate::prelude::IndexPtr;
 use crate::types::UnifiedTypeDefinition;
 use std::collections::{HashMap, BTreeSet};
+
+pub(super) fn get_reference<Backend: VmBackend, T: Clone + HasPosition>(
+    vm: &Vm<Backend>,
+    expression_node: &ExpNode<T>,
+) -> Result<IndexPtr<VariableEntry>, VmError> {
+    let node_data = expression_node.data().get_position().clone();
+    let map_err = |e| VmError::new(e, node_data.clone());
+    let expression = &expression_node.exp;
+    
+    if let Expression::Literal(Literal::Identifier(id)) = expression {
+        vm.variables.get_index_from_name(id)
+            .ok_or_else(|| map_err(VmErrorType::UndefinedIdentifier(id.clone())))
+    } else {
+        Err(map_err(VmErrorType::InvalidOperation(
+            "Cannot get reference to a non-variable expression".to_string(),
+        )))
+    }
+}
 
 pub(super) fn evaluate_expr<Backend: VmBackend, T: Clone + HasPosition>(
     vm: &mut Vm<Backend>,
@@ -14,12 +34,11 @@ pub(super) fn evaluate_expr<Backend: VmBackend, T: Clone + HasPosition>(
     let expression = &expression_node.exp;
     match expression {
         Expression::Literal(literal) => match literal {
-            Literal::Identifier(x) => vm.variables.get_variable_or_err(&x).map_err(map_err),
+            Literal::Identifier(x) => vm.variables.get_value_or_err(&x).map_err(map_err),
             Literal::Bool(_) | Literal::Float(_) | Literal::Integer(_) => Ok(
                 VmValue::ValuePrimitive(ValuePrimitive::from(literal.clone())),
             ),
             Literal::String(_) => {
-                // TODO: Handle strings as arrays when array implementation is ready
                 Err(map_err(VmErrorType::Unsupported(
                     "String literals not yet supported as arrays".to_string(),
                 )))
@@ -34,10 +53,26 @@ pub(super) fn evaluate_expr<Backend: VmBackend, T: Clone + HasPosition>(
             let right_val = vm.evaluate_expr(right)?;
             vm_value::evaluate_binary_op(&left_val, &operator, &right_val).map_err(map_err)
         }
-        Expression::Unary { operator, operand } => {
-            let operand_val = vm.evaluate_expr(operand)?;
-            vm_value::evaluate_unary_op(&operator, &operand_val).map_err(map_err)
-        }
+        Expression::Unary { operator, operand } => match operator {
+            UnaryOperator::Ref => {
+                let ptr = get_reference(vm, operand)?;
+                Ok(VmValue::ValuePrimitive(ValuePrimitive::Reference(ptr)))
+            }
+            UnaryOperator::Deref => {
+                let operand_val = vm.evaluate_expr(operand)?;
+                if let VmValue::ValuePrimitive(ValuePrimitive::Reference(ptr)) = operand_val {
+                    Ok(vm.variables.get_value_from_index(ptr).clone())
+                } else {
+                    Err(map_err(VmErrorType::TypeMismatch(
+                        "Dereference operator (*) requires a reference value",
+                    )))
+                }
+            }
+            _ => {
+                let operand_val = vm.evaluate_expr(operand)?;
+                vm_value::evaluate_unary_op(&operator, &operand_val).map_err(map_err)
+            }
+        },
         Expression::Grouping { expression } => vm.evaluate_expr(expression),
         Expression::Product { data } => {
             let mut product = HashMap::new();
@@ -112,12 +147,12 @@ pub(super) fn evaluate_expr<Backend: VmBackend, T: Clone + HasPosition>(
             let VmValue::FuncId(func_id) = caller else {
                 return Err(map_err(VmErrorType::CallingNonFunc));
             };
-            let param_type = vm.get_func(&func_id).get_param();
+            let param_type = vm.get_func(func_id).get_param();
             if !callee.of_type(param_type, &mut vm.types) {
                 return Err(map_err(VmErrorType::FuncInvalidInput));
             }
             // type check already gaurentee that callee is of struct type
-            vm.execute_function(&func_id, callee)
+            vm.execute_function(func_id, callee)
         }
     }
 }

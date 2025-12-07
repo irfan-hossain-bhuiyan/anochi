@@ -43,7 +43,7 @@ pub(super) fn execute_statement<Backend: VmBackend, T: Clone + HasPosition>(
             match &target.exp {
                 Expression::Literal(Literal::Identifier(identifier)) => {
                     let evaluated_value = vm.evaluate_expr(value)?;
-                    vm.variables.set_variable(
+                    vm.variables.set_value_from_name(
                         identifier,
                         evaluated_value,
                         &mut vm.types,

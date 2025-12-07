@@ -2,7 +2,8 @@ use std::collections::hash_map::DefaultHasher;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
-use std::mem::{MaybeUninit, size_of};
+use std::marker::PhantomData;
+use std::mem::{MaybeUninit};
 use std::ops::{Deref, Index, IndexMut};
 
 use enum_dispatch::enum_dispatch;
@@ -10,19 +11,6 @@ use macros::generate_unchecked;
 pub struct ZeroSizePopError;
 /// Type alias for hash values - can be easily changed to u128 or larger in the future
 pub type HashValue = u64;
-
-fn slice_index_from_vec<T>(vec: &[T], slice: &[T]) -> Option<usize> {
-    let vec_start = vec.as_ptr() as usize;
-    let slice_start = slice.as_ptr() as usize;
-
-    // Check if slice is within vec
-    if slice_start >= vec_start && slice_start <= vec_start + std::mem::size_of_val(vec) {
-        let offset_bytes = slice_start - vec_start;
-        Some(offset_bytes / size_of::<T>())
-    } else {
-        None
-    }
-}
 
 /// Hash Consing Container - A generic data structure that uses hash-based memoization
 /// to store objects and detect duplicates. Each push operation returns a hash that
@@ -78,10 +66,19 @@ impl Ord for FreeRange {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug,)]
 pub struct IndexPtr<T> {
     index: usize,
     _marker: std::marker::PhantomData<T>,
+}
+impl<T> Clone for IndexPtr<T>{
+    fn clone(&self) -> Self { *self }
+}
+impl<T> Copy for IndexPtr<T> {}
+impl<T> PartialEq for IndexPtr<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.index==other.index
+    }
 }
 
 impl<T> IndexPtr<T> {
@@ -89,7 +86,24 @@ impl<T> IndexPtr<T> {
         self.index
     }
 }
-
+pub trait Allocator<T>{
+    fn get_from_ptr_checked(&self,ptr:IndexPtr<T>)->Option<&T>;
+    fn get_mut_from_ptr_checked(&mut self,ptr:IndexPtr<T>)->Option<&mut T>;
+    fn get_from_ptr(&self,ptr:IndexPtr<T>)->&T {
+        self.get_from_ptr_checked(ptr).unwrap()
+    }
+    fn get_mut_from_ptr(&mut self,ptr:IndexPtr<T>)->&mut T {
+        self.get_mut_from_ptr_checked(ptr).unwrap()
+    }
+}
+impl<T> Allocator<T> for IndexCons<T>{
+    fn get_from_ptr_checked(&self,ptr:IndexPtr<T>)->Option<&T> {
+        self.get_checked(ptr)
+    }
+    fn get_mut_from_ptr_checked(&mut self,ptr:IndexPtr<T>)->Option<&mut T> {
+        self.get_mut_checked(ptr)
+    }
+}
 #[derive(Debug, Clone)]
 pub struct IndexCons<T> {
     storage: Vec<Option<T>>,
@@ -164,12 +178,12 @@ impl<T> IndexCons<T> {
         self.free_ranges.insert(FreeRange::new(merged_start, merged_end));
         Some(value)
     }
-
-    pub fn get(&self, index_ptr: &IndexPtr<T>) -> Option<&T> {
+    #[generate_unchecked]
+    pub fn get_checked(&self, index_ptr: IndexPtr<T>) -> Option<&T> {
         self.storage.get(index_ptr.index)?.as_ref()
     }
-
-    pub fn get_mut(&mut self, index_ptr: &IndexPtr<T>) -> Option<&mut T> {
+    #[generate_unchecked]
+    pub fn get_mut_checked(&mut self, index_ptr: IndexPtr<T>) -> Option<&mut T> {
         self.storage.get_mut(index_ptr.index)?.as_mut()
     }
 
@@ -319,6 +333,16 @@ pub struct SizedArray<T, const MAX_SIZE: usize = 1024> {
     size: usize,
 }
 
+impl<T, const MAX_SIZE: usize> Allocator<T> for SizedArray<T, MAX_SIZE> {
+    fn get_from_ptr_checked(&self,ptr:IndexPtr<T>)->Option<&T> {
+        self.get_checked(ptr.index)
+    }
+    fn get_mut_from_ptr_checked(&mut self,ptr:IndexPtr<T>)->Option<&mut T> {
+        self.get_mut_checked(ptr.index)
+    }
+}
+
+
 impl<T:Debug, const MAX_SIZE: usize> Debug for SizedArray<T, MAX_SIZE> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         Debug::fmt(&self.array[0..self.size],f)
@@ -359,9 +383,14 @@ impl<T, const MAX_SIZE: usize> Default for SizedArray<T, MAX_SIZE> {
 }
 
 impl<T, const MAX_SIZE: usize> SizedArray<T, MAX_SIZE> {
-    pub fn push_back(&mut self, value: T) {
+    pub fn push_back(&mut self, value: T) -> IndexPtr<T> {
+        let index = self.size;
         self.array[self.size] = value;
         self.size += 1;
+        IndexPtr {
+            index,
+            _marker: PhantomData,
+        }
     }
     #[generate_unchecked]
     fn get_checked(&self, index: usize) -> Option<&T> {
@@ -385,7 +414,7 @@ impl<T, const MAX_SIZE: usize> SizedArray<T, MAX_SIZE> {
             Ok(())
         }
     }
-    fn shrink_size(&mut self,new_size:usize)->Result<(),&'static str>{
+    pub fn shrink_size(&mut self,new_size:usize)->Result<(),&'static str>{
         if self.size<new_size{Err("You resized the array to grow")}
         else {
             self.size=new_size;

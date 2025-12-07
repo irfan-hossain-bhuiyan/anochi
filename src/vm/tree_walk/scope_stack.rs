@@ -4,7 +4,7 @@ use std::fmt::{Debug, Display};
 use thiserror::Error;
 
 
-use crate::prelude::SizedArray;
+use crate::prelude::{Allocator, IndexPtr, SizedArray};
 use crate::{
     ast::Identifier,
     types::{TypeContainer, TypeId},
@@ -37,11 +37,11 @@ impl Display for VariableState {
 pub struct VariableEntry {
     pub value: VmValue,
     pub type_id: TypeId,
-    pub var_state: VariableState,
+    var_state: VariableState,
 }
 
 impl VariableEntry {
-    pub fn new(
+    fn new(
         value: VmValue,
         var_state: VariableState,
         type_container: &mut TypeContainer,
@@ -49,7 +49,7 @@ impl VariableEntry {
         let type_id=value.get_type_id_of_value(type_container);
         unsafe{Self::new_unchecked(value, type_id, var_state)}
     }
-    pub fn new_checked(
+    fn new_checked(
         value: VmValue,
         type_id: TypeId,
         var_state: VariableState,
@@ -64,7 +64,7 @@ impl VariableEntry {
             var_state,
         })
     }
-    pub unsafe fn new_unchecked(value: VmValue, type_id: TypeId, var_state: VariableState) -> Self {
+    unsafe fn new_unchecked(value: VmValue, type_id: TypeId, var_state: VariableState) -> Self {
         Self {
             value,
             type_id,
@@ -72,11 +72,26 @@ impl VariableEntry {
         }
     }
 }
-type ScopeValues=HashMap<Identifier,usize>;
+type ScopeValues=HashMap<Identifier,IndexPtr<VariableEntry>>;
+
+#[derive(Debug)]
+struct ScopeState {
+    variables: ScopeValues,
+    stack_size_at_creation: usize,
+}
+
+impl ScopeState {
+    fn new(stack_size: usize) -> Self {
+        Self {
+            variables: HashMap::new(),
+            stack_size_at_creation: stack_size,
+        }
+    }
+}
 /// Stack-based scope management for variables
 #[derive(Debug)]
 pub struct ScopeStack {
-    scopes: VecDeque<ScopeValues>,
+    scopes: VecDeque<ScopeState>,
     stack:SizedArray<VariableEntry>
 }
 
@@ -84,23 +99,22 @@ impl ScopeStack {
     /// Creates a new scope stack with global scope
     pub fn new() -> Self {
         let mut scopes = VecDeque::new();
-        scopes.push_back(HashMap::new()); // Global scope
         let stack=SizedArray::default();
+        scopes.push_back(ScopeState::new(stack.len()));
         Self { scopes,stack }
     }
 
-    /// Creates a new scope (pushes new HashMap to stack)
     pub fn create_scope(&mut self) {
-        self.scopes.push_back(HashMap::new());
+        self.scopes.push_back(ScopeState::new(self.stack.len()));
     }
 
-    /// Removes current scope (pops from stack)
     pub fn drop_scope(&mut self) {
         if self.scopes.len() <= 1 {
-            // Keep at least global scope
             unreachable!("scope shouldn't get called when there is already 1 scope")
         }
-        self.scopes.pop_back();
+        if let Some(scope) = self.scopes.pop_back() {
+            let _ = self.stack.shrink_size(scope.stack_size_at_creation);
+        }
     }
 
     /// Inserts a variable in current scope, automatically inferring its type
@@ -115,10 +129,9 @@ impl ScopeStack {
     }
 
     fn insert_var_entry(&mut self, identifier: Identifier, entry: VariableEntry) {
-        let index=self.stack.size();
-        self.stack.push_back(entry);
+        let index = self.stack.push_back(entry);
         if let Some(current_scope) = self.scopes.back_mut() {
-            current_scope.insert(identifier, index);
+            current_scope.variables.insert(identifier, index);
         }
     }
 
@@ -138,90 +151,84 @@ impl ScopeStack {
         Ok(())
     }
 
-    /// Sets/updates an existing variable with type checking
-    pub fn set_variable(
+    pub fn set_value_from_index(
         &mut self,
-        identifier: &Identifier,
+        ptr: IndexPtr<VariableEntry>,
         value: VmValue,
-        type_container: &mut crate::types::TypeContainer,
+        type_container: &mut TypeContainer,
     ) -> Result<(), VmErrorType> {
-        // First, find the existing variable to get its expected type
-        let Some(existing_entry) = self.get_variable_entry(identifier) else {
-            return Err(VmErrorType::UndefinedIdentifier(identifier.clone()));
-        };
-        let expected_type_id = existing_entry.type_id;
-
-        // Check if the new value matches the expected type
+        let expected_type_id = self.get_variable_entry_from_index(ptr).type_id;
         let value_type_id = value.get_type_id_of_value(type_container);
         if value_type_id != expected_type_id {
             return Err(VmErrorType::TypeMismatch(
                 "Value type does not match variable type",
             ));
         }
-
-        // Find and update the variable
-        for scope in self.scopes.iter_mut().rev() {
-            if let Some(index) = scope.get(identifier) {
-                self.stack[*index].value=value;
-                return Ok(());
-            }
-        }
-        Err(VmErrorType::UndefinedIdentifier(identifier.clone()))
+        self.get_mut_from_index(ptr).value = value;
+        Ok(())
     }
 
-    /// Gets a variable by searching from current scope to global
-    pub fn get_variable(&self, identifier: &Identifier) -> Option<&VmValue> {
+    pub fn set_value_from_name(
+        &mut self,
+        identifier: &Identifier,
+        value: VmValue,
+        type_container: &mut TypeContainer,
+    ) -> Result<(), VmErrorType> {
+        let Some(ptr) = self.get_index_from_name(identifier) else {
+            return Err(VmErrorType::UndefinedIdentifier(identifier.clone()));
+        };
+        self.set_value_from_index(ptr, value, type_container)
+    }
+
+    pub fn get_variable_entry_from_index(&self, ptr: IndexPtr<VariableEntry>) -> &VariableEntry {
+        self.stack.get_from_ptr(ptr)
+    }
+
+    pub fn get_mut_from_index(&mut self, ptr: IndexPtr<VariableEntry>) -> &mut VariableEntry {
+        self.stack.get_mut_from_ptr(ptr)
+    }
+
+    pub fn get_value_from_index(&self, ptr: IndexPtr<VariableEntry>) -> &VmValue {
+        &self.get_variable_entry_from_index(ptr).value
+    }
+
+    pub fn get_index_from_name(&self, identifier: &Identifier) -> Option<IndexPtr<VariableEntry>> {
         for scope in self.scopes.iter().rev() {
-            if let Some(index) = scope.get(identifier) {
-                return Some(&self.stack[*index].value);
+            if let Some(ptr) = scope.variables.get(identifier) {
+                return Some(*ptr);
             }
         }
         None
     }
 
-    /// Gets a variable entry (with type) by searching from current scope to global
-    pub fn get_variable_entry(&self, identifier: &Identifier) -> Option<&VariableEntry> {
-        for scope in self.scopes.iter().rev() {
-            if let Some(index) = scope.get(identifier) {
-                return Some(&self.stack[*index]);
-            }
-        }
-        None
-    }
-    pub fn get_variable_or_err(&self, identifier: &Identifier) -> ExprResult {
-        self.get_variable(identifier)
-            .cloned()
-            .ok_or(VmErrorType::UndefinedIdentifier(identifier.clone()))
+    pub fn get_variable_entry_from_name(&self, identifier: &Identifier) -> Option<&VariableEntry> {
+        let ptr = self.get_index_from_name(identifier)?;
+        Some(self.get_variable_entry_from_index(ptr))
     }
 
-    /// Checks if variable exists in any scope
+    pub fn get_value_from_name(&self, identifier: &Identifier) -> Option<&VmValue> {
+        let ptr = self.get_index_from_name(identifier)?;
+        Some(self.get_value_from_index(ptr))
+    }
+    pub fn get_value_or_err(&self, identifier: &Identifier) -> ExprResult {
+        let ptr = self.get_index_from_name(identifier)
+            .ok_or_else(|| VmErrorType::UndefinedIdentifier(identifier.clone()))?;
+        Ok(self.get_value_from_index(ptr).clone())
+    }
+
     pub fn has_variable(&self, identifier: &Identifier) -> bool {
-        self.get_variable(identifier).is_some()
+        self.get_index_from_name(identifier).is_some()
     }
     /// Check if variable exists in current scope
     pub(crate) fn has_variable_current(&self, target: &Identifier) -> bool {
-        self.current_scope().get(target).is_some()
+        self.current_scope().variables.contains_key(target)
     }
 
-    fn current_scope(&self) -> &ScopeValues {
+    fn current_scope(&self) -> &ScopeState {
         self.scopes.back().unwrap()
     }
 }
 
-//impl Display for ScopeStack {
-//    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//        for (scope_index, scope) in self.scopes.iter().enumerate() {
-//            if scope_index > 0 {
-//                writeln!(f, "==scope==")?;
-//            }
-//            
-//            for (identifier, entry) in scope {
-//                writeln!(f, "{} {} = {};", entry.var_state, identifier, entry.value)?;
-//            }
-//        }
-//        Ok(())
-//    }
-//}
 
 impl Default for ScopeStack {
     fn default() -> Self {
@@ -237,7 +244,7 @@ impl Display for ScopeStack {
         }
         writeln!(f, "  Scopes:")?;
         for (scope_idx, scope) in self.scopes.iter().enumerate() {
-            writeln!(f, "    Scope {scope_idx}: {scope:?}")?;
+            writeln!(f, "    Scope {scope_idx} (stack_size: {}): {:?}", scope.stack_size_at_creation, scope.variables)?;
         }
         write!(f, "}}")?;
         Ok(())

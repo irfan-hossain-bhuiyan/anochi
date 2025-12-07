@@ -43,10 +43,10 @@ pub enum BinaryOperator {
 /// such as negation or logical NOT.
 #[derive(Debug, Clone, PartialEq)]
 pub enum UnaryOperator {
-    /// Arithmetic negation operator (`-`)
     Minus,
-
     Not,
+    Ref,
+    Deref,
 }
 
 impl fmt::Display for BinaryOperator {
@@ -75,6 +75,8 @@ impl fmt::Display for UnaryOperator {
         let symbol = match self {
             UnaryOperator::Minus => "-",
             UnaryOperator::Not => "not",
+            UnaryOperator::Ref => "&",
+            UnaryOperator::Deref => "*",
         };
         write!(f, "{symbol}")
     }

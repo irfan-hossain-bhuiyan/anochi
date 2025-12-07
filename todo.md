@@ -29,6 +29,7 @@
 
 ## Doing:
 - [ ] Stack will have a fixed size,and a index,to get it's current pointer.
+- [ ] Change the current index from usize to IndexPtr<>,because the type is making problem
 - [ ] HashMap will map to it.ScopeStack which is a VecDeque<HashMap<>>,Now the VecDeque will also save the last scope index.
 - [ ] Struct which is a hashmap of VmValue,Will now converted to index of Vec,I don't have to remove my previous code,
 The StructValue will be now called StructGeneralizedValue,

@@ -3,6 +3,8 @@ use crate::types::{
     BuiltinKind, TypeContainer, TypeDefinition, TypeGeneric, TypeId, UnifiedTypeDefinition,
 };
 use crate::vm::tree_walk::vm_error::VmErrorType;
+use crate::vm::tree_walk::scope_stack::VariableEntry;
+use crate::prelude::IndexPtr;
 use enum_as_inner::EnumAsInner;
 use enum_dispatch::enum_dispatch;
 use num_bigint::BigInt;
@@ -50,6 +52,7 @@ pub enum ValuePrimitive {
     Bool(bool),
     Integer(BigInt),
     Float(BigRational),
+    Reference(IndexPtr<VariableEntry>),
 }
 
 impl VmVal for ValuePrimitive {
@@ -62,6 +65,7 @@ impl VmVal for ValuePrimitive {
             ValuePrimitive::Bool(_) => BuiltinKind::Bool,
             ValuePrimitive::Integer(_) => BuiltinKind::I64,
             ValuePrimitive::Float(_) => BuiltinKind::F64,
+            ValuePrimitive::Reference(_) => BuiltinKind::Reference,
         };
         UnifiedTypeDefinition::builtin(builtin_kind)
     }
@@ -97,6 +101,7 @@ impl Display for ValuePrimitive {
             Self::Bool(b) => write!(f, "{b}"),
             Self::Integer(i) => write!(f, "{i}"),
             Self::Float(fl) => write!(f, "{fl}"),
+            Self::Reference(ptr) => write!(f, "&{:?}", ptr),
         }
     }
 }

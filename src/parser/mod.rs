@@ -172,6 +172,8 @@ impl<'a> Parser<'a> {
                 let operator = match self.peek_type() {
                     Some(TokenType::Minus) => UnaryOperator::Minus,
                     Some(TokenType::Keyword(Keyword::Not)) => UnaryOperator::Not,
+                    Some(TokenType::Ampersand) => UnaryOperator::Ref,
+                    Some(TokenType::Star) => UnaryOperator::Deref,
                     _ => return self.parse_expr_level(ExprLevel::MemberAccess),
                 };
                 self.advance();

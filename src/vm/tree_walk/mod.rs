@@ -168,8 +168,8 @@ impl<Backend: VmBackend> Vm<Backend> {
         self.funcs.push(func)
     }
     /// It type check the function that is currently passed,and execute it.
-    fn execute_function(&mut self, func_id: &FuncId, inputs: VmValue) -> VmExprResult {
-        let func = self.get_func(func_id);
+    fn execute_function(&mut self, func_id: FuncId, inputs: VmValue) -> VmExprResult {
+        let func = self.get_func(func_id.clone());
         let param_type = func.get_param();
         if !inputs.of_type(param_type, &mut self.types) {
             panic!("The validation should checked before");
@@ -191,11 +191,11 @@ impl<Backend: VmBackend> Vm<Backend> {
         self.drop_scope();
         result
     }
-    fn get_func(&self, func_id: &FuncId) -> &VmFunc {
-        self.funcs.get(func_id).unwrap()
+    fn get_func(&self, func_id: FuncId) -> &VmFunc {
+        self.funcs.get_checked(func_id).unwrap()
     }
-    fn get_func_mut(&mut self, func_id: &FuncId) -> &mut VmFunc {
-        self.funcs.get_mut(func_id).unwrap()
+    fn get_func_mut(&mut self, func_id: FuncId) -> &mut VmFunc {
+        self.funcs.get_mut_checked(func_id).unwrap()
     }
 
     fn type_match(&mut self, r#type: TypeId, object: VmValue) -> Result<(), VmErrorType> {

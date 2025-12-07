@@ -85,6 +85,7 @@ pub enum TokenType {
     Semicolon,
     Slash,
     Star,
+    Ampersand,
     Bang,
    Pipe,
     BangEqual,
@@ -95,7 +96,6 @@ pub enum TokenType {
     Less,
     LessEqual,
     Arrow,
-    //Newline
 }
 #[derive(Debug,Clone,PartialEq,Error)]
 pub enum TokenizerErrorType{

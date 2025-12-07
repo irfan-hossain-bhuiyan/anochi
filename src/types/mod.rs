@@ -16,16 +16,12 @@ pub use type_def::TypeDefinition;
 /// These types are pre-registered in the TypeContainer and cannot be user-defined.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum BuiltinKind {
-    /// 64-bit signed integer
     I64,
-    /// 64-bit floating point
     F64,
-    /// Boolean type
     Bool,
-    /// Machine-sized unsigned integer (pointer size)
     Usize,
-    /// Type of types (meta-type)
     Type,
+    Reference,
 }
 
 pub type TypeId = HashPtr<OptimizedTypeDefinition>;

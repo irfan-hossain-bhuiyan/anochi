@@ -94,7 +94,7 @@
         assert!(stack.get_variable(&nonexistent_var).is_none());
         
         // Test error method
-        let result = stack.get_variable_or_err(&nonexistent_var);
+        let result = stack.get_value_or_err(&nonexistent_var);
         assert!(matches!(result, Err(VmErrorType::UndefinedIdentifier(_))));
     }
 

@@ -533,6 +533,12 @@ impl<'a> Tokenizer<'a> {
                     start_column,
                     start_pos,
                 ),
+                '&' => self.make_single_char_token(
+                    TokenType::Ampersand,
+                    start_line,
+                    start_column,
+                    start_pos,
+                ),
                 '|' => self.make_single_char_token(
                     TokenType::Pipe,
                     start_line,
