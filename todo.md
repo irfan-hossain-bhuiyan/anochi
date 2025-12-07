@@ -28,6 +28,11 @@
 - [x] Implemented CodeError<ErrorType>,this is generic over error,The position n where the error is
 
 ## Doing:
+- [ ] Stack will have a fixed size,and a index,to get it's current pointer.
+- [ ] HashMap will map to it.ScopeStack which is a VecDeque<HashMap<>>,Now the VecDeque will also save the last scope index.
+- [ ] Struct which is a hashmap of VmValue,Will now converted to index of Vec,I don't have to remove my previous code,
+The StructValue will be now called StructGeneralizedValue,
+- [ ] Make the scope ptr based on vector,I wanna mimic stack,The hashmap now,will not contain the 
 - [ ] Better error reporting
 - [ ] Implementation of code validity checking and code running
     - [ ] You don't need to run entire code to check if the code is valid,
