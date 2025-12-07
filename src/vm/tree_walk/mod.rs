@@ -1,12 +1,12 @@
 //! Virtual Machine for the Anochi programming language.
 
 mod vm_value;
-pub use vm_value::{StructValue, ValuePrimitive, VmValue};
+pub use vm_value::{StructValue, ValuePrimitive, VmVal, VmValue};
 
 use crate::{
     ast::{ExprNode, Identifier, StatNode, StatementBlock},
     prelude::IndexCons,
-    token::tokenizer::HasPosition,
+    token::{Position, tokenizer::HasPosition},
     types::{TypeContainer, TypeId, UnifiedTypeDefinition},
     vm::{
         backend::{IoBackend, VmBackend},
@@ -79,7 +79,7 @@ impl<Backend: VmBackend> Vm<Backend> {
             let type_id = self.types.store_unified_type(type_def);
             self.variables.insert_variable(
                 Identifier::new(name.to_string()),
-                VmValue::Type(type_id),
+                VmValue::TypeId(type_id),
                 &mut self.types,
             );
         }
@@ -99,7 +99,7 @@ impl<Backend: VmBackend> Vm<Backend> {
 
     pub(super) fn to_type(&mut self, value: VmValue) -> Result<TypeId, VmErrorType> {
         value
-            .into_type_id(&mut self.types)
+            .get_type_id(&mut self.types)
             .ok_or(VmErrorType::InvalidTypeDefination)
     }
     pub(super) fn insert_variable(
@@ -174,13 +174,16 @@ impl<Backend: VmBackend> Vm<Backend> {
         if !inputs.of_type(param_type, &mut self.types) {
             panic!("The validation should checked before");
         }
-        let inputs= inputs.as_product().unwrap();
-        let body = self.get_func(func_id).get_statement().clone();
-        // TODO:There is unwarp and clone of statement,I don't know,but I need to fix this
+        let inputs = inputs.into_struct_value().unwrap();
+        let body = self.get_func(func_id).get_statement() as  *const StatNode<Position>;
         self.create_scope();
         let result = (|| {
             self.extract_struct(inputs).unwrap();
-            match self.execute_statement(&body)? {
+            //TODO:Unsafe here is ok,as I am only mutating the new scope,So it guarentee's that
+            //the const ptr isn't mutating elsewhere.
+            match self.execute_statement(unsafe {
+                body.as_ref().unwrap()   
+            })? {
                 StatementEvent::Return(value) => Ok(value),
                 _ => Ok(VmValue::create_unit()),
             }

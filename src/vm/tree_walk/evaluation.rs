@@ -1,6 +1,6 @@
 use super::*;
 use crate::ast::{Expression, Literal};
-use crate::vm::tree_walk::vm_value::{self, ValuePrimitive };
+use crate::vm::tree_walk::vm_value::{self, ValuePrimitive, VmVal};
 use crate::vm::tree_walk::vm_error::{VmError, VmErrorType};
 use crate::types::UnifiedTypeDefinition;
 use std::collections::{HashMap, BTreeSet};
@@ -44,13 +44,13 @@ pub(super) fn evaluate_expr<Backend: VmBackend, T: Clone + HasPosition>(
             for (key, value) in data.iter() {
                 product.insert(key.clone(), vm.evaluate_expr(value)?);
             }
-            Ok(VmValue::Product(StructValue::new(product)))
+            Ok(VmValue::StructValue(StructValue::new(product)))
         }
         Expression::Sum { data } => {
             let mut type_set = BTreeSet::new();
             for expr in data.iter() {
                 match vm.evaluate_expr(expr)? {
-                    VmValue::Type(type_id) => {
+                    VmValue::TypeId(type_id) => {
                         type_set.insert(type_id);
                     }
                     _ => {
@@ -76,7 +76,7 @@ pub(super) fn evaluate_expr<Backend: VmBackend, T: Clone + HasPosition>(
 
             let unified = crate::types::UnifiedTypeDefinition::sum(variants);
             let type_id = vm.types.store_unified_type(unified);
-            Ok(VmValue::Type(type_id))
+            Ok(VmValue::TypeId(type_id))
         }
         Expression::MemberAccess { object, member } => todo!(),
         Expression::Function {
@@ -104,12 +104,12 @@ pub(super) fn evaluate_expr<Backend: VmBackend, T: Clone + HasPosition>(
                 VmFunc::new_checked(input_type, output_type, *statements.clone(), &vm.types)
                     .ok_or(VmErrorType::FuncInvalidInput).map_err(map_err)?;
             let func_id = vm.add_function(func);
-            Ok(VmValue::from_func(func_id))
+            Ok(func_id.into())
         }
         Expression::FnCall { caller, callee } => {
             let caller = vm.evaluate_expr(caller)?;
             let callee = vm.evaluate_expr(callee)?;
-            let VmValue::Func(func_id) = caller else {
+            let VmValue::FuncId(func_id) = caller else {
                 return Err(map_err(VmErrorType::CallingNonFunc));
             };
             let param_type = vm.get_func(&func_id).get_param();

@@ -3,6 +3,8 @@ use crate::types::{
     BuiltinKind, TypeContainer, TypeDefinition, TypeGeneric, TypeId, UnifiedTypeDefinition,
 };
 use crate::vm::tree_walk::vm_error::VmErrorType;
+use enum_as_inner::EnumAsInner;
+use enum_dispatch::enum_dispatch;
 use num_bigint::BigInt;
 use num_rational::BigRational;
 use std::ops::Deref;
@@ -10,14 +12,83 @@ use std::{collections::HashMap, fmt::Display};
 
 mod function;
 pub use function::{VmFunc,FuncId};
-#[cfg(test)]
-mod tests;
+#[enum_dispatch]
+pub trait VmVal {
+    fn into_unified_type_definition(self) -> Option<UnifiedTypeDefinition>;
+    fn get_type_of_value(&self) -> UnifiedTypeDefinition;
+
+    fn into_type_definition(self, container: &mut TypeContainer) -> Option<TypeDefinition>
+    where
+        Self: Sized,
+    {
+        let type_id = container.store_unified_type(self.into_unified_type_definition()?);
+        type_id.to_type_def(container)
+    }
+
+    fn get_type_id(self, type_container: &mut TypeContainer) -> Option<TypeId>
+    where
+        Self: Sized,
+    {
+        self.into_unified_type_definition()
+            .map(|x| type_container.store_unified_type(x))
+    }
+
+    fn get_type_id_of_value(&self, container: &mut TypeContainer) -> TypeId {
+        self.get_type_of_value().get_id(container)
+    }
+
+    fn of_type(&self, expected_type_id: TypeId, type_container: &mut TypeContainer) -> bool {
+        let id = self.get_type_id_of_value(type_container);
+        id == expected_type_id
+    }
+}
+
+
 /// Primitive values that can be stored in the VM
 #[derive(Debug, Clone, PartialEq)]
 pub enum ValuePrimitive {
     Bool(bool),
     Integer(BigInt),
     Float(BigRational),
+}
+
+impl VmVal for ValuePrimitive {
+    fn into_unified_type_definition(self) -> Option<UnifiedTypeDefinition> {
+        None
+    }
+
+    fn get_type_of_value(&self) -> UnifiedTypeDefinition {
+        let builtin_kind = match self {
+            ValuePrimitive::Bool(_) => BuiltinKind::Bool,
+            ValuePrimitive::Integer(_) => BuiltinKind::I64,
+            ValuePrimitive::Float(_) => BuiltinKind::F64,
+        };
+        UnifiedTypeDefinition::builtin(builtin_kind)
+    }
+}
+
+impl ValuePrimitive {
+    pub fn from_i64(value: i64) -> Self {
+        Self::Integer(BigInt::from(value))
+    }
+
+    pub fn from_f64(value: f64) -> Self {
+        let rational =
+            BigRational::from_float(value).unwrap_or_else(|| BigRational::from(BigInt::from(0)));
+        Self::Float(rational)
+    }
+
+    pub fn from_bool(value: bool) -> Self {
+        Self::Bool(value)
+    }
+
+    pub fn from_bigint(value: BigInt) -> Self {
+        Self::Integer(value)
+    }
+
+    pub fn from_bigrational(value: BigRational) -> Self {
+        Self::Float(value)
+    }
 }
 
 impl Display for ValuePrimitive {
@@ -69,20 +140,75 @@ impl Deref for StructValue {
 
     type Target = HashMap<Identifier, VmValue>;
 }
-/// The main value type used in the VM
-#[derive(Debug, Clone, PartialEq)]
+
+impl VmVal for StructValue {
+    fn into_unified_type_definition(self) -> Option<UnifiedTypeDefinition> {
+        let mut type_fields = std::collections::BTreeMap::new();
+        for (identifier, value) in self.into_iter() {
+            let field_type = value.into_unified_type_definition()?;
+            type_fields.insert(identifier, field_type);
+        }
+        Some(UnifiedTypeDefinition::TypeDef(TypeGeneric::Product {
+            fields: type_fields,
+        }))
+    }
+
+    fn get_type_of_value(&self) -> UnifiedTypeDefinition {
+        for field_value in self.values() {
+            if let VmValue::TypeId(_) = field_value {
+                return UnifiedTypeDefinition::builtin(BuiltinKind::Type);
+            }
+        }
+        let mut type_fields = std::collections::BTreeMap::new();
+        for (field_name, field_value) in self.iter() {
+            let field_type = field_value.get_type_of_value();
+            type_fields.insert(field_name.clone(), field_type);
+        }
+        UnifiedTypeDefinition::TypeDef(TypeGeneric::Product {
+            fields: type_fields,
+        })
+    }
+}
+
+impl StructValue {
+    pub fn create_unit() -> Self {
+        Self::default()
+    }
+}
+
+impl VmVal for TypeId {
+    fn into_unified_type_definition(self) -> Option<UnifiedTypeDefinition> {
+        Some(UnifiedTypeDefinition::TypeId(self))
+    }
+
+    fn get_type_of_value(&self) -> UnifiedTypeDefinition {
+        UnifiedTypeDefinition::builtin(BuiltinKind::Type)
+    }
+}
+
+impl VmVal for FuncId {
+    fn into_unified_type_definition(self) -> Option<UnifiedTypeDefinition> {
+        None
+    }
+
+    fn get_type_of_value(&self) -> UnifiedTypeDefinition {
+        UnifiedTypeDefinition::builtin(BuiltinKind::Type)
+    }
+}
+#[enum_dispatch(VmVal)]
+#[derive(Debug, Clone, PartialEq, EnumAsInner)]
 pub enum VmValue {
-    ValuePrimitive(ValuePrimitive),
-    Product(StructValue),
-    Type(TypeId),
-    Func(FuncId),
+    ValuePrimitive,
+    StructValue,
+    TypeId,
+    FuncId,
 }
 
 impl Display for VmValue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::ValuePrimitive(x) => Display::fmt(x, f),
-            Self::Product(fields) => {
+            Self::StructValue(fields) => {
                 write!(f, "{{")?;
                 let mut first = true;
                 for (key, value) in fields.iter() {
@@ -95,8 +221,8 @@ impl Display for VmValue {
                 write!(f, "}}")?;
                 Ok(())
             }
-            Self::Type(_) => write!(f, "Type"),
-            Self::Func(fun) => write!(f, "Func({fun:?})"),
+            Self::TypeId(_) => write!(f, "Type"),
+            Self::FuncId(fun) => write!(f, "Func({fun:?})"),
         }
     }
 }
@@ -113,143 +239,12 @@ impl From<Literal> for VmValue {
     }
 }
 impl VmValue {
-    /// Create VmValue from i64
-    pub fn from_i64(value: i64) -> Self {
-        Self::ValuePrimitive(ValuePrimitive::Integer(BigInt::from(value)))
+    pub fn create_unit() -> Self {
+        Self::StructValue(StructValue::default())
     }
 
-    /// Create VmValue from f64
-    pub fn from_f64(value: f64) -> Self {
-        let rational =
-            BigRational::from_float(value).unwrap_or_else(|| BigRational::from(BigInt::from(0)));
-        Self::ValuePrimitive(ValuePrimitive::Float(rational))
-    }
-
-    /// Create VmValue from bool
-    pub fn from_bool(value: bool) -> Self {
-        Self::ValuePrimitive(ValuePrimitive::Bool(value))
-    }
-
-    /// Create VmValue from BigInt
-    pub fn from_bigint(value: BigInt) -> Self {
-        Self::ValuePrimitive(ValuePrimitive::Integer(value))
-    }
-
-    /// Create VmValue from BigRational
-    pub fn from_bigrational(value: BigRational) -> Self {
-        Self::ValuePrimitive(ValuePrimitive::Float(value))
-    }
-
-    /// Convert VmValue to UnifiedTypeDefinition for type expressions only
-    ///
-    /// This function only works on type expressions, not value expressions.
-    /// Type expressions can be:
-    /// - Type(id) - direct type reference
-    /// - {a=Type(i64), b=Type(i64)} - product of types
-    /// - {a={x=Type(i64),y=Type(i64)}, b=Type(i64)} - nested type expressions
-    ///
-    /// Returns None if the value is not a valid type expression.
-    pub fn into_unified_type_definition(self) -> Option<UnifiedTypeDefinition> {
-        match self {
-            VmValue::ValuePrimitive(_) => {
-                // Primitive values are not type expressions
-                None
-            }
-            VmValue::Product(fields) => {
-                // Check if all fields are valid type expressions (recursive)
-                let mut type_fields = std::collections::BTreeMap::new();
-
-                for (identifier, value) in fields.into_iter() {
-                    let field_type = value.into_unified_type_definition()?;
-                    type_fields.insert(identifier, field_type);
-                }
-
-                Some(UnifiedTypeDefinition::TypeDef(TypeGeneric::Product {
-                    fields: type_fields,
-                }))
-            }
-            VmValue::Type(type_id) => {
-                // A Type value represents a type expression
-                Some(UnifiedTypeDefinition::TypeId(type_id))
-            }
-            VmValue::Func(func) => None,
-        }
-    }
-    pub fn into_type_definition(self, container: &mut TypeContainer) -> Option<TypeDefinition> {
-        let type_id = container.store_unified_type(self.into_unified_type_definition()?);
-        type_id.to_type_def(container)
-    }
-    pub fn into_type_id(self, type_container: &mut TypeContainer) -> Option<TypeId> {
-        self.into_unified_type_definition()
-            .map(|x| type_container.store_unified_type(x))
-    }
-
-    /// Get the type of this VmValue as UnifiedTypeDefinition
-    ///
-    /// Returns the type information for this value without requiring a TypeContainer.
-    /// Returns None for mixed type/value products (not yet implemented).
-    pub fn get_type_id_of_value(&self, container: &mut TypeContainer) -> TypeId {
-        self.get_type_of_value().get_id(container)
-    }
-    pub fn get_type_of_value(&self) -> UnifiedTypeDefinition {
-        match self {
-            VmValue::Type(_) => {
-                // Return "type of type" (meta-type)
-                UnifiedTypeDefinition::builtin(BuiltinKind::Type)
-            }
-            VmValue::ValuePrimitive(primitive) => {
-                let builtin_kind = match primitive {
-                    ValuePrimitive::Bool(_) => BuiltinKind::Bool,
-                    ValuePrimitive::Integer(_) => BuiltinKind::I64,
-                    ValuePrimitive::Float(_) => BuiltinKind::F64,
-                };
-                UnifiedTypeDefinition::builtin(builtin_kind)
-            }
-            VmValue::Product(fields) => {
-                // Check if product contains mixed types and values
-                for field_value in fields.values() {
-                    match field_value {
-                        VmValue::Type(_) => {
-                            return UnifiedTypeDefinition::builtin(BuiltinKind::Type);
-                        }
-                        VmValue::ValuePrimitive(_) | VmValue::Product(_) | VmValue::Func(_) => {}
-                    }
-                }
-                // Create product type from field types
-                let mut type_fields = std::collections::BTreeMap::new();
-                for (field_name, field_value) in fields.iter() {
-                    let field_type = field_value.get_type_of_value();
-                    type_fields.insert(field_name.clone(), field_type);
-                }
-
-                UnifiedTypeDefinition::TypeDef(TypeGeneric::Product {
-                    fields: type_fields,
-                })
-            }
-            VmValue::Func(func)=>UnifiedTypeDefinition::builtin(BuiltinKind::Type),
-        }
-    }
-
-    pub fn of_type(&self, expected_type_id: TypeId, type_container: &mut TypeContainer) -> bool {
-        let id = self.get_type_id_of_value(type_container);
-        id == expected_type_id
-    }
-
-    pub(crate) fn from_func(func: FuncId) -> Self {
-        Self::Func(func)
-    }
-
-    pub(crate) fn as_product(self) -> Option<StructValue> {
-        match self {
-            VmValue::Product(product) => Some(product),
-            _ => None,
-        }
-    }
-    pub fn create_unit()->Self{
-        Self::Product(StructValue::default())
-    }
-    pub fn is_null(&self)->bool{
-        matches!(self,VmValue::Product(x) if x.is_empty())
+    pub fn is_null(&self) -> bool {
+        matches!(self, VmValue::StructValue(x) if x.is_empty())
     }
 }
 
@@ -277,7 +272,7 @@ pub fn evaluate_unary_op(operator: &UnaryOperator, operand: &VmValue) -> Result<
         (UnaryOperator::Not, VmValue::ValuePrimitive(ValuePrimitive::Bool(b))) => {
             Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(!b)))
         }
-        (_, VmValue::Product(_)) => Err(VmErrorType::InvalidOperation(
+        (_, VmValue::StructValue(_)) => Err(VmErrorType::InvalidOperation(
             "Product operations not yet implemented".to_string(),
         )),
         _ => Err(VmErrorType::InvalidOperation(format!(
@@ -398,7 +393,7 @@ pub fn evaluate_binary_op(
         },
 
         // Handle Product types - all operations return error for now
-        (VmValue::Product(_), _) | (_, VmValue::Product(_)) => Err(VmErrorType::InvalidOperation(
+        (VmValue::StructValue(_), _) | (_, VmValue::StructValue(_)) => Err(VmErrorType::InvalidOperation(
             "Product operations not yet implemented".to_string(),
         )),
 

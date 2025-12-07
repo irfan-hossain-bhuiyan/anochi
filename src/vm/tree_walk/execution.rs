@@ -1,6 +1,6 @@
 use super::*;
 use crate::ast::{Statement, Expression, Literal};
-use crate::vm::tree_walk::vm_value::{ValuePrimitive, VmValue};
+use crate::vm::tree_walk::vm_value::{ValuePrimitive, VmVal, VmValue};
 use crate::vm::tree_walk::vm_error::{VmError, VmErrorType};
 
 pub(super) fn execute_statement<Backend: VmBackend, T: Clone + HasPosition>(
@@ -19,8 +19,7 @@ pub(super) fn execute_statement<Backend: VmBackend, T: Clone + HasPosition>(
             let value = vm.evaluate_expr(value)?;
             if let Some(type_expr) = r#type {
                 let type_value = vm.evaluate_expr(type_expr)?;
-                let expected_type_id = type_value
-                    .into_type_id(&mut vm.types)
+                let expected_type_id = VmVal::get_type_id(type_value, &mut vm.types)
                     .ok_or(VmErrorType::InvalidTypeDefination).map_err(map_err)?;
                 if !value.of_type(expected_type_id, &mut vm.types) {
                     return Err(map_err(VmErrorType::TypeMismatch("")));

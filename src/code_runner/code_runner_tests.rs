@@ -1,4 +1,4 @@
-use crate::{code_runner::CodeRunner, vm::tree_walk::VmValue};
+use crate::{code_runner::CodeRunner, vm::tree_walk::{ValuePrimitive}};
 
 #[test]
 fn test_basic_functionality() {
@@ -13,11 +13,11 @@ fn test_basic_functionality() {
         .unwrap();
     //runner.run_statements("let b = 3;").unwrap();
     let result = runner.evaluate_expr("(a + b) * 2 - 5").unwrap();
-    assert_eq!(result, VmValue::from_i64(31));
+    assert_eq!(result, ValuePrimitive::from_i64(31).into());
 
     // Test boolean operations
     let result = runner.evaluate_expr("a > b").unwrap();
-    assert_eq!(result, VmValue::from_bool(true));
+    assert_eq!(result, ValuePrimitive::from_bool(true).into());
 }
 
 #[test]
@@ -28,7 +28,7 @@ fn test_control_flow() {
     runner.run_statements("let x = 0;if (2>1){x=42;}").unwrap();
     //runner.run_statements("if (2 > 1) { x = 42; }").unwrap();
     let result = runner.evaluate_expr("x").unwrap();
-    assert_eq!(result, VmValue::from_i64(42));
+    assert_eq!(result, ValuePrimitive::from_i64(42).into());
 }
 #[test]
 fn test_scope() {
@@ -40,8 +40,8 @@ fn test_scope() {
     //runner.run_statements("{let x=10;y=x;}").unwrap();
     let x = runner.evaluate_expr("x").unwrap();
     let y = runner.evaluate_expr("y").unwrap();
-    assert_eq!(x, VmValue::from_i64(10));
-    assert_eq!(y, VmValue::from_i64(20));
+    assert_eq!(x, ValuePrimitive::from_i64(10).into());
+    assert_eq!(y, ValuePrimitive::from_i64(20).into());
 }
 
 #[test]
@@ -72,7 +72,7 @@ fn test_if() {
         )
         .unwrap();
     let output = runner.evaluate_expr("x").unwrap();
-    assert_eq!(output, VmValue::from_i64(20))
+    assert_eq!(output, ValuePrimitive::from_i64(20).into())
 }
 
 #[test]
@@ -89,7 +89,7 @@ fn test_loop() {
         )
         .unwrap();
     let output = runner.evaluate_expr("x").unwrap();
-    assert_eq!(output, VmValue::from_i64(31))
+    assert_eq!(output, ValuePrimitive::from_i64(31).into())
 }
 #[test]
 fn test_function_call() {
@@ -102,6 +102,6 @@ fn test_function_call() {
         )
         .unwrap();
     let output = runner.evaluate_expr("result").unwrap();
-    assert_eq!(output, VmValue::from_i64(25))
+    assert_eq!(output, ValuePrimitive::from_i64(25).into())
 }
 

@@ -1,13 +1,14 @@
 use std::collections::{HashMap, VecDeque};
-use std::fmt::Display;
+use std::fmt::{Debug, Display};
 
 use thiserror::Error;
 
 
+use crate::prelude::SizedArray;
 use crate::{
     ast::Identifier,
     types::{TypeContainer, TypeId},
-    vm::tree_walk::{VmErrorType, VmValue},
+    vm::tree_walk::{VmErrorType, VmVal, VmValue},
 };
 type ExprResult=Result<VmValue,VmErrorType>;
 #[derive(Debug,Clone,Error)]
@@ -71,11 +72,12 @@ impl VariableEntry {
         }
     }
 }
-type ScopeValues=HashMap<Identifier,VariableEntry>;
+type ScopeValues=HashMap<Identifier,usize>;
 /// Stack-based scope management for variables
 #[derive(Debug)]
 pub struct ScopeStack {
     scopes: VecDeque<ScopeValues>,
+    stack:SizedArray<VariableEntry>
 }
 
 impl ScopeStack {
@@ -83,7 +85,8 @@ impl ScopeStack {
     pub fn new() -> Self {
         let mut scopes = VecDeque::new();
         scopes.push_back(HashMap::new()); // Global scope
-        Self { scopes }
+        let stack=SizedArray::default();
+        Self { scopes,stack }
     }
 
     /// Creates a new scope (pushes new HashMap to stack)
@@ -108,8 +111,14 @@ impl ScopeStack {
         type_container: &mut crate::types::TypeContainer,
     ) {
         let entry = VariableEntry::new(value, VariableState::Immutable, type_container);
+        self.insert_var_entry(identifier, entry);
+    }
+
+    fn insert_var_entry(&mut self, identifier: Identifier, entry: VariableEntry) {
+        let index=self.stack.size();
+        self.stack.push_back(entry);
         if let Some(current_scope) = self.scopes.back_mut() {
-            current_scope.insert(identifier, entry);
+            current_scope.insert(identifier, index);
         }
     }
 
@@ -124,10 +133,8 @@ impl ScopeStack {
         let Some(entry) = VariableEntry::new_checked(value, expected_type_id, VariableState::Immutable, type_container) else {
             return Err(VmErrorType::TypeMismatch("Value type does not match expected type"));
         };
-        
-        if let Some(current_scope) = self.scopes.back_mut() {
-            current_scope.insert(identifier, entry);
-        }
+        self.insert_var_entry(identifier, entry);
+        //current_scope.insert(identifier,);
         Ok(())
     }
 
@@ -154,8 +161,8 @@ impl ScopeStack {
 
         // Find and update the variable
         for scope in self.scopes.iter_mut().rev() {
-            if let Some(entry) = scope.get_mut(identifier) {
-                entry.value = value;
+            if let Some(index) = scope.get(identifier) {
+                self.stack[*index].value=value;
                 return Ok(());
             }
         }
@@ -165,8 +172,8 @@ impl ScopeStack {
     /// Gets a variable by searching from current scope to global
     pub fn get_variable(&self, identifier: &Identifier) -> Option<&VmValue> {
         for scope in self.scopes.iter().rev() {
-            if let Some(entry) = scope.get(identifier) {
-                return Some(&entry.value);
+            if let Some(index) = scope.get(identifier) {
+                return Some(&self.stack[*index].value);
             }
         }
         None
@@ -175,8 +182,8 @@ impl ScopeStack {
     /// Gets a variable entry (with type) by searching from current scope to global
     pub fn get_variable_entry(&self, identifier: &Identifier) -> Option<&VariableEntry> {
         for scope in self.scopes.iter().rev() {
-            if let Some(entry) = scope.get(identifier) {
-                return Some(entry);
+            if let Some(index) = scope.get(identifier) {
+                return Some(&self.stack[*index]);
             }
         }
         None
@@ -201,23 +208,38 @@ impl ScopeStack {
     }
 }
 
-impl Display for ScopeStack {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for (scope_index, scope) in self.scopes.iter().enumerate() {
-            if scope_index > 0 {
-                writeln!(f, "==scope==")?;
-            }
-            
-            for (identifier, entry) in scope {
-                writeln!(f, "{} {} = {};", entry.var_state, identifier, entry.value)?;
-            }
-        }
-        Ok(())
-    }
-}
+//impl Display for ScopeStack {
+//    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//        for (scope_index, scope) in self.scopes.iter().enumerate() {
+//            if scope_index > 0 {
+//                writeln!(f, "==scope==")?;
+//            }
+//            
+//            for (identifier, entry) in scope {
+//                writeln!(f, "{} {} = {};", entry.var_state, identifier, entry.value)?;
+//            }
+//        }
+//        Ok(())
+//    }
+//}
 
 impl Default for ScopeStack {
     fn default() -> Self {
         Self::new()
+    }
+}
+impl Display for ScopeStack {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "ScopeStack {{")?;
+        writeln!(f, "  Stack (bottom to top):")?;
+        for (idx, entry) in self.stack.iter().enumerate() {
+            writeln!(f, "    [{}] {} = {} (type: {:?})", idx, entry.var_state, entry.value, entry.type_id)?;
+        }
+        writeln!(f, "  Scopes:")?;
+        for (scope_idx, scope) in self.scopes.iter().enumerate() {
+            writeln!(f, "    Scope {scope_idx}: {scope:?}")?;
+        }
+        write!(f, "}}")?;
+        Ok(())
     }
 }
