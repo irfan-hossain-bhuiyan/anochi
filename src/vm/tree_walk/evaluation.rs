@@ -22,7 +22,7 @@ pub(super) fn get_reference<Backend: VmBackend, T: Clone + HasPosition>(
         }
         Expression::Unary { operator: UnaryOperator::Deref, operand } => {
             let value = evaluate_expr(vm, operand)?;
-            if let VmValue::ValuePrimitive(ValuePrimitive::Reference(ptr)) = value {
+            if let VmValue::ValuePrimitive(ValuePrimitive::Reference(ptr, _)) = value {
                 Ok(ptr)
             } else {
                 Err(map_err(VmErrorType::TypeMismatch(
@@ -69,11 +69,12 @@ pub(super) fn evaluate_expr<Backend: VmBackend, T: Clone + HasPosition>(
         Expression::Unary { operator, operand } => match operator {
             UnaryOperator::Ref => {
                 let ptr = get_reference(vm, operand)?;
-                Ok(VmValue::ValuePrimitive(ValuePrimitive::Reference(ptr)))
+                let type_id = vm.variables.get_variable_entry_from_index(ptr).type_id;
+                Ok(VmValue::ValuePrimitive(ValuePrimitive::Reference(ptr, type_id)))
             }
             UnaryOperator::Deref => {
                 let operand_val = vm.evaluate_expr(operand)?;
-                if let VmValue::ValuePrimitive(ValuePrimitive::Reference(ptr)) = operand_val {
+                if let VmValue::ValuePrimitive(ValuePrimitive::Reference(ptr, _)) = operand_val {
                     Ok(vm.variables.get_value_from_index(ptr).clone())
                 } else {
                     Err(map_err(VmErrorType::TypeMismatch(
@@ -126,7 +127,7 @@ pub(super) fn evaluate_expr<Backend: VmBackend, T: Clone + HasPosition>(
             let type_id = vm.types.store_unified_type(unified);
             Ok(VmValue::TypeId(type_id))
         }
-        Expression::MemberAccess { object, member } => todo!(),
+        Expression::MemberAccess { .. } => todo!(),
         Expression::Function {
             input,
             output,

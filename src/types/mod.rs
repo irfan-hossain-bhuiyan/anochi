@@ -21,7 +21,6 @@ pub enum BuiltinKind {
     Bool,
     Usize,
     Type,
-    Reference,
 }
 
 pub type TypeId = HashPtr<OptimizedTypeDefinition>;
@@ -48,6 +47,8 @@ pub enum TypeGeneric<T> {
     },
     /// Built-in type: a primitive type provided by the language.
     Builtin(BuiltinKind),
+    /// Reference type: a pointer to another type
+    Reference(Box<T>),
 }
 
 impl<T> From<BuiltinKind> for TypeGeneric<T> {
@@ -162,6 +163,7 @@ impl<T, U:Ord> Mappable<T, U> for TypeGeneric<T> {
             
             TypeGeneric::Sum { variants } => TypeGeneric::Sum {variants: variants.inner_map(f)},
             
+            TypeGeneric::Reference(inner) => TypeGeneric::Reference(Box::new(f(*inner))),
             TypeGeneric::Builtin(kind) => TypeGeneric::Builtin(kind),
         }
     }
@@ -210,6 +212,9 @@ impl<T> TypeGeneric<T> {
 
 // Implementation for UnifiedTypeDefinition
 impl UnifiedTypeDefinition {
+    pub fn reference(r#type:Self)->Self{
+        Self::TypeDef(TypeGeneric::Reference(Box::new(r#type)))
+    }
     pub fn product(fields: BTreeMap<Identifier, Self>) -> Self {
         Self::TypeDef(TypeGeneric::Product { fields })
     }
@@ -248,6 +253,37 @@ impl UnifiedTypeDefinition {
 impl OptimizedTypeDefinition {
     pub fn new(type_generic: TypeGeneric<TypeId>) -> Self {
         Self(type_generic)
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_reference_type_cycle() {
+        let mut container = TypeContainer::new();
+        
+        // Create i64 type
+        let i64_def = UnifiedTypeDefinition::builtin(BuiltinKind::I64);
+        
+        // Create reference to i64
+        let ref_def = UnifiedTypeDefinition::reference(i64_def);
+        
+        // Store in container
+        let type_id = container.store_unified_type(ref_def);
+        
+        // Retrieve back as TypeDefinition
+        let retrieved_def = container.get_type_def(&type_id).expect("Should retrieve type");
+        
+        // Verify it is a reference to i64
+        match retrieved_def.inner() {
+            TypeGeneric::Reference(inner) => {
+                assert_eq!(inner.as_builtin(), Some(BuiltinKind::I64));
+            }
+            _ => panic!("Expected Reference type, got {:?}", retrieved_def),
+        }
     }
 }
 

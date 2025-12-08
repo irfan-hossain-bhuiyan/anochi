@@ -1,5 +1,5 @@
 use super::*;
-use crate::ast::{Statement, Expression, Literal};
+use crate::ast::{Statement};
 use crate::vm::tree_walk::vm_value::{ValuePrimitive, VmVal, VmValue};
 use crate::vm::tree_walk::vm_error::{VmError, VmErrorType};
 use crate::vm::tree_walk::evaluation::get_reference;

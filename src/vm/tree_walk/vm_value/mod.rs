@@ -52,7 +52,7 @@ pub enum ValuePrimitive {
     Bool(bool),
     Integer(BigInt),
     Float(BigRational),
-    Reference(IndexPtr<VariableEntry>),
+    Reference(IndexPtr<VariableEntry>, TypeId),
 }
 
 impl VmVal for ValuePrimitive {
@@ -61,13 +61,14 @@ impl VmVal for ValuePrimitive {
     }
 
     fn get_type_of_value(&self) -> UnifiedTypeDefinition {
-        let builtin_kind = match self {
-            ValuePrimitive::Bool(_) => BuiltinKind::Bool,
-            ValuePrimitive::Integer(_) => BuiltinKind::I64,
-            ValuePrimitive::Float(_) => BuiltinKind::F64,
-            ValuePrimitive::Reference(_) => BuiltinKind::Reference,
-        };
-        UnifiedTypeDefinition::builtin(builtin_kind)
+        match self {
+            ValuePrimitive::Bool(_) => UnifiedTypeDefinition::builtin(BuiltinKind::Bool),
+            ValuePrimitive::Integer(_) => UnifiedTypeDefinition::builtin(BuiltinKind::I64),
+            ValuePrimitive::Float(_) => UnifiedTypeDefinition::builtin(BuiltinKind::F64),
+            ValuePrimitive::Reference(_, type_id) => {
+                UnifiedTypeDefinition::reference(UnifiedTypeDefinition::type_id(type_id.clone()))
+            },
+        }
     }
 }
 
@@ -101,7 +102,7 @@ impl Display for ValuePrimitive {
             Self::Bool(b) => write!(f, "{b}"),
             Self::Integer(i) => write!(f, "{i}"),
             Self::Float(fl) => write!(f, "{fl}"),
-            Self::Reference(ptr) => write!(f, "&{:?}", ptr),
+            Self::Reference(ptr, _) => write!(f, "&{:?}", ptr),
         }
     }
 }

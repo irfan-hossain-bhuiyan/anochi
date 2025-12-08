@@ -43,6 +43,13 @@ impl TypeDefinition {
             _ => None,
         }
     }
+    /// Get reference inner type if this is a reference type
+    pub fn as_reference(&self) -> Option<&TypeDefinition> {
+        match &self.0 {
+            TypeGeneric::Reference(inner) => Some(inner),
+            _ => None,
+        }
+    }
 }
 
 impl TypeDefinition {
@@ -59,6 +66,11 @@ impl TypeDefinition {
     /// Creates a new builtin type.
     pub fn builtin(kind: BuiltinKind) -> Self {
         Self(TypeGeneric::Builtin(kind))
+    }
+
+    /// Creates a new reference type.
+    pub fn reference(inner: TypeDefinition) -> Self {
+        Self(TypeGeneric::Reference(Box::new(inner)))
     }
 
     /// Check if this type is compatible with another type
