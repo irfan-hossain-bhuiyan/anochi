@@ -105,3 +105,31 @@ fn test_function_call() {
     assert_eq!(output, ValuePrimitive::from_i64(25).into())
 }
 
+#[test]
+fn test_reference_and_dereference() {
+    let mut runner = CodeRunner::default();
+    runner
+        .run_statements(
+            r"
+    let x = 10;
+    let r = &x;
+    let y = *r;
+    *r = 20;
+    let z = x;
+    ",
+        )
+        .unwrap();
+    
+    // Check if y got the value 10 (dereferenced from r which pointed to x)
+    let y = runner.evaluate_expr("y").unwrap();
+    assert_eq!(y, ValuePrimitive::from_i64(10).into());
+    
+    // Check if modifying *r changed x
+    let x = runner.evaluate_expr("x").unwrap();
+    assert_eq!(x, ValuePrimitive::from_i64(20).into());
+    
+    // Check if z got the updated value of x
+    let z = runner.evaluate_expr("z").unwrap();
+    assert_eq!(z, ValuePrimitive::from_i64(20).into());
+}
+

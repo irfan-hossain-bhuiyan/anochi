@@ -203,3 +203,39 @@ fn parse_loop() {
 
     assert_eq!(statement, expected);
 }
+
+#[test]
+fn test_parse_reference_and_dereference() {
+    let source = "{ let r = &x; let v = *r; *r = 20; }";
+    let statement = parse_ast_from_source(source);
+    
+    let expected = Statement::StatementBlock(StatementBlock {
+        statements: vec![
+            Statement::assignment(
+                Identifier::new("r"),
+                None,
+                Expression::unary(
+                    crate::ast::UnaryOperator::Ref,
+                    Expression::identifier(Identifier::new("x")).to_node(())
+                ).to_node(())
+            ).to_node(()),
+            Statement::assignment(
+                Identifier::new("v"),
+                None,
+                Expression::unary(
+                    crate::ast::UnaryOperator::Deref,
+                    Expression::identifier(Identifier::new("r")).to_node(())
+                ).to_node(())
+            ).to_node(()),
+            Statement::mutable_assignment(
+                Expression::unary(
+                    crate::ast::UnaryOperator::Deref,
+                    Expression::identifier(Identifier::new("r")).to_node(())
+                ).to_node(()),
+                Expression::from_i64(20).to_node(())
+            ).to_node(())
+        ]
+    }).to_node(());
+    
+    assert_eq!(statement, expected);
+}

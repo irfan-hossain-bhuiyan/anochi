@@ -8,20 +8,33 @@ use crate::types::UnifiedTypeDefinition;
 use std::collections::{HashMap, BTreeSet};
 
 pub(super) fn get_reference<Backend: VmBackend, T: Clone + HasPosition>(
-    vm: &Vm<Backend>,
+    vm: &mut Vm<Backend>,
     expression_node: &ExpNode<T>,
 ) -> Result<IndexPtr<VariableEntry>, VmError> {
     let node_data = expression_node.data().get_position().clone();
     let map_err = |e| VmError::new(e, node_data.clone());
     let expression = &expression_node.exp;
     
-    if let Expression::Literal(Literal::Identifier(id)) = expression {
-        vm.variables.get_index_from_name(id)
-            .ok_or_else(|| map_err(VmErrorType::UndefinedIdentifier(id.clone())))
-    } else {
-        Err(map_err(VmErrorType::InvalidOperation(
-            "Cannot get reference to a non-variable expression".to_string(),
-        )))
+    match expression {
+        Expression::Literal(Literal::Identifier(id)) => {
+            vm.variables.get_index_from_name(id)
+                .ok_or_else(|| map_err(VmErrorType::UndefinedIdentifier(id.clone())))
+        }
+        Expression::Unary { operator: UnaryOperator::Deref, operand } => {
+            let value = evaluate_expr(vm, operand)?;
+            if let VmValue::ValuePrimitive(ValuePrimitive::Reference(ptr)) = value {
+                Ok(ptr)
+            } else {
+                Err(map_err(VmErrorType::TypeMismatch(
+                    "Dereference operator (*) requires a reference value",
+                )))
+            }
+        }
+        _ => {
+            Err(map_err(VmErrorType::InvalidOperation(
+                "Cannot get reference to a non-variable expression".to_string(),
+            )))
+        }
     }
 }
 

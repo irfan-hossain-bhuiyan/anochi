@@ -1,7 +1,7 @@
 mod parser_error;
 
 #[cfg(test)]
-mod block_tests;
+mod parser_tests;
 
 use crate::ast::{
     BinaryOperator, Expression, ExpressionNode, Statement, StatementBlock, StatementNode,
@@ -296,7 +296,7 @@ impl<'a> Parser<'a> {
                 let stmt = Statement::assignment(x, r#type, expr);
                 Ok(self.make_stat_node(stmt, start))
             }
-            TokenType::Identifier(_) => {
+            TokenType::Identifier(_) | TokenType::Star => {
                 let x = self.parse_expression()?;
                 // Check for typed assignment: identifier : type = value
 

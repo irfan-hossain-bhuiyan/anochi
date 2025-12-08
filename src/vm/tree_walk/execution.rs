@@ -2,6 +2,7 @@ use super::*;
 use crate::ast::{Statement, Expression, Literal};
 use crate::vm::tree_walk::vm_value::{ValuePrimitive, VmVal, VmValue};
 use crate::vm::tree_walk::vm_error::{VmError, VmErrorType};
+use crate::vm::tree_walk::evaluation::get_reference;
 
 pub(super) fn execute_statement<Backend: VmBackend, T: Clone + HasPosition>(
     vm: &mut Vm<Backend>,
@@ -40,24 +41,14 @@ pub(super) fn execute_statement<Backend: VmBackend, T: Clone + HasPosition>(
             Ok(StatementEvent::None)
         }
         Statement::MutableAssignment { target, value } => {
-            match &target.exp {
-                Expression::Literal(Literal::Identifier(identifier)) => {
-                    let evaluated_value = vm.evaluate_expr(value)?;
-                    vm.variables.set_value_from_name(
-                        identifier,
-                        evaluated_value,
-                        &mut vm.types,
-                    ).map_err(map_err)?;
-                    Ok(StatementEvent::None)
-                }
-                _ => {
-                    // For member access and other complex assignments,
-                    // return an error for now until type system is implemented
-                    Err(map_err(VmErrorType::InvalidOperation(
-                        "Complex assignment not yet supported".to_string(),
-                    )))
-                }
-            }
+            let ptr = get_reference(vm, target)?;
+            let evaluated_value = vm.evaluate_expr(value)?;
+            vm.variables.set_value_from_index(
+                ptr,
+                evaluated_value,
+                &mut vm.types,
+            ).map_err(map_err)?;
+            Ok(StatementEvent::None)
         }
         Statement::StatementBlock(stmtblock) => vm.run_block(&stmtblock),
         Statement::If { condition, on_true } => {
