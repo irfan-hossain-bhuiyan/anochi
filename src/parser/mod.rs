@@ -38,7 +38,7 @@ macro_rules! match_token_or_err {
 pub struct Parser<'a> {
     tokens: &'a TokenSlice,
     current: usize,
-    is_error: bool,
+    //is_error: bool,
     is_in_loop: bool,
     //DESIGN DECISION:It is here because the vm,might go inside a function inside loop,if the
     //funciton has break,continue the vm will validate it,because it is inside loop.
@@ -69,7 +69,10 @@ impl<'a> Parser<'a> {
         let slice = self.tokens.slice(start, self.current).pos_range();
         expr.to_node(slice)
     }
-
+    fn make_stat_node(&self, stmt: Stat, start: usize) -> StatNode {
+        let slice = self.tokens.slice(start, self.current).pos_range();
+        stmt.to_node(slice)
+    }
     fn parse_expr_level(&mut self, level: ExprLevel) -> ReExpNode {
         let start = self.current;
         match level {
@@ -230,51 +233,7 @@ impl<'a> Parser<'a> {
             }
         }
     }
-
-    // Function ::= "|" Identifier "|" ("->" Expression)? "{" Statement "}"
-    fn parse_function(&mut self) -> ReExp {
-        assert!(
-            matches!(self.peek_type(), Some(TokenType::Keyword(Keyword::Fn))),
-            "parse_function called without Fn keyword"
-        );
-        self.advance();
-        let input = self.parse_expr_level(ExprLevel::Primary)?;
-        let output = if match_token!(self, TokenType::Arrow).is_err() {
-            None
-        } else {
-            Some(Box::new(self.parse_expr_level(ExprLevel::Primary)?))
-        };
-        let statements = self.parse_statement()?;
-        let input = Box::new(input);
-        let statements = Box::new(statements);
-        let expr = Expression::Function {
-            input,
-            output,
-            statements,
-        };
-        Ok(expr)
-    }
-
-    fn make_stat_node(&self, stmt: Stat, start: usize) -> StatNode {
-        let slice = self.tokens.slice(start, self.current).pos_range();
-        stmt.to_node(slice)
-    }
-
-    fn parse_statement_block(&mut self) -> Result<StatBlock, ParserError> {
-        match_token_or_err!(self, TokenType::LeftBrace)?;
-        let mut statements = Vec::new();
-        loop {
-            if match_token!(self, TokenType::RightBrace).is_ok() {
-                break;
-            }
-            match self.parse_statement() {
-                Ok(x) => statements.push(x),
-                Err(x) => return Err(x),
-            }
-        }
-        Ok(StatementBlock { statements })
-    }
-    //fn into_parser_error(&self)
+    
     pub fn parse_statement(&mut self) -> ReStatNode {
         let start = self.current;
         // Assignment: identifier = expression
@@ -387,12 +346,53 @@ TokenType::Keyword(Keyword::Return) => {
             _ => Err(StatementParseErrorType::NoStatement.with_pos(self.peek_position())),
         }
     }
+    // Function ::= "|" Identifier "|" ("->" Expression)? "{" Statement "}"
+    fn parse_function(&mut self) -> ReExp {
+        assert!(
+            matches!(self.peek_type(), Some(TokenType::Keyword(Keyword::Fn))),
+            "parse_function called without Fn keyword"
+        );
+        self.advance();
+        let input = self.parse_expr_level(ExprLevel::Primary)?;
+        let output = if match_token!(self, TokenType::Arrow).is_err() {
+            None
+        } else {
+            Some(Box::new(self.parse_expr_level(ExprLevel::Primary)?))
+        };
+        let statements = self.parse_statement()?;
+        let input = Box::new(input);
+        let statements = Box::new(statements);
+        let expr = Expression::Function {
+            input,
+            output,
+            statements,
+        };
+        Ok(expr)
+    }
+
+    fn parse_statement_block(&mut self) -> Result<StatBlock, ParserError> {
+        assert!(
+            matches!(self.peek_type(), Some(TokenType::LeftBrace)),
+            "parse_statement_block should be called on left brace"
+        );
+        self.advance();
+        let mut statements = Vec::new();
+        loop {
+            if match_token!(self, TokenType::RightBrace).is_ok() {
+                break;
+            }
+            match self.parse_statement() {
+                Ok(x) => statements.push(x),
+                Err(x) => return Err(x),
+            }
+        }
+        Ok(StatementBlock { statements })
+    }
 
     pub fn new(tokens: &'a TokenSlice) -> Self {
         Parser {
             tokens,
             current: 0,
-            is_error: false,
             is_in_loop: false,
         }
     }
@@ -473,7 +473,7 @@ TokenType::Keyword(Keyword::Return) => {
         &self.tokens[self.current - 1]
     }
 
-    pub(crate) fn parse_statements(&mut self) -> ReStatNode {
+    pub fn parse_statements(&mut self) -> ReStatNode {
         let start = self.current;
         let mut vec = Vec::new();
         while !self.is_at_end() {

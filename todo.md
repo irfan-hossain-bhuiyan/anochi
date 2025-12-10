@@ -26,11 +26,33 @@
 - [x] fixed loop
     - A way to fix this issue,Iis to add return type in the execute statement if break or continue is called,the loop will evaluate the decision and check if it is okay.to break or continue.
 - [x] Implemented CodeError<ErrorType>,this is generic over error,The position n where the error is
-
-## Doing:
 - [x] Stack will have a fixed size,and a index,to get it's current pointer.
 - [x] Change the current index from usize to IndexPtr<>,because the type is making problem
 - [x] HashMap will map to it.ScopeStack which is a VecDeque<HashMap<>>,Now the VecDeque will also save the last scope index.
+## Doing:
+- [ ] Implement the staack push of struct,
+    - First make a valueprimitive enum for stack (so stack can only push primitive type),
+    - A function in scope stack that can push VmValue,make the struct StructValue generic
+- [ ] Checking for types,and running the code are two different things,I now need a consistent parsing or this won't work
+    - [ ] Making new parsing function,Let's set some crieteria:
+    ```anochi
+        // A syntax like this isn't allowed
+        let a=i32;
+        let b:a=10;
+        // This will be allowed
+        comptime{ let a=i32;}
+        let b:a=10;
+    ```
+
+    1. I have came to an implementation,In here comptime variable can be accessed anywhere inside the struct,
+    You don't need to &self,to reference them in funciton.
+    2. Now I need to add add &self,&mut self only when I am constructing a new instance of the type.
+    3. I need to add add reference to the struct first,This is the first proirity
+    make the comptime take a block statement,and unlike other it won't create scope,
+    this is the reason I am using block,else comptime{} will create new scope (because it is treated as a statement and evaluated)
+    non of the variable will be used.
+
+    Now how do I 
 - [ ] Struct which is a hashmap of VmValue,Will now converted to index of Vec,I don't have to remove my previous code,
 The StructValue will be now called StructGeneralizedValue,
 - [ ] Make the scope ptr based on vector,I wanna mimic stack,The hashmap now,will not contain the 

@@ -3,7 +3,6 @@ use std::fmt::{Debug, Display};
 
 use thiserror::Error;
 
-
 use crate::prelude::{Allocator, IndexPtr, SizedArray};
 use crate::{
     ast::Identifier,
