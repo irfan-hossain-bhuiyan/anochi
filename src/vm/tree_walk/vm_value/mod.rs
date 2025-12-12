@@ -1,10 +1,8 @@
 use crate::ast::{BinaryOperator, Identifier, Literal, UnaryOperator};
-use crate::prelude::IndexPtr;
 use crate::types::{
     CompTimeBuiltinType, CompTimeTypeGeneric, TypeContainer, TypeDefinition, TypeId,
     UnifiedTypeDefinition,
 };
-use crate::vm::tree_walk::scope_stack::VariableEntry;
 use crate::vm::tree_walk::vm_error::VmErrorType;
 use enum_as_inner::EnumAsInner;
 use enum_dispatch::enum_dispatch;
@@ -12,7 +10,7 @@ use num_bigint::BigInt;
 use num_rational::BigRational;
 use std::collections::BTreeMap;
 use std::ops::Deref;
-use std::{collections::HashMap, fmt::Display};
+use std::fmt::Display;
 
 mod function;
 pub use function::{FuncId, VmFunc};
@@ -212,8 +210,8 @@ impl VmVal for TypeId {
         UnifiedTypeDefinition::builtin(CompTimeBuiltinType::Type)
     }
 
-    fn to_vm_units(&self) -> Vec<crate::vm::tree_walk::VmUnitType> {
-        vec![crate::vm::tree_walk::VmUnitType::Usize((*self).into())]
+    fn to_vm_units(self) -> Vec<crate::vm::tree_walk::VmUnitType> {
+        vec![crate::vm::tree_walk::VmUnitType::Usize(self.into())]
     }
 }
 
@@ -262,7 +260,7 @@ impl Display for VmParsedValue {
     }
 }
 
-impl From<Literal> for VmValue {
+impl From<Literal> for VmParsedValue {
     fn from(v: Literal) -> Self {
         match v {
             Literal::String(_) => {
@@ -273,17 +271,17 @@ impl From<Literal> for VmValue {
         }
     }
 }
-impl VmValue {
+impl VmParsedValue {
     pub fn create_unit() -> Self {
         Self::StructValue(StructValue::default())
     }
 
     pub fn is_null(&self) -> bool {
-        matches!(self, VmValue::StructValue(x) if x.is_empty())
+        matches!(self, VmParsedValue::StructValue(x) if x.is_empty())
     }
 }
 
-/// Evaluates a unary operation on a VmValue.
+/// Evaluates a unary operation on a VmParsedValue.
 ///
 /// This is a standalone function that handles negation and logical NOT operations
 /// on numeric and boolean values. It doesn't require any VM state and can be used independently.
@@ -298,19 +296,19 @@ impl VmValue {
 /// A `VmResult` containing the computed result or an error.
 pub fn evaluate_unary_op(
     operator: &UnaryOperator,
-    operand: &VmValue,
-) -> Result<VmValue, VmErrorType> {
+    operand: &VmParsedValue,
+) -> Result<VmParsedValue, VmErrorType> {
     match (operator, operand) {
-        (UnaryOperator::Minus, VmValue::ValuePrimitive(ValuePrimitive::Integer(i))) => {
-            Ok(VmValue::ValuePrimitive(ValuePrimitive::Integer(-i)))
+        (UnaryOperator::Minus, VmParsedValue::ValuePrimitive(ValuePrimitive::Integer(i))) => {
+            Ok(VmParsedValue::ValuePrimitive(ValuePrimitive::Integer(-i)))
         }
-        (UnaryOperator::Minus, VmValue::ValuePrimitive(ValuePrimitive::Float(f))) => {
-            Ok(VmValue::ValuePrimitive(ValuePrimitive::Float(-f)))
+        (UnaryOperator::Minus, VmParsedValue::ValuePrimitive(ValuePrimitive::Float(f))) => {
+            Ok(VmParsedValue::ValuePrimitive(ValuePrimitive::Float(-f)))
         }
-        (UnaryOperator::Not, VmValue::ValuePrimitive(ValuePrimitive::Bool(b))) => {
-            Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(!b)))
+        (UnaryOperator::Not, VmParsedValue::ValuePrimitive(ValuePrimitive::Bool(b))) => {
+            Ok(VmParsedValue::ValuePrimitive(ValuePrimitive::Bool(!b)))
         }
-        (_, VmValue::StructValue(_)) => Err(VmErrorType::InvalidOperation(
+        (_, VmParsedValue::StructValue(_)) => Err(VmErrorType::InvalidOperation(
             "Product operations not yet implemented".to_string(),
         )),
         _ => Err(VmErrorType::InvalidOperation(format!(
@@ -319,7 +317,7 @@ pub fn evaluate_unary_op(
     }
 }
 
-/// Evaluates a binary operation between two VmValues.
+/// Evaluates a binary operation between two VmParsedValues.
 ///
 /// This is a standalone function that handles arithmetic, comparison, and logical
 /// operations with type coercion between integers and floats when necessary.
@@ -335,27 +333,27 @@ pub fn evaluate_unary_op(
 ///
 /// A `VmResult` containing the computed result or an error.
 pub fn evaluate_binary_op(
-    left: &VmValue,
+    left: &VmParsedValue,
     operator: &BinaryOperator,
-    right: &VmValue,
-) -> Result<VmValue, VmErrorType> {
+    right: &VmParsedValue,
+) -> Result<VmParsedValue, VmErrorType> {
     match (left, right) {
         // Bool operations
         (
-            VmValue::ValuePrimitive(ValuePrimitive::Bool(l)),
-            VmValue::ValuePrimitive(ValuePrimitive::Bool(r)),
+            VmParsedValue::ValuePrimitive(ValuePrimitive::Bool(l)),
+            VmParsedValue::ValuePrimitive(ValuePrimitive::Bool(r)),
         ) => match operator {
-            BinaryOperator::Equal => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(l == r))),
-            BinaryOperator::NotEqual => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(l != r))),
-            BinaryOperator::And => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(*l && *r))),
-            BinaryOperator::Or => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(*l || *r))),
-            BinaryOperator::Less => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(!*l && *r))), // false < true
+            BinaryOperator::Equal => Ok(VmParsedValue::ValuePrimitive(ValuePrimitive::Bool(l == r))),
+            BinaryOperator::NotEqual => Ok(VmParsedValue::ValuePrimitive(ValuePrimitive::Bool(l != r))),
+            BinaryOperator::And => Ok(VmParsedValue::ValuePrimitive(ValuePrimitive::Bool(*l && *r))),
+            BinaryOperator::Or => Ok(VmParsedValue::ValuePrimitive(ValuePrimitive::Bool(*l || *r))),
+            BinaryOperator::Less => Ok(VmParsedValue::ValuePrimitive(ValuePrimitive::Bool(!*l && *r))), // false < true
             BinaryOperator::LessEqual => {
-                Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(!*l || *r)))
+                Ok(VmParsedValue::ValuePrimitive(ValuePrimitive::Bool(!*l || *r)))
             } // false <= true, true <= true
-            BinaryOperator::Greater => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(*l && !*r))), // true > false
+            BinaryOperator::Greater => Ok(VmParsedValue::ValuePrimitive(ValuePrimitive::Bool(*l && !*r))), // true > false
             BinaryOperator::GreaterEqual => {
-                Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(*l || !*r)))
+                Ok(VmParsedValue::ValuePrimitive(ValuePrimitive::Bool(*l || !*r)))
             } // true >= false, true >= true
             _ => Err(VmErrorType::InvalidOperation(format!(
                 "Cannot apply {operator:?} to Bool"
@@ -363,33 +361,33 @@ pub fn evaluate_binary_op(
         },
         // Integer operations
         (
-            VmValue::ValuePrimitive(ValuePrimitive::Integer(l)),
-            VmValue::ValuePrimitive(ValuePrimitive::Integer(r)),
+            VmParsedValue::ValuePrimitive(ValuePrimitive::Integer(l)),
+            VmParsedValue::ValuePrimitive(ValuePrimitive::Integer(r)),
         ) => match operator {
-            BinaryOperator::Plus => Ok(VmValue::ValuePrimitive(ValuePrimitive::Integer(l + r))),
-            BinaryOperator::Minus => Ok(VmValue::ValuePrimitive(ValuePrimitive::Integer(l - r))),
-            BinaryOperator::Multiply => Ok(VmValue::ValuePrimitive(ValuePrimitive::Integer(l * r))),
+            BinaryOperator::Plus => Ok(VmParsedValue::ValuePrimitive(ValuePrimitive::Integer(l + r))),
+            BinaryOperator::Minus => Ok(VmParsedValue::ValuePrimitive(ValuePrimitive::Integer(l - r))),
+            BinaryOperator::Multiply => Ok(VmParsedValue::ValuePrimitive(ValuePrimitive::Integer(l * r))),
             BinaryOperator::Divide => {
                 if *r == BigInt::from(0) {
                     Err(VmErrorType::DivisionByZero)
                 } else {
-                    Ok(VmValue::ValuePrimitive(ValuePrimitive::Integer(l / r)))
+                    Ok(VmParsedValue::ValuePrimitive(ValuePrimitive::Integer(l / r)))
                 }
             }
             BinaryOperator::Modulo => {
                 if *r == BigInt::from(0) {
                     Err(VmErrorType::DivisionByZero)
                 } else {
-                    Ok(VmValue::ValuePrimitive(ValuePrimitive::Integer(l % r)))
+                    Ok(VmParsedValue::ValuePrimitive(ValuePrimitive::Integer(l % r)))
                 }
             }
-            BinaryOperator::Equal => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(l == r))),
-            BinaryOperator::NotEqual => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(l != r))),
-            BinaryOperator::Less => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(l < r))),
-            BinaryOperator::LessEqual => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(l <= r))),
-            BinaryOperator::Greater => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(l > r))),
+            BinaryOperator::Equal => Ok(VmParsedValue::ValuePrimitive(ValuePrimitive::Bool(l == r))),
+            BinaryOperator::NotEqual => Ok(VmParsedValue::ValuePrimitive(ValuePrimitive::Bool(l != r))),
+            BinaryOperator::Less => Ok(VmParsedValue::ValuePrimitive(ValuePrimitive::Bool(l < r))),
+            BinaryOperator::LessEqual => Ok(VmParsedValue::ValuePrimitive(ValuePrimitive::Bool(l <= r))),
+            BinaryOperator::Greater => Ok(VmParsedValue::ValuePrimitive(ValuePrimitive::Bool(l > r))),
             BinaryOperator::GreaterEqual => {
-                Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(l >= r)))
+                Ok(VmParsedValue::ValuePrimitive(ValuePrimitive::Bool(l >= r)))
             }
             _ => Err(VmErrorType::InvalidOperation(format!(
                 "Cannot apply {operator:?} to integer"
@@ -397,33 +395,33 @@ pub fn evaluate_binary_op(
         },
         // Float operations
         (
-            VmValue::ValuePrimitive(ValuePrimitive::Float(l)),
-            VmValue::ValuePrimitive(ValuePrimitive::Float(r)),
+            VmParsedValue::ValuePrimitive(ValuePrimitive::Float(l)),
+            VmParsedValue::ValuePrimitive(ValuePrimitive::Float(r)),
         ) => match operator {
-            BinaryOperator::Plus => Ok(VmValue::ValuePrimitive(ValuePrimitive::Float(l + r))),
-            BinaryOperator::Minus => Ok(VmValue::ValuePrimitive(ValuePrimitive::Float(l - r))),
-            BinaryOperator::Multiply => Ok(VmValue::ValuePrimitive(ValuePrimitive::Float(l * r))),
+            BinaryOperator::Plus => Ok(VmParsedValue::ValuePrimitive(ValuePrimitive::Float(l + r))),
+            BinaryOperator::Minus => Ok(VmParsedValue::ValuePrimitive(ValuePrimitive::Float(l - r))),
+            BinaryOperator::Multiply => Ok(VmParsedValue::ValuePrimitive(ValuePrimitive::Float(l * r))),
             BinaryOperator::Divide => {
                 if *r == BigRational::from(BigInt::from(0)) {
                     Err(VmErrorType::DivisionByZero)
                 } else {
-                    Ok(VmValue::ValuePrimitive(ValuePrimitive::Float(l / r)))
+                    Ok(VmParsedValue::ValuePrimitive(ValuePrimitive::Float(l / r)))
                 }
             }
             BinaryOperator::Modulo => {
                 if *r == BigRational::from(BigInt::from(0)) {
                     Err(VmErrorType::DivisionByZero)
                 } else {
-                    Ok(VmValue::ValuePrimitive(ValuePrimitive::Float(l % r)))
+                    Ok(VmParsedValue::ValuePrimitive(ValuePrimitive::Float(l % r)))
                 }
             }
-            BinaryOperator::Equal => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(l == r))),
-            BinaryOperator::NotEqual => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(l != r))),
-            BinaryOperator::Less => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(l < r))),
-            BinaryOperator::LessEqual => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(l <= r))),
-            BinaryOperator::Greater => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(l > r))),
+            BinaryOperator::Equal => Ok(VmParsedValue::ValuePrimitive(ValuePrimitive::Bool(l == r))),
+            BinaryOperator::NotEqual => Ok(VmParsedValue::ValuePrimitive(ValuePrimitive::Bool(l != r))),
+            BinaryOperator::Less => Ok(VmParsedValue::ValuePrimitive(ValuePrimitive::Bool(l < r))),
+            BinaryOperator::LessEqual => Ok(VmParsedValue::ValuePrimitive(ValuePrimitive::Bool(l <= r))),
+            BinaryOperator::Greater => Ok(VmParsedValue::ValuePrimitive(ValuePrimitive::Bool(l > r))),
             BinaryOperator::GreaterEqual => {
-                Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(l >= r)))
+                Ok(VmParsedValue::ValuePrimitive(ValuePrimitive::Bool(l >= r)))
             }
             _ => Err(VmErrorType::InvalidOperation(format!(
                 "Cannot apply {operator:?} to float"
@@ -431,7 +429,7 @@ pub fn evaluate_binary_op(
         },
 
         // Handle Product types - all operations return error for now
-        (VmValue::StructValue(_), _) | (_, VmValue::StructValue(_)) => Err(
+        (VmParsedValue::StructValue(_), _) | (_, VmParsedValue::StructValue(_)) => Err(
             VmErrorType::InvalidOperation("Product operations not yet implemented".to_string()),
         ),
 

@@ -15,7 +15,9 @@
 use std::{collections::HashMap};
 
 pub use crate::token::token_type::Identifier;
+use crate::token::tokenizer::HasPosition;
 use crate::token::{Position};
+use crate::types::TypeId;
 
 pub mod literal;
 pub mod operators;
@@ -58,6 +60,40 @@ impl<'a, T> From<T> for AstNode< T> {
 
     
 
-pub type StatementNode=StatNode<Position>;
-pub type StatmentBlockNode=StatementBlock<Position>;
-pub type ExpressionNode=ExprNode<Position>;
+#[derive(Clone, Debug, PartialEq)]
+pub struct CodeMetaData {
+    pub pos: Position,
+    pub type_data: Option<TypeId>,
+}
+
+impl CodeMetaData {
+    pub fn new(pos: Position) -> Self {
+        Self { 
+            pos,
+            type_data: None,
+        }
+    }
+
+    pub fn update_type(&mut self, type_id: TypeId) -> Result<(), String> {
+        if let Some(existing_type) = &self.type_data {
+            if existing_type == &type_id {
+                Ok(())
+            } else {
+                Err(format!("Type mismatch: expected {:?}, got {:?}", existing_type, type_id))
+            }
+        } else {
+            self.type_data = Some(type_id);
+            Ok(())
+        }
+    }
+}
+
+impl HasPosition for CodeMetaData {
+    fn get_position(&self) -> &Position {
+        &self.pos
+    }
+}
+
+pub type StatementNode=StatNode<CodeMetaData>;
+pub type StatmentBlockNode=StatementBlock<CodeMetaData>;
+pub type ExpressionNode=ExprNode<CodeMetaData>;

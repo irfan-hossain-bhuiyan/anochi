@@ -135,4 +135,5 @@ pub enum Keyword {
     Let,
     Fn,
     Return,
+    Comptime,
 }

@@ -1,16 +1,16 @@
 use super::*;
-use crate::ast::{Expression, Literal, UnaryOperator};
+use crate::ast::{Expression, CodeMetaData, Literal, UnaryOperator};
 use crate::vm::tree_walk::vm_value::{self, ValuePrimitive, VmVal};
 use crate::vm::tree_walk::vm_error::{VmError, VmErrorType};
-use crate::vm::tree_walk::scope_stack::VariableEntry;
 use crate::prelude::IndexPtr;
 use crate::types::UnifiedTypeDefinition;
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet};
+use crate::vm::tree_walk::scope_stack::VariableData;
 
-pub(super) fn get_reference<Backend: VmBackend, T: Clone + HasPosition>(
+pub(super) fn get_reference<Backend: VmBackend>(
     vm: &mut Vm<Backend>,
-    expression_node: &ExpNode<T>,
-) -> Result<IndexPtr<VariableEntry>, VmError> {
+    expression_node: &ExprNode<CodeMetaData>,
+) -> Result<IndexPtr<VariableData>, VmError> {
     let node_data = expression_node.data().get_position().clone();
     let map_err = |e| VmError::new(e, node_data.clone());
     let expression = &expression_node.exp;
@@ -38,9 +38,100 @@ pub(super) fn get_reference<Backend: VmBackend, T: Clone + HasPosition>(
     }
 }
 
-pub(super) fn evaluate_expr<Backend: VmBackend, T: Clone + HasPosition>(
+pub(super) fn type_evaluation<Backend: VmBackend>(
     vm: &mut Vm<Backend>,
-    expression_node: &ExpNode<T>,
+    expression_node: &ExprNode<CodeMetaData>,
+) -> Result<TypeId, VmError> {
+    let node_data = expression_node.data().get_position().clone();
+    let map_err = |e| VmError::new(e, node_data.clone());
+    let expression = &expression_node.exp;
+    
+    match expression {
+        Expression::Literal(literal) => match literal {
+            Literal::Identifier(name) => {
+                let var_entry = vm.variables.get_variable_entry_from_name(name)
+                    .ok_or_else(|| map_err(VmErrorType::UndefinedIdentifier(name.clone())))?;
+                Ok(var_entry.type_id)
+            }
+            Literal::Bool(_) => {
+                let type_def = UnifiedTypeDefinition::builtin(crate::types::CompTimeBuiltinType::Bool);
+                Ok(vm.types.store_unified_type(type_def))
+            }
+            Literal::Integer(_) => {
+                let type_def = UnifiedTypeDefinition::builtin(crate::types::CompTimeBuiltinType::Int);
+                Ok(vm.types.store_unified_type(type_def))
+            }
+            Literal::Float(_) => {
+                let type_def = UnifiedTypeDefinition::builtin(crate::types::CompTimeBuiltinType::Float);
+                Ok(vm.types.store_unified_type(type_def))
+            }
+            Literal::String(_) => {
+                Err(map_err(VmErrorType::Unsupported(
+                    "String literals not yet supported".to_string(),
+                )))
+            }
+        },
+        Expression::Binary { left, operator, right } => {
+            let left_type = type_evaluation(vm, left)?;
+            let right_type = type_evaluation(vm, right)?;
+            
+            if left_type != right_type {
+                return Err(map_err(VmErrorType::TypeMismatch(
+                    "Binary operation requires matching types",
+                )));
+            }
+            
+            Ok(left_type)
+        }
+        Expression::Unary { operator, operand } => match operator {
+            UnaryOperator::Ref => {
+                let operand_type = type_evaluation(vm, operand)?;
+                let type_def = UnifiedTypeDefinition::builtin(crate::types::CompTimeBuiltinType::Usize);
+                Ok(vm.types.store_unified_type(type_def))
+            }
+            UnaryOperator::Deref => {
+                let _operand_type = type_evaluation(vm, operand)?;
+                Err(map_err(VmErrorType::Unsupported(
+                    "Dereference type checking not yet implemented".to_string(),
+                )))
+            }
+            _ => {
+                let operand_type = type_evaluation(vm, operand)?;
+                Ok(operand_type)
+            }
+        },
+        Expression::Grouping { expression } => type_evaluation(vm, expression),
+        Expression::Product { data } => {
+            let mut product_types = BTreeMap::new();
+            for (key, value_expr) in data.iter() {
+                let value_type = type_evaluation(vm, value_expr)?;
+                product_types.insert(key.clone(), UnifiedTypeDefinition::TypeId(value_type));
+            }
+            
+            let unified = UnifiedTypeDefinition::product(product_types);
+            let type_id = vm.types.store_unified_type(unified);
+            Ok(type_id)
+        }
+        Expression::Sum { data } => {
+            let mut type_set = BTreeSet::new();
+            for expr in data.iter() {
+                let type_id = type_evaluation(vm, expr)?;
+                type_set.insert(UnifiedTypeDefinition::TypeId(type_id));
+            }
+            
+            let unified = UnifiedTypeDefinition::sum(type_set);
+            let type_id = vm.types.store_unified_type(unified);
+            Ok(type_id)
+        }
+        Expression::MemberAccess { .. } => todo!(),
+        Expression::Function { .. } => todo!(),
+        Expression::FnCall { .. } => todo!(),
+    }
+}
+
+pub(super) fn evaluate_expr<Backend: VmBackend>(
+    vm: &mut Vm<Backend>,
+    expression_node: &ExprNode<CodeMetaData>,
 ) -> VmExprResult {
     let node_data = expression_node.data().get_position().clone();
     let map_err = |e| VmError::new(e, node_data.clone());

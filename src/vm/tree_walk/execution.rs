@@ -2,11 +2,11 @@ use super::*;
 use crate::ast::{Statement};
 use crate::vm::tree_walk::vm_value::{ValuePrimitive, VmVal, VmValue};
 use crate::vm::tree_walk::vm_error::{VmError, VmErrorType};
-use crate::vm::tree_walk::evaluation::get_reference;
+use crate::vm::tree_walk::evaluation::{evaluate_expr, get_reference};
 
-pub(super) fn execute_statement<Backend: VmBackend, T: Clone + HasPosition>(
+pub(super) fn execute_statement<Backend: VmBackend>(
     vm: &mut Vm<Backend>,
-    stat_node: &StmtNode<T>,
+    stat_node: &StatementNode,
 ) -> StatementResult {
     let node_data = stat_node.data().get_position().clone();
     let map_err = |e| VmError::new(e, node_data.clone());
@@ -17,9 +17,9 @@ pub(super) fn execute_statement<Backend: VmBackend, T: Clone + HasPosition>(
             r#type,
             value,
         } => {
-            let value = vm.evaluate_expr(value)?;
+            let value = evaluate_expr(vm,value)?;
             if let Some(type_expr) = r#type {
-                let type_value = vm.evaluate_expr(type_expr)?;
+                let type_value = evaluate_expr(vm,type_expr)?;
                 let expected_type_id = VmVal::get_type_id(type_value, &mut vm.types)
                     .ok_or(VmErrorType::InvalidTypeDefination).map_err(map_err)?;
                 if !value.of_type(expected_type_id, &mut vm.types) {
@@ -42,7 +42,7 @@ pub(super) fn execute_statement<Backend: VmBackend, T: Clone + HasPosition>(
         }
         Statement::MutableAssignment { target, value } => {
             let ptr = get_reference(vm, target)?;
-            let evaluated_value = vm.evaluate_expr(value)?;
+            let evaluated_value = evaluate_expr(vm,value)?;
             vm.variables.set_value_from_index(
                 ptr,
                 evaluated_value,
@@ -53,7 +53,7 @@ pub(super) fn execute_statement<Backend: VmBackend, T: Clone + HasPosition>(
         Statement::StatementBlock(stmtblock) => vm.run_block(&stmtblock),
         Statement::If { condition, on_true } => {
             let VmValue::ValuePrimitive(ValuePrimitive::Bool(x)) =
-                vm.evaluate_expr(condition)?
+                evaluate_expr(vm,condition)?
             else {
                 return Err(map_err(VmErrorType::TypeMismatch(
                     "The expression in if should be boolean",
@@ -71,7 +71,7 @@ pub(super) fn execute_statement<Backend: VmBackend, T: Clone + HasPosition>(
             on_false,
         } => {
             let VmValue::ValuePrimitive(ValuePrimitive::Bool(x)) =
-                vm.evaluate_expr(condition)?
+                evaluate_expr(vm,condition)?
             else {
                 return Err(map_err(VmErrorType::TypeMismatch(
                     "The expression on ifelse should be bool",
@@ -88,7 +88,7 @@ pub(super) fn execute_statement<Backend: VmBackend, T: Clone + HasPosition>(
                 vm.print_stack();
             } else {
                 for expr in expr_vec.iter() {
-                    let expr = vm.evaluate_expr(expr)?;
+                    let expr = evaluate_expr(vm,expr)?;
                     vm.backend.debug_print(&expr.to_string()).unwrap();
                 }
             }
@@ -113,11 +113,12 @@ pub(super) fn execute_statement<Backend: VmBackend, T: Clone + HasPosition>(
         }
         Statement::Return(x)=>{
             let return_value=match x {
-                Some(value)=>vm.evaluate_expr(value)?,
+                Some(value)=>evaluate_expr(vm,value)?,
                 None=>VmValue::create_unit(),
             };
             Ok(StatementEvent::Return(return_value))
         }
+        Statement::Comptime { statements } => todo!(),
     }
 }
 

@@ -4,8 +4,8 @@ mod parser_error;
 mod parser_tests;
 
 use crate::ast::{
-    BinaryOperator, Expression, ExpressionNode, Statement, StatementBlock, StatementNode,
-    UnaryOperator,
+    BinaryOperator, Expression, ExpressionNode, CodeMetaData, Statement,
+    StatementBlock, StatementBlockMetaData, StatementNode, StatMetaData, UnaryOperator,
 };
 use crate::token::token_type::Keyword::{self, And, Or};
 use crate::token::{Position, Token, TokenSlice, TokenType};
@@ -67,11 +67,11 @@ pub enum ExprLevel {
 impl<'a> Parser<'a> {
     fn make_expr_node(&self, expr: Exp, start: usize) -> ExpNode {
         let slice = self.tokens.slice(start, self.current).pos_range();
-        expr.to_node(slice)
+        expr.to_node(CodeMetaData::new(slice))
     }
     fn make_stat_node(&self, stmt: Stat, start: usize) -> StatNode {
         let slice = self.tokens.slice(start, self.current).pos_range();
-        stmt.to_node(slice)
+        stmt.to_node(StatMetaData::new(slice))
     }
     fn parse_expr_level(&mut self, level: ExprLevel) -> ReExpNode {
         let start = self.current;
@@ -343,6 +343,12 @@ TokenType::Keyword(Keyword::Return) => {
                 let stmt = Statement::Return(expr);
                 Ok(self.make_stat_node(stmt, start))
             }
+            TokenType::Keyword(Keyword::Comptime) => {
+                self.advance();
+                let statements = self.parse_statement_block()?;
+                let stmt = Statement::Comptime { statements };
+                Ok(self.make_stat_node(stmt, start))
+            }
             _ => Err(StatementParseErrorType::NoStatement.with_pos(self.peek_position())),
         }
     }
@@ -371,6 +377,7 @@ TokenType::Keyword(Keyword::Return) => {
     }
 
     fn parse_statement_block(&mut self) -> Result<StatBlock, ParserError> {
+        let start = self.current;
         assert!(
             matches!(self.peek_type(), Some(TokenType::LeftBrace)),
             "parse_statement_block should be called on left brace"
@@ -386,7 +393,8 @@ TokenType::Keyword(Keyword::Return) => {
                 Err(x) => return Err(x),
             }
         }
-        Ok(StatementBlock { statements })
+        let slice = self.tokens.slice(start, self.current).pos_range();
+        Ok(StatementBlock::new(statements, StatementBlockMetaData::new(slice)))
     }
 
     pub fn new(tokens: &'a TokenSlice) -> Self {
@@ -480,7 +488,8 @@ TokenType::Keyword(Keyword::Return) => {
             let stmt = self.parse_statement()?;
             vec.push(stmt);
         }
-        let stmt = Statement::Statements(StatementBlock::new(vec));
+        let slice = self.tokens.slice(start, self.current).pos_range();
+        let stmt = Statement::Statements(StatementBlock::new(vec, StatementBlockMetaData::new(slice)));
         let stmt = self.make_stat_node(stmt, start);
         Ok(stmt)
     }

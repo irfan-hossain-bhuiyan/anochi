@@ -24,9 +24,9 @@ fn parse_ast_from_source(source: &str) -> StatNode<()> {
 fn test_parse_empty_block() {
     let source = "{}";
     let statement = parse_ast_from_source(source);
-    let expected = Statement::StatementBlock(StatementBlock {
-        statements: Vec::new(),
-    })
+    let expected = Statement::StatementBlock(StatementBlock::new(
+        Vec::new(), ()
+    ))
     .to_node(());
     assert_eq!(statement, expected);
 }
@@ -36,16 +36,16 @@ fn test_parse_empty_block() {
 fn test_parse_block_with_single_assignment() {
     let source = "{ let x = 42; }";
     let statement = parse_ast_from_source(source);
-    let expected = Statement::StatementBlock(StatementBlock {
-        statements: vec![
+    let expected = Statement::StatementBlock(StatementBlock::new(
+        vec![
             Statement::assignment(
                 Identifier::new("x"),
                 None,
                 Expression::from_i64(42).to_node(()),
             )
             .to_node(()),
-        ],
-    })
+        ], ()
+    ))
     .to_node(());
     assert_eq!(statement, expected);
 }
@@ -55,8 +55,8 @@ fn test_parse_block_with_single_assignment() {
 fn test_parse_block_with_multiple_statements() {
     let source = "{ let x = 42; let y = true; }";
     let statement = parse_ast_from_source(source);
-    let expected = Statement::StatementBlock(StatementBlock {
-        statements: vec![
+    let expected = Statement::StatementBlock(StatementBlock::new(
+        vec![
             Statement::assignment(
                 Identifier::new("x"),
                 None,
@@ -69,8 +69,8 @@ fn test_parse_block_with_multiple_statements() {
                 Expression::from_bool(true).to_node(()),
             )
             .to_node(()),
-        ],
-    })
+        ], ()
+    ))
     .to_node(());
     assert_eq!(statement, expected);
 }
@@ -80,27 +80,27 @@ fn test_parse_block_with_multiple_statements() {
 fn test_parse_nested_blocks() {
     let source = "{ let x = 42; { let y = true; } }";
     let statement = parse_ast_from_source(source);
-    let expected = Statement::StatementBlock(StatementBlock {
-        statements: vec![
+    let expected = Statement::StatementBlock(StatementBlock::new(
+        vec![
             Statement::assignment(
                 Identifier::new("x"),
                 None,
                 Expression::from_i64(42).to_node(()),
             )
             .to_node(()),
-            Statement::StatementBlock(StatementBlock {
-                statements: vec![
+            Statement::StatementBlock(StatementBlock::new(
+                vec![
                     Statement::assignment(
                         Identifier::new("y"),
                         None,
                         Expression::from_bool(true).to_node(()),
                     )
                     .to_node(()),
-                ],
-            })
+                ], ()
+            ))
             .to_node(()),
-        ],
-    })
+        ], ()
+    ))
     .to_node(());
     assert_eq!(statement, expected);
 }
@@ -110,15 +110,15 @@ fn test_parse_nested_blocks() {
 fn test_parse_block_with_mutable_assignment() {
     let source = "{ x = 100; }";
     let statement = parse_ast_from_source(source);
-    let expected = Statement::StatementBlock(StatementBlock {
-        statements: vec![
+    let expected = Statement::StatementBlock(StatementBlock::new(
+        vec![
             Statement::mutable_assignment(
                 Expression::identifier(Identifier::new("x")).to_node(()),
                 Expression::from_i64(100).to_node(()),
             )
             .to_node(()),
-        ],
-    })
+        ], ()
+    ))
     .to_node(());
     assert_eq!(statement, expected);
 }
@@ -128,25 +128,25 @@ fn test_parse_block_with_mutable_assignment() {
 fn test_parse_block_with_if_statement() {
     let source = "{ if true { let x = 42; } }";
     let statement = parse_ast_from_source(source);
-    let expected = Statement::StatementBlock(StatementBlock {
-        statements: vec![
+    let expected = Statement::StatementBlock(StatementBlock::new(
+        vec![
             Statement::if_stmt(
                 Expression::from_bool(true).to_node(()),
-                Statement::StatementBlock(StatementBlock {
-                    statements: vec![
+                Statement::StatementBlock(StatementBlock::new(
+                    vec![
                         Statement::assignment(
                             Identifier::new("x"),
                             None,
                             Expression::from_i64(42).to_node(()),
                         )
                         .to_node(()),
-                    ],
-                })
+                    ], ()
+                ))
                 .to_node(()),
             )
             .to_node(()),
-        ],
-    })
+        ], ()
+    ))
     .to_node(());
     assert_eq!(statement, expected);
 }
@@ -156,8 +156,8 @@ fn test_parse_block_with_if_statement() {
 fn test_parse_block_with_mixed_statements() {
     let source = "{ let x = 42; x = 100; if x { let y = true; } }";
     let statement = parse_ast_from_source(source);
-    let expected = Statement::StatementBlock(StatementBlock {
-        statements: vec![
+    let expected = Statement::StatementBlock(StatementBlock::new(
+        vec![
             Statement::assignment(
                 Identifier::new("x"),
                 None,
@@ -171,35 +171,36 @@ fn test_parse_block_with_mixed_statements() {
             .to_node(()),
             Statement::if_stmt(
                 Expression::identifier(Identifier::new("x")).to_node(()),
-                Statement::StatementBlock(StatementBlock {
-                    statements: vec![
+                Statement::StatementBlock(StatementBlock::new(
+                    vec![
                         Statement::assignment(
                             Identifier::new("y"),
                             None,
                             Expression::from_bool(true).to_node(()),
                         )
                         .to_node(()),
-                    ],
-                })
+                    ], ()
+                ))
                 .to_node(()),
             )
             .to_node(()),
-        ],
-    })
+        ], ()
+    ))
     .to_node(());
-    assert_eq!(statement, expected);
-}
 #[test]
 fn parse_loop() {
     let source = "loop {break; }";
     let statement = parse_ast_from_source(source);
 
-    let expected =Statement::Loop {
-                statements: StatementBlock {
-                    statements: vec![Statement::Break.to_node(())],
-                },
-            }
+    let expected = Statement::Loop {
+        statements: StatementBlock::new(
+            vec![Statement::Break.to_node(())], ()
+        ),
+    }
     .to_node(());
+
+    assert_eq!(statement, expected);
+}
 
     assert_eq!(statement, expected);
 }
@@ -209,8 +210,8 @@ fn test_parse_reference_and_dereference() {
     let source = "{ let r = &x; let v = *r; *r = 20; }";
     let statement = parse_ast_from_source(source);
     
-    let expected = Statement::StatementBlock(StatementBlock {
-        statements: vec![
+    let expected = Statement::StatementBlock(StatementBlock::new(
+        vec![
             Statement::assignment(
                 Identifier::new("r"),
                 None,
@@ -234,8 +235,8 @@ fn test_parse_reference_and_dereference() {
                 ).to_node(()),
                 Expression::from_i64(20).to_node(())
             ).to_node(())
-        ]
-    }).to_node(());
+        ], ()
+    )).to_node(());
     
     assert_eq!(statement, expected);
 }

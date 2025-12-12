@@ -28,9 +28,9 @@ mod vm_value;
 pub use vm_value::{StructValue, ValuePrimitive, VmVal, VmParsedValue};
 
 use crate::{
-    ast::{ExprNode, Identifier, StatNode, StatementBlock},
+    ast::{ExprNode, ExpressionNode, Identifier, StatMetaData, StatNode, StatementBlock, StatementNode, StatmentBlockNode},
     prelude::IndexCons,
-    token::{Position, tokenizer::HasPosition},
+    token::tokenizer::HasPosition,
     types::{TypeContainer, TypeId, UnifiedTypeDefinition},
     vm::{
         backend::{IoBackend, VmBackend},
@@ -41,9 +41,9 @@ mod vm_error;
 pub use vm_error::{VmError, VmErrorType};
 
 /// Result type for VM evaluation operations.
-pub type VmExprResult = Result<VmValue, VmError>;
-pub type VmExprResultType = Result<VmValue, VmErrorType>;
-pub type VmResultMut<'a> = Result<&'a mut VmValue, VmError>;
+pub type VmExprResult = Result<VmParsedValue, VmError>;
+pub type VmExprResultType = Result<VmParsedValue, VmErrorType>;
+pub type VmResultMut<'a> = Result<&'a mut VmParsedValue, VmError>;
 /// Result type for statement execution
 pub type StatementResult = Result<StatementEvent, VmError>;
 
@@ -52,7 +52,7 @@ pub type StatementResult = Result<StatementEvent, VmError>;
 pub enum StatementEvent {
     Break,
     Continue,
-    Return(VmValue),
+    Return(VmParsedValue),
     None,
 }
 
@@ -103,7 +103,7 @@ impl<Backend: VmBackend> Vm<Backend> {
             let type_id = self.types.store_unified_type(type_def);
             self.variables.insert_variable(
                 Identifier::new(name.to_string()),
-                VmValue::TypeId(type_id),
+                VmParsedValue::TypeId(type_id),
                 &mut self.types,
             );
         }
@@ -116,7 +116,7 @@ impl<Backend: VmBackend> Vm<Backend> {
     }
 
 
-    pub(super) fn to_type(&mut self, value: VmValue) -> Result<TypeId, VmErrorType> {
+    pub(super) fn to_type(&mut self, value: VmParsedValue) -> Result<TypeId, VmErrorType> {
         value
             .get_type_id(&mut self.types)
             .ok_or(VmErrorType::InvalidTypeDefination)
@@ -124,7 +124,7 @@ impl<Backend: VmBackend> Vm<Backend> {
     pub(super) fn insert_variable(
         &mut self,
         target: Identifier,
-        value: VmValue,
+        value: VmParsedValue,
     ) -> Result<(), VmErrorType> {
         if self.variables.has_variable_current(&target) {
             return Err(VmErrorType::SameVariableName);
@@ -133,11 +133,14 @@ impl<Backend: VmBackend> Vm<Backend> {
             .insert_variable(target, value, &mut self.types);
         Ok(())
     }
-    pub fn execute_statement<T: Clone + HasPosition>(
+    pub fn execute_statement(
         &mut self,
-        stat_node: &StmtNode<T>,
+        stat_node: &StatementNode,
     ) -> StatementResult {
         execution::execute_statement(self, stat_node)
+    }
+    pub fn evaluate_expr(&mut self,expr_node:&ExpressionNode)->VmExprResult{
+        evaluation::evaluate_expr(self, expr_node)
     }
 
     pub(crate) fn print_stack(&self) {
@@ -147,7 +150,7 @@ impl<Backend: VmBackend> Vm<Backend> {
     pub fn insert_variable_check(
         &mut self,
         identifier: Identifier,
-        value: VmValue,
+        value: VmParsedValue,
         expected_type_id: TypeId,
         type_container: &mut crate::types::TypeContainer,
     ) -> Result<(), VmErrorType> {
@@ -155,9 +158,9 @@ impl<Backend: VmBackend> Vm<Backend> {
             .insert_variable_check(identifier, value, expected_type_id, type_container)
     }
 
-    pub(super) fn run_block<T: Clone + HasPosition>(
+    pub(super) fn run_block(
         &mut self,
-        stmtblock: &StatementBlock<T>,
+        stmtblock: &StatmentBlockNode,
     ) -> Result<StatementEvent, VmError> {
         self.create_scope();
         let mut inner_code = || {
@@ -187,14 +190,14 @@ impl<Backend: VmBackend> Vm<Backend> {
         self.funcs.push(func)
     }
     /// It type check the function that is currently passed,and execute it.
-    fn execute_function(&mut self, func_id: FuncId, inputs: VmValue) -> VmExprResult {
+    fn execute_function(&mut self, func_id: FuncId, inputs: VmParsedValue) -> VmExprResult {
         let func = self.get_func(func_id);
         let param_type = func.get_param();
         if !inputs.of_type(param_type, &mut self.types) {
             panic!("The validation should checked before");
         }
         let inputs = inputs.into_struct_value().unwrap();
-        let body = self.get_func(func_id).get_statement() as  *const StatNode<Position>;
+        let body = self.get_func(func_id).get_statement() as  *const StatNode<StatMetaData>;
         self.create_scope();
         let result = (|| {
             self.extract_struct(inputs).unwrap();
@@ -204,7 +207,7 @@ impl<Backend: VmBackend> Vm<Backend> {
                 body.as_ref().unwrap()   
             })? {
                 StatementEvent::Return(value) => Ok(value),
-                _ => Ok(VmValue::create_unit()),
+                _ => Ok(VmParsedValue::create_unit()),
             }
         })();
         self.drop_scope();
@@ -217,7 +220,7 @@ impl<Backend: VmBackend> Vm<Backend> {
         self.funcs.get_mut_checked(func_id).unwrap()
     }
 
-    fn type_match(&mut self, r#type: TypeId, object: VmValue) -> Result<(), VmErrorType> {
+    fn type_match(&mut self, r#type: TypeId, object: VmParsedValue) -> Result<(), VmErrorType> {
         if self.to_type(object)? == r#type {
             return Ok(());
         }

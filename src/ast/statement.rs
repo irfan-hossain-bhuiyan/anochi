@@ -14,12 +14,19 @@ pub struct StatNode<T>{
 
 #[derive(Debug, Clone, PartialEq, Deref, DerefMut)]
 pub struct StatementBlock<T> {
+    data: T,
+    #[deref]
+    #[deref_mut]
     pub statements: Vec<StatNode<T>>,
 }
 
 impl<T> StatementBlock<T> {
-    pub fn new(statements: Vec<StatNode<T>>) -> Self {
-        Self { statements }
+    pub fn new(statements: Vec<StatNode<T>>, data: T) -> Self {
+        Self { data, statements }
+    }
+
+    pub fn data(&self) -> &T {
+        &self.data
     }
 }
 
@@ -58,6 +65,9 @@ pub enum Statement<T> {
     Break,
     Continue,
     Return(Option<ExprNode<T>>),
+    Comptime {
+        statements: StatementBlock<T>,
+    },
 }
 
 // Mappable implementations for Statement and related types
@@ -82,6 +92,7 @@ impl<T,U> Mappable<T,U> for StatementBlock<T> {
         F: FnMut(T) -> U,
     {
         Self::Mapped {
+            data: f(self.data),
             statements: self.statements.into_iter().map(|x| x.inner_map(f)).collect(),
         }
     }
@@ -122,7 +133,10 @@ impl<T,U> Mappable<T,U> for Statement<T> {
             },
             Self::Break => Statement::Break,
             Self::Continue => Statement::Continue,
-            Self::Return(x) =>Statement::Return(x.map(|x|x.inner_map(f)))
+            Self::Return(x) =>Statement::Return(x.map(|x|x.inner_map(f))),
+            Self::Comptime { statements } => Statement::Comptime {
+                statements: statements.inner_map(f),
+            },
         }
     }
 }
@@ -178,8 +192,8 @@ impl<T> Statement<T> {
         }
     }
 
-    pub fn statement_block(statements: Vec<StatNode<T>>) -> Self {
-        Statement::StatementBlock(StatementBlock { statements })
+    pub fn statement_block(statements: Vec<StatNode<T>>, data: T) -> Self {
+        Statement::StatementBlock(StatementBlock::new(statements, data))
     }
 
     pub fn if_stmt(
