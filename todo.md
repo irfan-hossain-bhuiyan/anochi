@@ -30,6 +30,13 @@
 - [x] Change the current index from usize to IndexPtr<>,because the type is making problem
 - [x] HashMap will map to it.ScopeStack which is a VecDeque<HashMap<>>,Now the VecDeque will also save the last scope index.
 ## Doing:
+- [ ] make stackvalues a different type,it will have basic primitive for for ValuePrimitive,
+and all the TypeId and FuncId will be mapped to usize for now,make the mapping both ways.
+- [ ] make the 
+- [ ] Add usize type in the stack
+- [ ] change the struct representation to a vec one,struct will return a vec  
+- [ ] For TypeMetaData,there will be another data,it is a enum unique for each type,For struct it will be Hashmap<Identifier,usize>
+this is for relative to where in the struct this parameter exist.and for sum type it will the tag index,for each type
 - [ ] Implement the staack push of struct,
     - First make a valueprimitive enum for stack (so stack can only push primitive type),
     - A function in scope stack that can push VmValue,make the struct StructValue generic

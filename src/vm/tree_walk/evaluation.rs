@@ -5,7 +5,7 @@ use crate::vm::tree_walk::vm_error::{VmError, VmErrorType};
 use crate::vm::tree_walk::scope_stack::VariableEntry;
 use crate::prelude::IndexPtr;
 use crate::types::UnifiedTypeDefinition;
-use std::collections::{HashMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 pub(super) fn get_reference<Backend: VmBackend, T: Clone + HasPosition>(
     vm: &mut Vm<Backend>,
@@ -89,7 +89,7 @@ pub(super) fn evaluate_expr<Backend: VmBackend, T: Clone + HasPosition>(
         },
         Expression::Grouping { expression } => vm.evaluate_expr(expression),
         Expression::Product { data } => {
-            let mut product = HashMap::new();
+            let mut product = BTreeMap::new();
             for (key, value) in data.iter() {
                 product.insert(key.clone(), vm.evaluate_expr(value)?);
             }

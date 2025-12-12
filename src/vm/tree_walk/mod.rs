@@ -1,7 +1,31 @@
 //! Virtual Machine for the Anochi programming language.
 
+use num_bigint::BigInt;
+use num_rational::BigRational;
+
+/// Untyped VM unit - the fundamental storage unit on the VM stack
+/// All type information is tracked separately via TypeContainer and VariableData
+#[derive(Debug, Clone, PartialEq)]
+pub enum VmUnitType {
+    Bool(bool),
+    Integer(BigInt),
+    Float(BigRational),
+    Usize(usize),
+}
+
+impl std::fmt::Display for VmUnitType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            VmUnitType::Bool(b) => write!(f, "{}", b),
+            VmUnitType::Integer(i) => write!(f, "{}", i),
+            VmUnitType::Float(fl) => write!(f, "{}", fl),
+            VmUnitType::Usize(u) => write!(f, "@{}", u),
+        }
+    }
+}
+
 mod vm_value;
-pub use vm_value::{StructValue, ValuePrimitive, VmVal, VmValue};
+pub use vm_value::{StructValue, ValuePrimitive, VmVal, VmParsedValue};
 
 use crate::{
     ast::{ExprNode, Identifier, StatNode, StatementBlock},
@@ -65,13 +89,13 @@ impl<Backend: VmBackend> Vm<Backend> {
         self.types.get_type_def(id)
     }
     fn load_builtin_types(&mut self) {
-        use crate::types::BuiltinKind;
+        use crate::types::CompTimeBuiltinType;
 
         let builtin_types = [
-            ("i64", BuiltinKind::I64),
-            ("f64", BuiltinKind::F64),
-            ("bool", BuiltinKind::Bool),
-            ("usize", BuiltinKind::Usize),
+            ("i64", CompTimeBuiltinType::Int),
+            ("f64", CompTimeBuiltinType::Float),
+            ("bool", CompTimeBuiltinType::Bool),
+            ("usize", CompTimeBuiltinType::Usize),
         ];
 
         for (name, builtin_kind) in builtin_types {
@@ -90,12 +114,7 @@ impl<Backend: VmBackend> Vm<Backend> {
         }
         Ok(())
     }
-    pub fn evaluate_expr<T: Clone + HasPosition>(
-        &mut self,
-        expression_node: &ExpNode<T>,
-    ) -> VmExprResult {
-        evaluation::evaluate_expr(self, expression_node)
-    }
+
 
     pub(super) fn to_type(&mut self, value: VmValue) -> Result<TypeId, VmErrorType> {
         value
@@ -169,7 +188,7 @@ impl<Backend: VmBackend> Vm<Backend> {
     }
     /// It type check the function that is currently passed,and execute it.
     fn execute_function(&mut self, func_id: FuncId, inputs: VmValue) -> VmExprResult {
-        let func = self.get_func(func_id.clone());
+        let func = self.get_func(func_id);
         let param_type = func.get_param();
         if !inputs.of_type(param_type, &mut self.types) {
             panic!("The validation should checked before");

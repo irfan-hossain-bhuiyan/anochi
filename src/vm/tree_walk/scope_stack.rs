@@ -3,11 +3,11 @@ use std::fmt::{Debug, Display};
 
 use thiserror::Error;
 
-use crate::prelude::{Allocator, IndexPtr, SizedArray};
+use crate::prelude::{ SizedArray};
 use crate::{
     ast::Identifier,
     types::{TypeContainer, TypeId},
-    vm::tree_walk::{VmErrorType, VmVal, VmValue},
+    vm::tree_walk::{VmErrorType, VmVal, VmValue, VmUnitType},
 };
 type ExprResult=Result<VmValue,VmErrorType>;
 #[derive(Debug,Clone,Error)]
@@ -33,45 +33,23 @@ impl Display for VariableState {
     }
 }
 #[derive(Debug, Clone)]
-pub struct VariableEntry {
-    pub value: VmValue,
+pub struct VariableData {
     pub type_id: TypeId,
     var_state: VariableState,
+    stack_position: usize,
 }
 
-impl VariableEntry {
-    fn new(
-        value: VmValue,
-        var_state: VariableState,
-        type_container: &mut TypeContainer,
-    ) -> Self {
-        let type_id=value.get_type_id_of_value(type_container);
-        unsafe{Self::new_unchecked(value, type_id, var_state)}
-    }
-    fn new_checked(
-        value: VmValue,
-        type_id: TypeId,
-        var_state: VariableState,
-        type_container: &mut TypeContainer,
-    ) -> Option<Self> {
-        if !value.of_type(type_id, type_container) {
-            return None;
-        }
-        Some(Self {
-            value,
-            type_id,
-            var_state,
-        })
-    }
-    unsafe fn new_unchecked(value: VmValue, type_id: TypeId, var_state: VariableState) -> Self {
+impl VariableData {
+    fn new(type_id: TypeId, var_state: VariableState, stack_position: usize) -> Self {
         Self {
-            value,
             type_id,
             var_state,
+            stack_position,
         }
     }
 }
-type ScopeValues=HashMap<Identifier,IndexPtr<VariableEntry>>;
+
+type ScopeValues = HashMap<Identifier, VariableData>;
 
 #[derive(Debug)]
 struct ScopeState {
@@ -91,7 +69,7 @@ impl ScopeState {
 #[derive(Debug)]
 pub struct ScopeStack {
     scopes: VecDeque<ScopeState>,
-    stack:SizedArray<VariableEntry>
+    stack: SizedArray<VmUnitType>,
 }
 
 impl ScopeStack {
@@ -123,14 +101,30 @@ impl ScopeStack {
         value: VmValue,
         type_container: &mut crate::types::TypeContainer,
     ) {
-        let entry = VariableEntry::new(value, VariableState::Immutable, type_container);
-        self.insert_var_entry(identifier, entry);
+        let type_id = value.get_type_id_of_value(type_container);
+        self.insert_variable_with_type(identifier, value, type_id, VariableState::Immutable, type_container);
     }
 
-    fn insert_var_entry(&mut self, identifier: Identifier, entry: VariableEntry) {
-        let index = self.stack.push_back(entry);
+    fn insert_variable_with_type(
+        &mut self,
+        identifier: Identifier,
+        value: VmValue,
+        type_id: TypeId,
+        var_state: VariableState,
+        type_container: &TypeContainer,
+    ) {
+        let stack_position = self.stack.len();
+        self.flatten_and_push(value, type_container);
+        let var_data = VariableData::new(type_id, var_state, stack_position);
         if let Some(current_scope) = self.scopes.back_mut() {
-            current_scope.variables.insert(identifier, index);
+            current_scope.variables.insert(identifier, var_data);
+        }
+    }
+
+    fn flatten_and_push(&mut self, value: VmValue, type_container: &TypeContainer) {
+        let units = value.to_vm_units();
+        for unit in units {
+            self.stack.push_back(unit);
         }
     }
 
@@ -142,29 +136,40 @@ impl ScopeStack {
         expected_type_id: TypeId,
         type_container: &mut crate::types::TypeContainer,
     ) -> Result<(), VmErrorType> {
-        let Some(entry) = VariableEntry::new_checked(value, expected_type_id, VariableState::Immutable, type_container) else {
+        if !value.of_type(expected_type_id, type_container) {
             return Err(VmErrorType::TypeMismatch("Value type does not match expected type"));
-        };
-        self.insert_var_entry(identifier, entry);
-        //current_scope.insert(identifier,);
+        }
+        self.insert_variable_with_type(identifier, value, expected_type_id, VariableState::Immutable, type_container);
         Ok(())
     }
 
     pub fn set_value_from_index(
         &mut self,
-        ptr: IndexPtr<VariableEntry>,
+        identifier: &Identifier,
         value: VmValue,
         type_container: &mut TypeContainer,
     ) -> Result<(), VmErrorType> {
-        let expected_type_id = self.get_variable_entry_from_index(ptr).type_id;
+        let var_data = self.get_variable_data(identifier)
+            .ok_or_else(|| VmErrorType::UndefinedIdentifier(identifier.clone()))?;
+        let expected_type_id = var_data.type_id;
         let value_type_id = value.get_type_id_of_value(type_container);
         if value_type_id != expected_type_id {
             return Err(VmErrorType::TypeMismatch(
                 "Value type does not match variable type",
             ));
         }
-        self.get_mut_from_index(ptr).value = value;
+        let stack_position = var_data.stack_position;
+        self.overwrite_at_position(stack_position, value, type_container);
         Ok(())
+    }
+
+    fn overwrite_at_position(&mut self, position: usize, value: VmValue, type_container: &TypeContainer) {
+        let units = value.to_vm_units();
+        for (i, unit) in units.into_iter().enumerate() {
+            if let Some(slot) = self.stack.get_mut(position + i) {
+                *slot = unit;
+            }
+        }
     }
 
     pub fn set_value_from_name(
@@ -173,46 +178,61 @@ impl ScopeStack {
         value: VmValue,
         type_container: &mut TypeContainer,
     ) -> Result<(), VmErrorType> {
-        let Some(ptr) = self.get_index_from_name(identifier) else {
-            return Err(VmErrorType::UndefinedIdentifier(identifier.clone()));
-        };
-        self.set_value_from_index(ptr, value, type_container)
+        self.set_value_from_index(identifier, value, type_container)
     }
 
-    pub fn get_variable_entry_from_index(&self, ptr: IndexPtr<VariableEntry>) -> &VariableEntry {
-        self.stack.get_from_ptr(ptr)
-    }
-
-    pub fn get_mut_from_index(&mut self, ptr: IndexPtr<VariableEntry>) -> &mut VariableEntry {
-        self.stack.get_mut_from_ptr(ptr)
-    }
-
-    pub fn get_value_from_index(&self, ptr: IndexPtr<VariableEntry>) -> &VmValue {
-        &self.get_variable_entry_from_index(ptr).value
-    }
-
-    pub fn get_index_from_name(&self, identifier: &Identifier) -> Option<IndexPtr<VariableEntry>> {
+    fn get_variable_data(&self, identifier: &Identifier) -> Option<&VariableData> {
         for scope in self.scopes.iter().rev() {
-            if let Some(ptr) = scope.variables.get(identifier) {
-                return Some(*ptr);
+            if let Some(var_data) = scope.variables.get(identifier) {
+                return Some(var_data);
             }
         }
         None
     }
 
-    pub fn get_variable_entry_from_name(&self, identifier: &Identifier) -> Option<&VariableEntry> {
-        let ptr = self.get_index_from_name(identifier)?;
-        Some(self.get_variable_entry_from_index(ptr))
+    fn reconstruct_value(&self, identifier: &Identifier, type_container: &TypeContainer) -> Option<VmValue> {
+        let var_data = self.get_variable_data(identifier)?;
+        let type_id = var_data.type_id;
+        let position = var_data.stack_position;
+        self.reconstruct_from_type(position, type_id, type_container)
     }
 
-    pub fn get_value_from_name(&self, identifier: &Identifier) -> Option<&VmValue> {
-        let ptr = self.get_index_from_name(identifier)?;
-        Some(self.get_value_from_index(ptr))
+    fn reconstruct_from_type(&self, position: usize, type_id: TypeId, type_container: &TypeContainer) -> Option<VmValue> {
+        let optimized_type = type_container.get_type(&type_id)?;
+        match optimized_type.inner() {
+            crate::types::CompTimeTypeGeneric::Builtin(_) => {
+                let prim = self.stack.get(position)?.clone();
+                Some(VmValue::ValuePrimitive(prim))
+            }
+            crate::types::CompTimeTypeGeneric::Reference(_) => {
+                let prim = self.stack.get(position)?.clone();
+                Some(VmValue::ValuePrimitive(prim))
+            }
+            crate::types::CompTimeTypeGeneric::Product(fields) => {
+                let mut current_pos = position;
+                let mut struct_fields = std::collections::BTreeMap::new();
+                for (field_name, field_type_id) in fields {
+                    let field_value = self.reconstruct_from_type(current_pos, *field_type_id, type_container)?;
+                    let field_size = type_container.get_metadata(field_type_id)?.size;
+                    struct_fields.insert(field_name.clone(), field_value);
+                    current_pos += field_size;
+                }
+                Some(VmValue::StructValue(crate::vm::tree_walk::StructValue::new(struct_fields)))
+            }
+            crate::types::CompTimeTypeGeneric::Sum(_variants) => {
+                let prim = self.stack.get(position)?.clone();
+                Some(VmValue::ValuePrimitive(prim))
+            }
+        }
     }
-    pub fn get_value_or_err(&self, identifier: &Identifier) -> ExprResult {
-        let ptr = self.get_index_from_name(identifier)
-            .ok_or_else(|| VmErrorType::UndefinedIdentifier(identifier.clone()))?;
-        Ok(self.get_value_from_index(ptr).clone())
+
+    pub fn get_value_from_name(&self, identifier: &Identifier, type_container: &TypeContainer) -> Option<VmValue> {
+        self.reconstruct_value(identifier, type_container)
+    }
+
+    pub fn get_value_or_err(&self, identifier: &Identifier, type_container: &TypeContainer) -> ExprResult {
+        self.reconstruct_value(identifier, type_container)
+            .ok_or_else(|| VmErrorType::UndefinedIdentifier(identifier.clone()))
     }
 
     pub fn has_variable(&self, identifier: &Identifier) -> bool {
@@ -238,8 +258,8 @@ impl Display for ScopeStack {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "ScopeStack {{")?;
         writeln!(f, "  Stack (bottom to top):")?;
-        for (idx, entry) in self.stack.iter().enumerate() {
-            writeln!(f, "    [{}] {} = {} (type: {:?})", idx, entry.var_state, entry.value, entry.type_id)?;
+        for (idx, prim) in self.stack.iter().enumerate() {
+            writeln!(f, "    [{}] {}", idx, prim)?;
         }
         writeln!(f, "  Scopes:")?;
         for (scope_idx, scope) in self.scopes.iter().enumerate() {

@@ -1,19 +1,21 @@
 use crate::ast::{BinaryOperator, Identifier, Literal, UnaryOperator};
-use crate::types::{
-    BuiltinKind, TypeContainer, TypeDefinition, TypeGeneric, TypeId, UnifiedTypeDefinition,
-};
-use crate::vm::tree_walk::vm_error::VmErrorType;
-use crate::vm::tree_walk::scope_stack::VariableEntry;
 use crate::prelude::IndexPtr;
+use crate::types::{
+    CompTimeBuiltinType, CompTimeTypeGeneric, TypeContainer, TypeDefinition, TypeId,
+    UnifiedTypeDefinition,
+};
+use crate::vm::tree_walk::scope_stack::VariableEntry;
+use crate::vm::tree_walk::vm_error::VmErrorType;
 use enum_as_inner::EnumAsInner;
 use enum_dispatch::enum_dispatch;
 use num_bigint::BigInt;
 use num_rational::BigRational;
+use std::collections::BTreeMap;
 use std::ops::Deref;
 use std::{collections::HashMap, fmt::Display};
 
 mod function;
-pub use function::{VmFunc,FuncId};
+pub use function::{FuncId, VmFunc};
 #[enum_dispatch]
 pub trait VmVal {
     fn into_unified_type_definition(self) -> Option<UnifiedTypeDefinition>;
@@ -43,8 +45,9 @@ pub trait VmVal {
         let id = self.get_type_id_of_value(type_container);
         id == expected_type_id
     }
-}
 
+    fn to_vm_units(self) -> Vec<crate::vm::tree_walk::VmUnitType>;
+}
 
 /// Primitive values that can be stored in the VM
 #[derive(Debug, Clone, PartialEq)]
@@ -52,7 +55,7 @@ pub enum ValuePrimitive {
     Bool(bool),
     Integer(BigInt),
     Float(BigRational),
-    Reference(IndexPtr<VariableEntry>, TypeId),
+    Reference(usize, TypeId),
 }
 
 impl VmVal for ValuePrimitive {
@@ -62,12 +65,21 @@ impl VmVal for ValuePrimitive {
 
     fn get_type_of_value(&self) -> UnifiedTypeDefinition {
         match self {
-            ValuePrimitive::Bool(_) => UnifiedTypeDefinition::builtin(BuiltinKind::Bool),
-            ValuePrimitive::Integer(_) => UnifiedTypeDefinition::builtin(BuiltinKind::I64),
-            ValuePrimitive::Float(_) => UnifiedTypeDefinition::builtin(BuiltinKind::F64),
+            ValuePrimitive::Bool(_) => UnifiedTypeDefinition::builtin(CompTimeBuiltinType::Bool),
+            ValuePrimitive::Integer(_) => UnifiedTypeDefinition::builtin(CompTimeBuiltinType::Int),
+            ValuePrimitive::Float(_) => UnifiedTypeDefinition::builtin(CompTimeBuiltinType::Float),
             ValuePrimitive::Reference(_, type_id) => {
                 UnifiedTypeDefinition::reference(UnifiedTypeDefinition::type_id(type_id.clone()))
-            },
+            }
+        }
+    }
+
+    fn to_vm_units(self) -> Vec<crate::vm::tree_walk::VmUnitType> {
+        match self {
+            ValuePrimitive::Bool(b) => vec![crate::vm::tree_walk::VmUnitType::Bool(b)],
+            ValuePrimitive::Integer(i) => vec![crate::vm::tree_walk::VmUnitType::Integer(i)],
+            ValuePrimitive::Float(f) => vec![crate::vm::tree_walk::VmUnitType::Float(f)],
+            ValuePrimitive::Reference(stack_pos, _) => vec![crate::vm::tree_walk::VmUnitType::Usize(stack_pos)],
         }
     }
 }
@@ -124,27 +136,30 @@ impl From<Literal> for ValuePrimitive {
 }
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct StructValue {
-    value: HashMap<Identifier, VmValue>,
+    value: BTreeMap<Identifier, VmParsedValue>,
 }
+
 impl StructValue {
-    pub(crate) fn new(product: HashMap<Identifier, VmValue>) -> Self {
+    pub fn new(product: BTreeMap<Identifier, VmParsedValue>) -> Self {
         Self { value: product }
     }
 }
+
 impl IntoIterator for StructValue {
-    type Item = (Identifier, VmValue);
-    type IntoIter = std::collections::hash_map::IntoIter<Identifier, VmValue>;
+    type Item = (Identifier, VmParsedValue);
+    type IntoIter = std::collections::btree_map::IntoIter<Identifier, VmParsedValue>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.value.into_iter()
     }
 }
+
 impl Deref for StructValue {
     fn deref(&self) -> &Self::Target {
         &self.value
     }
 
-    type Target = HashMap<Identifier, VmValue>;
+    type Target = BTreeMap<Identifier, VmParsedValue>;
 }
 
 impl VmVal for StructValue {
@@ -154,15 +169,15 @@ impl VmVal for StructValue {
             let field_type = value.into_unified_type_definition()?;
             type_fields.insert(identifier, field_type);
         }
-        Some(UnifiedTypeDefinition::TypeDef(TypeGeneric::Product {
-            fields: type_fields,
-        }))
+        Some(UnifiedTypeDefinition::TypeDef(
+            CompTimeTypeGeneric::Product(type_fields),
+        ))
     }
 
     fn get_type_of_value(&self) -> UnifiedTypeDefinition {
         for field_value in self.values() {
-            if let VmValue::TypeId(_) = field_value {
-                return UnifiedTypeDefinition::builtin(BuiltinKind::Type);
+            if let VmParsedValue::TypeId(_) = field_value {
+                return UnifiedTypeDefinition::builtin(CompTimeBuiltinType::Type);
             }
         }
         let mut type_fields = std::collections::BTreeMap::new();
@@ -170,9 +185,15 @@ impl VmVal for StructValue {
             let field_type = field_value.get_type_of_value();
             type_fields.insert(field_name.clone(), field_type);
         }
-        UnifiedTypeDefinition::TypeDef(TypeGeneric::Product {
-            fields: type_fields,
-        })
+        UnifiedTypeDefinition::TypeDef(CompTimeTypeGeneric::Product(type_fields))
+    }
+
+    fn to_vm_units(self) -> Vec<crate::vm::tree_walk::VmUnitType> {
+        let mut units = Vec::new();
+        for (_field_name, field_value) in self {
+            units.extend(field_value.to_vm_units());
+        }
+        units
     }
 }
 
@@ -188,7 +209,11 @@ impl VmVal for TypeId {
     }
 
     fn get_type_of_value(&self) -> UnifiedTypeDefinition {
-        UnifiedTypeDefinition::builtin(BuiltinKind::Type)
+        UnifiedTypeDefinition::builtin(CompTimeBuiltinType::Type)
+    }
+
+    fn to_vm_units(&self) -> Vec<crate::vm::tree_walk::VmUnitType> {
+        vec![crate::vm::tree_walk::VmUnitType::Usize((*self).into())]
     }
 }
 
@@ -198,19 +223,23 @@ impl VmVal for FuncId {
     }
 
     fn get_type_of_value(&self) -> UnifiedTypeDefinition {
-        UnifiedTypeDefinition::builtin(BuiltinKind::Type)
+        UnifiedTypeDefinition::builtin(CompTimeBuiltinType::Type)
+    }
+
+    fn to_vm_units(&self) -> Vec<crate::vm::tree_walk::VmUnitType> {
+        vec![crate::vm::tree_walk::VmUnitType::Usize((*self).into())]
     }
 }
 #[enum_dispatch(VmVal)]
 #[derive(Debug, Clone, PartialEq, EnumAsInner)]
-pub enum VmValue {
+pub enum VmParsedValue {
     ValuePrimitive,
     StructValue,
     TypeId,
     FuncId,
 }
 
-impl Display for VmValue {
+impl Display for VmParsedValue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::ValuePrimitive(x) => Display::fmt(x, f),
@@ -267,7 +296,10 @@ impl VmValue {
 /// # Returns
 ///
 /// A `VmResult` containing the computed result or an error.
-pub fn evaluate_unary_op(operator: &UnaryOperator, operand: &VmValue) -> Result<VmValue, VmErrorType> {
+pub fn evaluate_unary_op(
+    operator: &UnaryOperator,
+    operand: &VmValue,
+) -> Result<VmValue, VmErrorType> {
     match (operator, operand) {
         (UnaryOperator::Minus, VmValue::ValuePrimitive(ValuePrimitive::Integer(i))) => {
             Ok(VmValue::ValuePrimitive(ValuePrimitive::Integer(-i)))
@@ -399,9 +431,9 @@ pub fn evaluate_binary_op(
         },
 
         // Handle Product types - all operations return error for now
-        (VmValue::StructValue(_), _) | (_, VmValue::StructValue(_)) => Err(VmErrorType::InvalidOperation(
-            "Product operations not yet implemented".to_string(),
-        )),
+        (VmValue::StructValue(_), _) | (_, VmValue::StructValue(_)) => Err(
+            VmErrorType::InvalidOperation("Product operations not yet implemented".to_string()),
+        ),
 
         // Type mismatch for other combinations
         _ => Err(VmErrorType::InvalidOperation(
