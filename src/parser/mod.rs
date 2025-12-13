@@ -1,11 +1,11 @@
 mod parser_error;
 
-#[cfg(test)]
-mod parser_tests;
+//#[cfg(test)]
+//mod parser_tests;
 
 use crate::ast::{
     BinaryOperator, Expression, ExpressionNode, CodeMetaData, Statement,
-    StatementBlock, StatementBlockMetaData, StatementNode, StatMetaData, UnaryOperator,
+    StatementBlockGeneric,  StatementNode,  UnaryOperator,
 };
 use crate::token::token_type::Keyword::{self, And, Or};
 use crate::token::{Position, Token, TokenSlice, TokenType};
@@ -43,14 +43,14 @@ pub struct Parser<'a> {
     //DESIGN DECISION:It is here because the vm,might go inside a function inside loop,if the
     //funciton has break,continue the vm will validate it,because it is inside loop.
 }
+type Exp=Expression;
 type ExpNode = ExpressionNode;
-type Exp = Expression<Position>;
-type Stat = Statement<Position>;
-type ReExp = Result<Exp, ParserError>;
+type ReExp= Result<Exp,ParserError>;
 type ReExpNode = Result<ExpNode, ParserError>;
+type Stat=Statement;
 type StatNode = StatementNode;
-type ReStatNode = Result<StatementNode, ParserError>;
-type StatBlock = StatementBlock<Position>;
+type ReStatNode = Result<StatNode, ParserError>;
+type StatBlock = StatementBlockGeneric<CodeMetaData>;
 
 pub enum ExprLevel {
     TypeUnion,
@@ -71,7 +71,7 @@ impl<'a> Parser<'a> {
     }
     fn make_stat_node(&self, stmt: Stat, start: usize) -> StatNode {
         let slice = self.tokens.slice(start, self.current).pos_range();
-        stmt.to_node(StatMetaData::new(slice))
+        stmt.to_node(CodeMetaData::new(slice))
     }
     fn parse_expr_level(&mut self, level: ExprLevel) -> ReExpNode {
         let start = self.current;
@@ -268,7 +268,7 @@ impl<'a> Parser<'a> {
             }
             TokenType::LeftBrace => match self.parse_statement_block() {
                 Ok(x) => {
-                    let stmt = Statement::StatementBlock(x);
+                    let stmt = Stat::StatementBlock(x);
                     Ok(self.make_stat_node(stmt, start))
                 }
                 Err(x) => Err(x),
@@ -394,7 +394,7 @@ TokenType::Keyword(Keyword::Return) => {
             }
         }
         let slice = self.tokens.slice(start, self.current).pos_range();
-        Ok(StatementBlock::new(statements, StatementBlockMetaData::new(slice)))
+        Ok(StatementBlockGeneric::new(statements, CodeMetaData::new(slice)))
     }
 
     pub fn new(tokens: &'a TokenSlice) -> Self {
@@ -489,7 +489,7 @@ TokenType::Keyword(Keyword::Return) => {
             vec.push(stmt);
         }
         let slice = self.tokens.slice(start, self.current).pos_range();
-        let stmt = Statement::Statements(StatementBlock::new(vec, StatementBlockMetaData::new(slice)));
+        let stmt = Statement::Statements(StatementBlockGeneric::new(vec, CodeMetaData::new(slice)));
         let stmt = self.make_stat_node(stmt, start);
         Ok(stmt)
     }

@@ -14,6 +14,7 @@
 
 use std::{collections::HashMap};
 
+use crate::ast::expression::{ExprNodeGeneric, ExpressionGeneric};
 pub use crate::token::token_type::Identifier;
 use crate::token::tokenizer::HasPosition;
 use crate::token::{Position};
@@ -26,11 +27,10 @@ pub mod statement;
 
 pub use literal::Literal;
 pub use operators::{BinaryOperator, UnaryOperator};
-pub use expression::{Expression, ExprNode};
-pub use statement::{Statement, StatementBlock, StatNode};
+pub use statement::{StatementGeneric, StatementBlockGeneric, StatNodeGeneric};
 
 pub type IdentifierMap<T> = HashMap<Identifier, T>;
-pub type IdentifierToExp<T> = IdentifierMap<ExprNode<T>>;
+pub type IdentifierToExp<T> = IdentifierMap<ExprNodeGeneric<T>>;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct AstNode<T> {
@@ -94,6 +94,8 @@ impl HasPosition for CodeMetaData {
     }
 }
 
-pub type StatementNode=StatNode<CodeMetaData>;
-pub type StatmentBlockNode=StatementBlock<CodeMetaData>;
-pub type ExpressionNode=ExprNode<CodeMetaData>;
+pub type ExpressionNode=ExprNodeGeneric<CodeMetaData>;
+pub type Expression=ExpressionGeneric<CodeMetaData>;
+pub type Statement=StatementGeneric<CodeMetaData>;
+pub type StatementNode=StatNodeGeneric<CodeMetaData>;
+pub type StatmentBlockNode=StatementBlockGeneric<CodeMetaData>;

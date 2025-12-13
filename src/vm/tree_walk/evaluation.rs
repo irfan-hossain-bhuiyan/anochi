@@ -1,6 +1,7 @@
 use super::*;
 use crate::ast::{Expression, CodeMetaData, Literal, UnaryOperator};
-use crate::vm::tree_walk::vm_value::{self, ValuePrimitive, VmVal};
+use crate::vm::tree_walk::vm_value::{self, ValuePrimitive, ParsedValueType, VmValue};
+use crate::ast::expression::ExprNodeGeneric;
 use crate::vm::tree_walk::vm_error::{VmError, VmErrorType};
 use crate::prelude::IndexPtr;
 use crate::types::UnifiedTypeDefinition;
@@ -9,8 +10,8 @@ use crate::vm::tree_walk::scope_stack::VariableData;
 
 pub(super) fn get_reference<Backend: VmBackend>(
     vm: &mut Vm<Backend>,
-    expression_node: &ExprNode<CodeMetaData>,
-) -> Result<IndexPtr<VariableData>, VmError> {
+    expression_node: &ExprNodeGeneric<CodeMetaData>,
+) -> Result<IndexPtr<VmUnitType>, VmError> {
     let node_data = expression_node.data().get_position().clone();
     let map_err = |e| VmError::new(e, node_data.clone());
     let expression = &expression_node.exp;
@@ -40,7 +41,7 @@ pub(super) fn get_reference<Backend: VmBackend>(
 
 pub(super) fn type_evaluation<Backend: VmBackend>(
     vm: &mut Vm<Backend>,
-    expression_node: &ExprNode<CodeMetaData>,
+    expression_node: &ExpressionNode
 ) -> Result<TypeId, VmError> {
     let node_data = expression_node.data().get_position().clone();
     let map_err = |e| VmError::new(e, node_data.clone());
@@ -49,9 +50,9 @@ pub(super) fn type_evaluation<Backend: VmBackend>(
     match expression {
         Expression::Literal(literal) => match literal {
             Literal::Identifier(name) => {
-                let var_entry = vm.variables.get_variable_entry_from_name(name)
+                let var_state = vm.variables.get_variable_data(name)
                     .ok_or_else(|| map_err(VmErrorType::UndefinedIdentifier(name.clone())))?;
-                Ok(var_entry.type_id)
+                Ok(var_state.type_id)
             }
             Literal::Bool(_) => {
                 let type_def = UnifiedTypeDefinition::builtin(crate::types::CompTimeBuiltinType::Bool);
@@ -131,7 +132,7 @@ pub(super) fn type_evaluation<Backend: VmBackend>(
 
 pub(super) fn evaluate_expr<Backend: VmBackend>(
     vm: &mut Vm<Backend>,
-    expression_node: &ExprNode<CodeMetaData>,
+    expression_node: &ExprNodeGeneric<CodeMetaData>,
 ) -> VmExprResult {
     let node_data = expression_node.data().get_position().clone();
     let map_err = |e| VmError::new(e, node_data.clone());

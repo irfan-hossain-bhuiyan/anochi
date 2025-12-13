@@ -1,27 +1,27 @@
 use crate::prelude::Mappable;
 use crate::token::token_type::Identifier;
-use super::expression::ExprNode;
+use super::expression::ExprNodeGeneric;
 
 use derive_more::{Deref, DerefMut};
 
 #[derive(Debug, Clone, PartialEq, Deref, DerefMut)]
-pub struct StatNode<T>{
+pub struct StatNodeGeneric<T>{
     data:T,
     #[deref]
     #[deref_mut]
-    pub stat:Statement<T>,
+    pub stat:StatementGeneric<T>,
 }
 
 #[derive(Debug, Clone, PartialEq, Deref, DerefMut)]
-pub struct StatementBlock<T> {
+pub struct StatementBlockGeneric<T> {
     data: T,
     #[deref]
     #[deref_mut]
-    pub statements: Vec<StatNode<T>>,
+    pub statements: Vec<StatNodeGeneric<T>>,
 }
 
-impl<T> StatementBlock<T> {
-    pub fn new(statements: Vec<StatNode<T>>, data: T) -> Self {
+impl<T> StatementBlockGeneric<T> {
+    pub fn new(statements: Vec<StatNodeGeneric<T>>, data: T) -> Self {
         Self { data, statements }
     }
 
@@ -33,46 +33,46 @@ impl<T> StatementBlock<T> {
 use enum_as_inner::EnumAsInner;
 
 #[derive(Debug, Clone, PartialEq, EnumAsInner)]
-pub enum Statement<T> {
+pub enum StatementGeneric<T> {
     /// Assignment for creating new variables with `let` keyword
     Assignment {
         target: Identifier,
-        r#type: Option<ExprNode<T>>,
-        value: ExprNode<T>,
+        r#type: Option<ExprNodeGeneric<T>>,
+        value: ExprNodeGeneric<T>,
     },
     /// Assignment for modifying existing objects/members
     MutableAssignment {
-        target: ExprNode<T>,
-        value: ExprNode<T>,
+        target: ExprNodeGeneric<T>,
+        value: ExprNodeGeneric<T>,
     },
-    Statements(StatementBlock<T>),
-    StatementBlock(StatementBlock<T>),
+    Statements(StatementBlockGeneric<T>),
+    StatementBlock(StatementBlockGeneric<T>),
     If {
-        condition: ExprNode<T>,
-        on_true: Box<StatNode<T>>,
+        condition: ExprNodeGeneric<T>,
+        on_true: Box<StatNodeGeneric<T>>,
     },
     IfElse {
-        condition: ExprNode<T>,
-        on_true: Box<StatNode<T>>,
-        on_false: Box<StatNode<T>>,
+        condition: ExprNodeGeneric<T>,
+        on_true: Box<StatNodeGeneric<T>>,
+        on_false: Box<StatNodeGeneric<T>>,
     },
     Debug {
-        expr_vec: Vec<ExprNode<T>>,
+        expr_vec: Vec<ExprNodeGeneric<T>>,
     },
     Loop {
-        statements: StatementBlock<T>,
+        statements: StatementBlockGeneric<T>,
     },
     Break,
     Continue,
-    Return(Option<ExprNode<T>>),
+    Return(Option<ExprNodeGeneric<T>>),
     Comptime {
-        statements: StatementBlock<T>,
+        statements: StatementBlockGeneric<T>,
     },
 }
 
 // Mappable implementations for Statement and related types
-impl<T,U> Mappable<T,U> for StatNode<T> {
-    type Mapped = StatNode<U>;
+impl<T,U> Mappable<T,U> for StatNodeGeneric<T> {
+    type Mapped = StatNodeGeneric<U>;
 
     fn inner_map<F>(self, f:&mut F) -> Self::Mapped
     where
@@ -84,8 +84,8 @@ impl<T,U> Mappable<T,U> for StatNode<T> {
     }
 }
 
-impl<T,U> Mappable<T,U> for StatementBlock<T> {
-    type Mapped = StatementBlock<U>;
+impl<T,U> Mappable<T,U> for StatementBlockGeneric<T> {
+    type Mapped = StatementBlockGeneric<U>;
 
     fn inner_map<F>(self, f:&mut F) -> Self::Mapped
     where
@@ -98,63 +98,63 @@ impl<T,U> Mappable<T,U> for StatementBlock<T> {
     }
 }
 
-impl<T,U> Mappable<T,U> for Statement<T> {
-    type Mapped = Statement<U>;
+impl<T,U> Mappable<T,U> for StatementGeneric<T> {
+    type Mapped = StatementGeneric<U>;
 
     fn inner_map<F>(self,f:&mut F) -> Self::Mapped
     where
         F: FnMut(T) -> U {
         match self {
-            Self::Assignment { target, r#type, value } => Statement::Assignment {
+            Self::Assignment { target, r#type, value } => StatementGeneric::Assignment {
                 target,
                 r#type: r#type.map(|t| t.inner_map(f)),
                 value: value.inner_map(f),
             },
-            Self::Statements(block) => Statement::Statements(block.inner_map(f)),
-            Self::MutableAssignment { target, value } => Statement::MutableAssignment {
+            Self::Statements(block) => StatementGeneric::Statements(block.inner_map(f)),
+            Self::MutableAssignment { target, value } => StatementGeneric::MutableAssignment {
                 target: target.inner_map(f),
                 value: value.inner_map(f),
             },
-            Self::StatementBlock(block) => Statement::StatementBlock(block.inner_map(f)),
-            Self::If { condition, on_true } => Statement::If {
+            Self::StatementBlock(block) => StatementGeneric::StatementBlock(block.inner_map(f)),
+            Self::If { condition, on_true } => StatementGeneric::If {
                 condition: condition.inner_map(f),
                 on_true: Box::new(on_true.inner_map(f)),
             },
-            Self::IfElse { condition, on_true, on_false } => Statement::IfElse {
+            Self::IfElse { condition, on_true, on_false } => StatementGeneric::IfElse {
                 condition: condition.inner_map(f),
                 on_true: Box::new(on_true.inner_map(f)),
                 on_false: Box::new(on_false.inner_map(f)),
             },
-            Self::Debug { expr_vec } => Statement::Debug {
+            Self::Debug { expr_vec } => StatementGeneric::Debug {
                 expr_vec: expr_vec.into_iter().map(|x| x.inner_map(f)).collect(),
             },
-            Self::Loop { statements } => Statement::Loop {
+            Self::Loop { statements } => StatementGeneric::Loop {
                 statements: statements.inner_map(f),
             },
-            Self::Break => Statement::Break,
-            Self::Continue => Statement::Continue,
-            Self::Return(x) =>Statement::Return(x.map(|x|x.inner_map(f))),
-            Self::Comptime { statements } => Statement::Comptime {
+            Self::Break => StatementGeneric::Break,
+            Self::Continue => StatementGeneric::Continue,
+            Self::Return(x) =>StatementGeneric::Return(x.map(|x|x.inner_map(f))),
+            Self::Comptime { statements } => StatementGeneric::Comptime {
                 statements: statements.inner_map(f),
             },
         }
     }
 }
 
-impl<T> From<StatementBlock<T>> for Statement<T> {
-    fn from(v: StatementBlock<T>) -> Self {
+impl<T> From<StatementBlockGeneric<T>> for StatementGeneric<T> {
+    fn from(v: StatementBlockGeneric<T>) -> Self {
         Self::StatementBlock(v)
     }
 }
 
-impl<T> Statement<T> {
+impl<T> StatementGeneric<T> {
     /// Creates a new variable assignment with explicit type
     pub fn assignment_with_type(
         target: Identifier,
-        r#type: impl Into<ExprNode<T>>,
-        value: impl Into<ExprNode<T>>,
+        r#type: impl Into<ExprNodeGeneric<T>>,
+        value: impl Into<ExprNodeGeneric<T>>,
     ) -> Self {
-        Statement::Assignment {
+        StatementGeneric::Assignment {
             target,
             r#type: Some(r#type.into()),
             value: value.into(),
@@ -162,20 +162,20 @@ impl<T> Statement<T> {
     }
     pub fn assignment(
         target: Identifier,
-        r#type: Option<ExprNode<T>>,
-        value: impl Into<ExprNode<T>>,
+        r#type: Option<ExprNodeGeneric<T>>,
+        value: impl Into<ExprNodeGeneric<T>>,
     ) -> Self {
-        Statement::Assignment {
+        StatementGeneric::Assignment {
             target,
             r#type,
             value: value.into(),
         }
     }
     pub fn mutable_assignment(
-        target: impl Into<ExprNode<T>>,
-        value: impl Into<ExprNode<T>>,
+        target: impl Into<ExprNodeGeneric<T>>,
+        value: impl Into<ExprNodeGeneric<T>>,
     ) -> Self {
-        Statement::MutableAssignment {
+        StatementGeneric::MutableAssignment {
             target: target.into(),
             value: value.into(),
         }
@@ -183,56 +183,56 @@ impl<T> Statement<T> {
 
     pub fn assignment_no_type(
         identifier: Identifier,
-        value: impl Into<ExprNode<T>>,
+        value: impl Into<ExprNodeGeneric<T>>,
     ) -> Self {
-        Statement::Assignment {
+        StatementGeneric::Assignment {
             target: identifier,
             r#type: None,
             value: value.into(),
         }
     }
 
-    pub fn statement_block(statements: Vec<StatNode<T>>, data: T) -> Self {
-        Statement::StatementBlock(StatementBlock::new(statements, data))
+    pub fn statement_block(statements: Vec<StatNodeGeneric<T>>, data: T) -> Self {
+        StatementGeneric::StatementBlock(StatementBlockGeneric::new(statements, data))
     }
 
     pub fn if_stmt(
-        condition: impl Into<ExprNode<T>>,
-        on_true: impl Into<StatNode<T>>,
+        condition: impl Into<ExprNodeGeneric<T>>,
+        on_true: impl Into<StatNodeGeneric<T>>,
     ) -> Self {
-        Statement::If {
+        StatementGeneric::If {
             condition: condition.into(),
             on_true: Box::new(on_true.into()),
         }
     }
 
     pub fn if_else(
-        condition: impl Into<ExprNode<T>>,
-        on_true: impl Into<StatNode<T>>,
-        on_false: impl Into<StatNode<T>>,
+        condition: impl Into<ExprNodeGeneric<T>>,
+        on_true: impl Into<StatNodeGeneric<T>>,
+        on_false: impl Into<StatNodeGeneric<T>>,
     ) -> Self {
-        Statement::IfElse {
+        StatementGeneric::IfElse {
             condition: condition.into(),
             on_true: Box::new(on_true.into()),
             on_false: Box::new(on_false.into()),
         }
     }
-    pub fn debug(expr_vec: Vec<ExprNode<T>>) -> Self {
+    pub fn debug(expr_vec: Vec<ExprNodeGeneric<T>>) -> Self {
         Self::Debug { expr_vec }
     }
 
 
 
-    pub fn to_node(self, data: T) -> StatNode<T> {
-        StatNode {
+    pub fn to_node(self, data: T) -> StatNodeGeneric<T> {
+        StatNodeGeneric {
             data,
             stat: self,
         }
     }
 }
 
-impl<T> StatNode<T>{
-    pub fn to_null(self)->StatNode<()>{
+impl<T> StatNodeGeneric<T>{
+    pub fn to_null(self)->StatNodeGeneric<()>{
         self.inner_map(&mut |_x|())
     }
 

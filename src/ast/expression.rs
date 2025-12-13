@@ -5,20 +5,20 @@ use crate::token::token_type::{Identifier, TokenType};
 use crate::token::token_type::Keyword::{False, True};
 use super::literal::Literal;
 use super::operators::{BinaryOperator, UnaryOperator};
-use super::{IdentifierToExp, StatNode};
+use super::{IdentifierToExp, StatNodeGeneric};
 
 use derive_more::{Deref, DerefMut, From};
 
 #[derive(Debug, Clone, PartialEq, Deref, DerefMut)]
-pub struct ExprNode<T>{
+pub struct ExprNodeGeneric<T>{
     data:T,
     #[deref]
     #[deref_mut]
-    pub exp:Expression<T>,
+    pub exp:ExpressionGeneric<T>,
 }
 
-impl<T,U> Mappable<T,U> for ExprNode<T> {
-    type Mapped = ExprNode<U>;
+impl<T,U> Mappable<T,U> for ExprNodeGeneric<T> {
+    type Mapped = ExprNodeGeneric<U>;
 
     fn inner_map<F>(self, f:&mut F) -> Self::Mapped
     where
@@ -30,8 +30,8 @@ impl<T,U> Mappable<T,U> for ExprNode<T> {
     }
 }
 
-impl<T> ExprNode<T>{
-    pub fn to_null(self)->ExprNode<()>{
+impl<T> ExprNodeGeneric<T>{
+    pub fn to_null(self)->ExprNodeGeneric<()>{
         self.inner_map(&mut |_x|())
     }
 
@@ -47,7 +47,7 @@ use enum_as_inner::EnumAsInner;
 /// This enum encompasses all types of expressions that can appear in
 /// Anochi source code, from simple literals to complex nested expressions.
 #[derive(Debug, Clone, PartialEq, EnumAsInner, From)]
-pub enum Expression<T> {
+pub enum ExpressionGeneric<T> {
     /// A literal value (number, string, identifier)
     Literal(Literal),
 
@@ -56,9 +56,9 @@ pub enum Expression<T> {
         /// The binary operator
         operator: BinaryOperator,
         /// Left operand of the binary operation
-        left: Box<ExprNode<T>>,
+        left: Box<ExprNodeGeneric<T>>,
         /// Right operand of the binary operation
-        right: Box<ExprNode<T>>,
+        right: Box<ExprNodeGeneric<T>>,
     },
 
     /// A unary operation on a single expression
@@ -66,19 +66,19 @@ pub enum Expression<T> {
         /// The unary operator
         operator: UnaryOperator,
         /// The operand of the unary operation
-        operand: Box<ExprNode<T>>,
+        operand: Box<ExprNodeGeneric<T>>,
     },
 
     /// A grouped expression (parentheses for precedence control)
     Grouping {
         /// The expression inside the parentheses
-        expression: Box<ExprNode<T>>,
+        expression: Box<ExprNodeGeneric<T>>,
     },
 
     /// A member access expression (e.g., `a.x`, `{x=10}.y`)
     MemberAccess {
         /// The object being accessed (left side of the dot)
-        object: Box<ExprNode<T>>,
+        object: Box<ExprNodeGeneric<T>>,
         /// The member being accessed (right side of the dot)
         member: Identifier,
     },
@@ -88,21 +88,21 @@ pub enum Expression<T> {
     },
 
     Sum {
-        data: Vec<ExprNode<T>>,
+        data: Vec<ExprNodeGeneric<T>>,
     },
     Function {
-        input: Box<ExprNode<T>>,
-        output: Option<Box<ExprNode<T>>>,
-        statements: Box<StatNode<T>>,
+        input: Box<ExprNodeGeneric<T>>,
+        output: Option<Box<ExprNodeGeneric<T>>>,
+        statements: Box<StatNodeGeneric<T>>,
     },
     FnCall {
-        caller:Box<ExprNode<T>>,
-        callee:Box<ExprNode<T>>,
+        caller:Box<ExprNodeGeneric<T>>,
+        callee:Box<ExprNodeGeneric<T>>,
     }
 }
 
-impl<T,U> Mappable<T,U> for Expression<T> {
-    type Mapped = Expression<U>;
+impl<T,U> Mappable<T,U> for ExpressionGeneric<T> {
+    type Mapped = ExpressionGeneric<U>;
     fn inner_map<F>(self, f:&mut F) -> Self::Mapped
         where
             F: FnMut(T) -> U {
@@ -165,50 +165,50 @@ impl<T,U> Mappable<T,U> for Expression<T> {
     }
 }
 
-impl<T> Expression<T> {
+impl<T> ExpressionGeneric<T> {
     /// Creates a new literal integer expression.
     pub fn from_i64(value: i64) -> Self {
-        Expression::Literal(Literal::Integer(value.into()))
+        ExpressionGeneric::Literal(Literal::Integer(value.into()))
     }
     pub fn from_f64(value: f64) -> Self {
-        Expression::Literal(Literal::Float(BigRational::from_float(value).unwrap()))
+        ExpressionGeneric::Literal(Literal::Float(BigRational::from_float(value).unwrap()))
     }
     pub fn from_bool(value: bool) -> Self {
-        Expression::Literal(Literal::Bool(value))
+        ExpressionGeneric::Literal(Literal::Bool(value))
     }
     pub fn integer(value: BigInt) -> Self {
-        Expression::Literal(Literal::Integer(value))
+        ExpressionGeneric::Literal(Literal::Integer(value))
     }
     pub fn product(value: IdentifierToExp<T>) -> Self {
-        Expression::Product { data: value }
+        ExpressionGeneric::Product { data: value }
     }
-    pub fn sum(value: Vec<ExprNode<T>>) -> Self {
-        Expression::Sum { data: value }
+    pub fn sum(value: Vec<ExprNodeGeneric<T>>) -> Self {
+        ExpressionGeneric::Sum { data: value }
     }
     pub fn float(value: BigRational) -> Self {
-        Expression::Literal(Literal::Float(value))
+        ExpressionGeneric::Literal(Literal::Float(value))
     }
     pub fn bool(value: bool) -> Self {
         Self::Literal(Literal::Bool(value))
     }
     pub fn string(value: String) -> Self {
-        Expression::Literal(Literal::String(value))
+        ExpressionGeneric::Literal(Literal::String(value))
     }
     pub fn identifier(name: Identifier) -> Self {
-        Expression::Literal(Literal::Identifier(name))
+        ExpressionGeneric::Literal(Literal::Identifier(name))
     }
-    pub fn fn_call(caller: ExprNode<T>, callee:ExprNode<T>) -> Self {
-        Expression::FnCall {
+    pub fn fn_call(caller: ExprNodeGeneric<T>, callee:ExprNodeGeneric<T>) -> Self {
+        ExpressionGeneric::FnCall {
             caller: Box::new(caller.into()),
             callee:Box::new(callee.into()),
         }
     }
     pub fn binary(
-        left: impl Into<ExprNode<T>>,
+        left: impl Into<ExprNodeGeneric<T>>,
         operator: BinaryOperator,
-        right: impl Into<ExprNode<T>>,
+        right: impl Into<ExprNodeGeneric<T>>,
     ) -> Self {
-        Expression::Binary {
+        ExpressionGeneric::Binary {
             left: Box::new(left.into()),
             operator,
             right: Box::new(right.into()),
@@ -216,7 +216,7 @@ impl<T> Expression<T> {
     }
 
     /// Creates a new unary expression.
-    pub fn unary(operator: UnaryOperator, operand: impl Into<ExprNode<T>>) -> Self {
+    pub fn unary(operator: UnaryOperator, operand: impl Into<ExprNodeGeneric<T>>) -> Self {
         Self::Unary {
             operator,
             operand: Box::new(operand.into()),
@@ -224,15 +224,15 @@ impl<T> Expression<T> {
     }
 
     /// Creates a new grouping expression.
-    pub fn grouping(expression: impl Into<ExprNode<T>>) -> Self {
-        Expression::Grouping {
+    pub fn grouping(expression: impl Into<ExprNodeGeneric<T>>) -> Self {
+        ExpressionGeneric::Grouping {
             expression: Box::new(expression.into()),
         }
     }
 
     /// Creates a new member access expression.
-    pub fn member_access(object: impl Into<ExprNode<T>>, member: Identifier) -> Self {
-        Expression::MemberAccess {
+    pub fn member_access(object: impl Into<ExprNodeGeneric<T>>, member: Identifier) -> Self {
+        ExpressionGeneric::MemberAccess {
             object: Box::new(object.into()),
             member,
         }
@@ -246,18 +246,18 @@ impl<T> Expression<T> {
     /// Returns a Token to an Expression if it is a literal token.
     pub fn from_token_type(token_type: TokenType) -> Option<Self> {
         match token_type {
-            TokenType::Integer(i) => Some(Expression::Literal(Literal::Integer(i))),
-            TokenType::Float(f) => Some(Expression::Literal(Literal::Float(f))),
-            TokenType::String(s) => Some(Expression::Literal(Literal::String(s))),
-            TokenType::Identifier(id) => Some(Expression::Literal(Literal::Identifier(id))),
-            TokenType::Keyword(True) => Some(Expression::Literal(Literal::Bool(true))),
-            TokenType::Keyword(False) => Some(Expression::Literal(Literal::Bool(false))),
+            TokenType::Integer(i) => Some(ExpressionGeneric::Literal(Literal::Integer(i))),
+            TokenType::Float(f) => Some(ExpressionGeneric::Literal(Literal::Float(f))),
+            TokenType::String(s) => Some(ExpressionGeneric::Literal(Literal::String(s))),
+            TokenType::Identifier(id) => Some(ExpressionGeneric::Literal(Literal::Identifier(id))),
+            TokenType::Keyword(True) => Some(ExpressionGeneric::Literal(Literal::Bool(true))),
+            TokenType::Keyword(False) => Some(ExpressionGeneric::Literal(Literal::Bool(false))),
             _ => None,
         }
     }
 
-    pub fn to_node(self, data: T) -> ExprNode<T> {
-        ExprNode {
+    pub fn to_node(self, data: T) -> ExprNodeGeneric<T> {
+        ExprNodeGeneric {
             data,
             exp: self,
         }

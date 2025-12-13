@@ -4,7 +4,7 @@ use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
 use std::mem::{MaybeUninit};
-use std::ops::{Deref, Index, IndexMut};
+use std::ops::{Deref, DerefMut, Index, IndexMut};
 
 use enum_dispatch::enum_dispatch;
 use macros::generate_unchecked;
@@ -23,7 +23,7 @@ pub struct HashPtr<T: ?Sized> {
 }
 
 impl<T> HashPtr<T> {
-    pub fn as_hash_value(&self) -> HashValue {
+    pub fn as_hash_value(self) -> HashValue {
         self.hash
     }
 }
@@ -356,21 +356,12 @@ impl<T, const MAX_SIZE: usize> Deref for SizedArray<T, MAX_SIZE> {
         &self.array[0..self.size]
     }
 }
+impl<T, const MAX_SIZE: usize> DerefMut for SizedArray<T, MAX_SIZE> {
 
-
-impl<T, const MAX_SIZE: usize> IndexMut<usize> for SizedArray<T, MAX_SIZE> {
-    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
-        self.get_mut(index)
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.array[0..self.size]
     }
 }
-
-impl<T, const MAX_SIZE: usize> Index<usize> for SizedArray<T, MAX_SIZE> {
-    fn index(&self, index: usize) -> &Self::Output {
-        self.get(index)
-    }
-    type Output=T;
-}
-
 impl<T, const MAX_SIZE: usize> Default for SizedArray<T, MAX_SIZE> {
     fn default() -> Self {
         unsafe {
@@ -428,6 +419,10 @@ impl<T, const MAX_SIZE: usize> SizedArray<T, MAX_SIZE> {
 
     pub(crate) fn size(&self) -> usize {
         self.size
+    }
+
+    pub(crate) fn len_as_ptr(&self) -> IndexPtr<crate::vm::tree_walk::VmUnitType> {
+        IndexPtr { index: self.len(), _marker: PhantomData::default() }
     }
 }
 

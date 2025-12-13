@@ -3,12 +3,13 @@ use std::fmt::{Debug, Display};
 
 use thiserror::Error;
 
-use crate::prelude::{ SizedArray};
+use crate::prelude::{ IndexPtr, SizedArray};
 use crate::{
     ast::Identifier,
     types::{TypeContainer, TypeId},
-    vm::tree_walk::{VmErrorType, VmVal, VmValue, VmUnitType},
+    vm::tree_walk::{VmErrorType, ParsedValueType, VmUnitType},
 };
+use crate::vm::tree_walk::vm_value::VmValue;
 type ExprResult=Result<VmValue,VmErrorType>;
 #[derive(Debug,Clone,Error)]
 enum Error{
@@ -32,20 +33,26 @@ impl Display for VariableState {
         }
     }
 }
+
+pub type VmPtr=IndexPtr<VmUnitType>;
 #[derive(Debug, Clone)]
 pub struct VariableData {
     pub type_id: TypeId,
     var_state: VariableState,
-    stack_position: usize,
+    stack_position: VmPtr,
 }
 
 impl VariableData {
-    fn new(type_id: TypeId, var_state: VariableState, stack_position: usize) -> Self {
+    fn new(type_id: TypeId, var_state: VariableState, stack_position: IndexPtr<VmUnitType>) -> Self {
         Self {
             type_id,
             var_state,
             stack_position,
         }
+    }
+
+    fn get_ptr(&self) -> IndexPtr<VmUnitType> {
+        self.stack_position
     }
 }
 
@@ -113,15 +120,16 @@ impl ScopeStack {
         var_state: VariableState,
         type_container: &TypeContainer,
     ) {
-        let stack_position = self.stack.len();
-        self.flatten_and_push(value, type_container);
+        let stack_position = self.stack.len_as_ptr();
+        self.flatten_and_push(value, type_id,type_container);
         let var_data = VariableData::new(type_id, var_state, stack_position);
         if let Some(current_scope) = self.scopes.back_mut() {
             current_scope.variables.insert(identifier, var_data);
         }
     }
 
-    fn flatten_and_push(&mut self, value: VmValue, type_container: &TypeContainer) {
+    fn flatten_and_push(&mut self, value: VmValue, of_type:TypeId,type_container: &TypeContainer) {
+        //TODO:I need to do somethinng for union type,example expanding it.
         let units = value.to_vm_units();
         for unit in units {
             self.stack.push_back(unit);
@@ -159,7 +167,7 @@ impl ScopeStack {
             ));
         }
         let stack_position = var_data.stack_position;
-        self.overwrite_at_position(stack_position, value, type_container);
+        self.overwrite_at_position(stack_position.as_index(), value, type_container);
         Ok(())
     }
 
@@ -181,7 +189,7 @@ impl ScopeStack {
         self.set_value_from_index(identifier, value, type_container)
     }
 
-    fn get_variable_data(&self, identifier: &Identifier) -> Option<&VariableData> {
+    pub fn get_variable_data(&self, identifier: &Identifier) -> Option<&VariableData> {
         for scope in self.scopes.iter().rev() {
             if let Some(var_data) = scope.variables.get(identifier) {
                 return Some(var_data);
@@ -189,17 +197,20 @@ impl ScopeStack {
         }
         None
     }
+    pub fn get_index_from_name(&self,identifier: &Identifier)->Option<IndexPtr<VmUnitType>>{
+        Some(self.get_variable_data(identifier)?.get_ptr())
+    }
 
     fn reconstruct_value(&self, identifier: &Identifier, type_container: &TypeContainer) -> Option<VmValue> {
         let var_data = self.get_variable_data(identifier)?;
         let type_id = var_data.type_id;
         let position = var_data.stack_position;
-        self.reconstruct_from_type(position, type_id, type_container)
+        self.reconstruct_from_type(position.as_index(), type_id, type_container)
     }
 
     fn reconstruct_from_type(&self, position: usize, type_id: TypeId, type_container: &TypeContainer) -> Option<VmValue> {
         let optimized_type = type_container.get_type(&type_id)?;
-        match optimized_type.inner() {
+        match optimized_type.0{
             crate::types::CompTimeTypeGeneric::Builtin(_) => {
                 let prim = self.stack.get(position)?.clone();
                 Some(VmValue::ValuePrimitive(prim))
@@ -212,8 +223,8 @@ impl ScopeStack {
                 let mut current_pos = position;
                 let mut struct_fields = std::collections::BTreeMap::new();
                 for (field_name, field_type_id) in fields {
-                    let field_value = self.reconstruct_from_type(current_pos, *field_type_id, type_container)?;
-                    let field_size = type_container.get_metadata(field_type_id)?.size;
+                    let field_value = self.reconstruct_from_type(current_pos, field_type_id, type_container)?;
+                    let field_size = type_container.get_metadata(&field_type_id)?.size;
                     struct_fields.insert(field_name.clone(), field_value);
                     current_pos += field_size;
                 }

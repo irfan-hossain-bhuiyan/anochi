@@ -1,42 +1,37 @@
+use macros::generate_unchecked;
+
 use crate::{
-    ast::{StatNode, StatementNode},
+    ast::StatementNode,
     prelude::{IndexPtr, Mappable},
     token::{Position, tokenizer::HasPosition},
-    types::{TypeContainer, TypeId}, vm::tree_walk::VmErrorType,
+    types::{TypeContainer, TypeId}, vm::tree_walk::VmErrorType, ast::StatNodeGeneric,
 };
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct VmFunc {
     param: TypeId,
     output: Option<TypeId>,
-    body: StatNode<Position>,
+    body: StatementNode,
 }
 
 impl VmFunc {
-    pub fn new_checked<T: HasPosition>(
+    #[generate_unchecked]
+    pub fn new_checked(
         param: TypeId,
         output: Option<TypeId>,
-        body: StatNode<T>,
+        body: StatementNode,
         type_container: &TypeContainer,
     ) -> Option<Self> {
         if !type_container.get_type(&param)?.is_product() {
             return None;
         }
-        let body: StatNode<Position> = body.inner_map(&mut |x: T| x.get_position().clone());
         Some(Self {
             param,
             output,
             body,
         })
     }
-    pub fn new<T:HasPosition>(
-        param: TypeId,
-        output: Option<TypeId>,
-        body: StatNode<T>,
-        type_container: &TypeContainer,
-    ) -> Self {
-        Self::new_checked(param, output, body, type_container).unwrap()
-    }
+    
     pub fn get_param(&self) -> TypeId {
         self.param
     }

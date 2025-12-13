@@ -2,6 +2,7 @@
 
 use num_bigint::BigInt;
 use num_rational::BigRational;
+use crate::{ast::{StatNodeGeneric, expression::ExprNodeGeneric}, prelude::HashValue};
 
 /// Untyped VM unit - the fundamental storage unit on the VM stack
 /// All type information is tracked separately via TypeContainer and VariableData
@@ -11,6 +12,7 @@ pub enum VmUnitType {
     Integer(BigInt),
     Float(BigRational),
     Usize(usize),
+    HashValue(HashValue)
 }
 
 impl std::fmt::Display for VmUnitType {
@@ -20,15 +22,16 @@ impl std::fmt::Display for VmUnitType {
             VmUnitType::Integer(i) => write!(f, "{}", i),
             VmUnitType::Float(fl) => write!(f, "{}", fl),
             VmUnitType::Usize(u) => write!(f, "@{}", u),
+            VmUnitType::HashValue(hash) => write!(f,"{}", hash),
         }
     }
 }
 
 mod vm_value;
-pub use vm_value::{StructValue, ValuePrimitive, VmVal, VmParsedValue};
+pub use vm_value::{StructValue, ValuePrimitive, ParsedValueType, VmValue};
 
 use crate::{
-    ast::{ExprNode, ExpressionNode, Identifier, StatMetaData, StatNode, StatementBlock, StatementNode, StatmentBlockNode},
+    ast::{ExpressionNode, Identifier, StatementNode, StatmentBlockNode},
     prelude::IndexCons,
     token::tokenizer::HasPosition,
     types::{TypeContainer, TypeId, UnifiedTypeDefinition},
@@ -41,9 +44,9 @@ mod vm_error;
 pub use vm_error::{VmError, VmErrorType};
 
 /// Result type for VM evaluation operations.
-pub type VmExprResult = Result<VmParsedValue, VmError>;
-pub type VmExprResultType = Result<VmParsedValue, VmErrorType>;
-pub type VmResultMut<'a> = Result<&'a mut VmParsedValue, VmError>;
+pub type VmExprResult = Result<VmValue, VmError>;
+pub type VmExprResultType = Result<VmValue, VmErrorType>;
+pub type VmResultMut<'a> = Result<&'a mut VmValue, VmError>;
 /// Result type for statement execution
 pub type StatementResult = Result<StatementEvent, VmError>;
 
@@ -52,7 +55,7 @@ pub type StatementResult = Result<StatementEvent, VmError>;
 pub enum StatementEvent {
     Break,
     Continue,
-    Return(VmParsedValue),
+    Return(VmValue),
     None,
 }
 
@@ -68,8 +71,8 @@ pub struct Vm<Backend = IoBackend> {
     pub(super) backend: Backend,
 }
 
-type ExpNode<T> = ExprNode<T>;
-type StmtNode<T> = StatNode<T>;
+type ExpNode<T> = ExprNodeGeneric<T>;
+type StmtNode<T> = StatNodeGeneric<T>;
 
 mod evaluation;
 mod execution;
@@ -81,6 +84,7 @@ impl<Backend: VmBackend> Vm<Backend> {
             types: crate::types::TypeContainer::new(),
             funcs: FunctionContainer::new(),
             backend,
+
         };
         vm.load_builtin_types();
         vm
@@ -92,10 +96,9 @@ impl<Backend: VmBackend> Vm<Backend> {
         use crate::types::CompTimeBuiltinType;
 
         let builtin_types = [
-            ("i64", CompTimeBuiltinType::Int),
-            ("f64", CompTimeBuiltinType::Float),
+            ("int", CompTimeBuiltinType::Int),
+            ("float", CompTimeBuiltinType::Float),
             ("bool", CompTimeBuiltinType::Bool),
-            ("usize", CompTimeBuiltinType::Usize),
         ];
 
         for (name, builtin_kind) in builtin_types {
@@ -103,7 +106,7 @@ impl<Backend: VmBackend> Vm<Backend> {
             let type_id = self.types.store_unified_type(type_def);
             self.variables.insert_variable(
                 Identifier::new(name.to_string()),
-                VmParsedValue::TypeId(type_id),
+                VmValue::TypeId(type_id),
                 &mut self.types,
             );
         }
@@ -116,7 +119,7 @@ impl<Backend: VmBackend> Vm<Backend> {
     }
 
 
-    pub(super) fn to_type(&mut self, value: VmParsedValue) -> Result<TypeId, VmErrorType> {
+    pub(super) fn to_type(&mut self, value: VmValue) -> Result<TypeId, VmErrorType> {
         value
             .get_type_id(&mut self.types)
             .ok_or(VmErrorType::InvalidTypeDefination)
@@ -124,7 +127,7 @@ impl<Backend: VmBackend> Vm<Backend> {
     pub(super) fn insert_variable(
         &mut self,
         target: Identifier,
-        value: VmParsedValue,
+        value: VmValue,
     ) -> Result<(), VmErrorType> {
         if self.variables.has_variable_current(&target) {
             return Err(VmErrorType::SameVariableName);
@@ -150,7 +153,7 @@ impl<Backend: VmBackend> Vm<Backend> {
     pub fn insert_variable_check(
         &mut self,
         identifier: Identifier,
-        value: VmParsedValue,
+        value: VmValue,
         expected_type_id: TypeId,
         type_container: &mut crate::types::TypeContainer,
     ) -> Result<(), VmErrorType> {
@@ -190,14 +193,14 @@ impl<Backend: VmBackend> Vm<Backend> {
         self.funcs.push(func)
     }
     /// It type check the function that is currently passed,and execute it.
-    fn execute_function(&mut self, func_id: FuncId, inputs: VmParsedValue) -> VmExprResult {
+    fn execute_function(&mut self, func_id: FuncId, inputs: VmValue) -> VmExprResult {
         let func = self.get_func(func_id);
         let param_type = func.get_param();
         if !inputs.of_type(param_type, &mut self.types) {
             panic!("The validation should checked before");
         }
         let inputs = inputs.into_struct_value().unwrap();
-        let body = self.get_func(func_id).get_statement() as  *const StatNode<StatMetaData>;
+        let body = self.get_func(func_id).get_statement() as  *const StatementNode;
         self.create_scope();
         let result = (|| {
             self.extract_struct(inputs).unwrap();
@@ -207,7 +210,7 @@ impl<Backend: VmBackend> Vm<Backend> {
                 body.as_ref().unwrap()   
             })? {
                 StatementEvent::Return(value) => Ok(value),
-                _ => Ok(VmParsedValue::create_unit()),
+                _ => Ok(VmValue::create_unit()),
             }
         })();
         self.drop_scope();
@@ -220,7 +223,7 @@ impl<Backend: VmBackend> Vm<Backend> {
         self.funcs.get_mut_checked(func_id).unwrap()
     }
 
-    fn type_match(&mut self, r#type: TypeId, object: VmParsedValue) -> Result<(), VmErrorType> {
+    fn type_match(&mut self, r#type: TypeId, object: VmValue) -> Result<(), VmErrorType> {
         if self.to_type(object)? == r#type {
             return Ok(());
         }

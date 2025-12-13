@@ -30,7 +30,15 @@
 - [x] Change the current index from usize to IndexPtr<>,because the type is making problem
 - [x] HashMap will map to it.ScopeStack which is a VecDeque<HashMap<>>,Now the VecDeque will also save the last scope index.
 ## Doing:
+- [ ] Implement all funciton that converts StructValue and enum value to it's equivalent unit type.
+- [ ] Implement addition,substraction for VmValue
+- [ ] adding 
+- [ ] VmValue will be just one type,It is a unit array and type id.
+- [ ] VmValue is converted from struct parsed value,to array based value,make a general VmValue,this will be a composiiton of 
 - [ ] make stackvalues a different type,it will have basic primitive for for ValuePrimitive,
+- [x] added type id as a VmUnit,as well,All of this to mimic ptr.
+- [ ] Adding metadata everywhere,fn will contain metadata as well.
+- [ ] 
 and all the TypeId and FuncId will be mapped to usize for now,make the mapping both ways.
 - [ ] make the 
 - [ ] Add usize type in the stack

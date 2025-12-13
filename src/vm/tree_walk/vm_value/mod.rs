@@ -1,24 +1,32 @@
 use crate::ast::{BinaryOperator, Identifier, Literal, UnaryOperator};
 use crate::types::{
-    CompTimeBuiltinType, CompTimeTypeGeneric, TypeContainer, TypeDefinition, TypeId,
-    UnifiedTypeDefinition,
+    CompTimeBuiltinType, CompTimeTypeGeneric, TypeContainer, TypeDefinition, TypeGeneric, TypeId, UnifiedTypeDefinition
 };
+use crate::vm::tree_walk::VmUnitType;
+use crate::vm::tree_walk::scope_stack::VmPtr;
 use crate::vm::tree_walk::vm_error::VmErrorType;
 use enum_as_inner::EnumAsInner;
 use enum_dispatch::enum_dispatch;
 use num_bigint::BigInt;
 use num_rational::BigRational;
+use std::any::Any;
 use std::collections::BTreeMap;
-use std::ops::Deref;
 use std::fmt::Display;
+use std::ops::Deref;
 
 mod function;
 pub use function::{FuncId, VmFunc};
+
 #[enum_dispatch]
-pub trait VmVal {
+pub trait ParsedValueType 
+where Self:Sized{
     fn into_unified_type_definition(self) -> Option<UnifiedTypeDefinition>;
     fn get_type_of_value(&self) -> UnifiedTypeDefinition;
-
+    fn to_vm_units(self) -> Vec<crate::vm::tree_walk::VmUnitType>;
+    fn to_vm_value_generalized(self,type_container: &mut TypeContainer)->VmValueGeneralized{
+        let type_id=self.get_type_id_of_value(type_container);
+        VmValueGeneralized { bits: self.to_vm_units(), r#type: type_id }
+    }
     fn into_type_definition(self, container: &mut TypeContainer) -> Option<TypeDefinition>
     where
         Self: Sized,
@@ -43,8 +51,6 @@ pub trait VmVal {
         let id = self.get_type_id_of_value(type_container);
         id == expected_type_id
     }
-
-    fn to_vm_units(self) -> Vec<crate::vm::tree_walk::VmUnitType>;
 }
 
 /// Primitive values that can be stored in the VM
@@ -53,10 +59,10 @@ pub enum ValuePrimitive {
     Bool(bool),
     Integer(BigInt),
     Float(BigRational),
-    Reference(usize, TypeId),
+    Reference(VmPtr, TypeId),
 }
 
-impl VmVal for ValuePrimitive {
+impl ParsedValueType for ValuePrimitive {
     fn into_unified_type_definition(self) -> Option<UnifiedTypeDefinition> {
         None
     }
@@ -74,10 +80,12 @@ impl VmVal for ValuePrimitive {
 
     fn to_vm_units(self) -> Vec<crate::vm::tree_walk::VmUnitType> {
         match self {
-            ValuePrimitive::Bool(b) => vec![crate::vm::tree_walk::VmUnitType::Bool(b)],
-            ValuePrimitive::Integer(i) => vec![crate::vm::tree_walk::VmUnitType::Integer(i)],
-            ValuePrimitive::Float(f) => vec![crate::vm::tree_walk::VmUnitType::Float(f)],
-            ValuePrimitive::Reference(stack_pos, _) => vec![crate::vm::tree_walk::VmUnitType::Usize(stack_pos)],
+            ValuePrimitive::Bool(b) => vec![VmUnitType::Bool(b)],
+            ValuePrimitive::Integer(i) => vec![VmUnitType::Integer(i)],
+            ValuePrimitive::Float(f) => vec![VmUnitType::Float(f)],
+            ValuePrimitive::Reference(stack_pos, _) => {
+                vec![VmUnitType::Usize(stack_pos.as_index())]
+            }
         }
     }
 }
@@ -134,18 +142,18 @@ impl From<Literal> for ValuePrimitive {
 }
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct StructValue {
-    value: BTreeMap<Identifier, VmParsedValue>,
+    value: BTreeMap<Identifier, VmValue>,
 }
 
 impl StructValue {
-    pub fn new(product: BTreeMap<Identifier, VmParsedValue>) -> Self {
+    pub fn new(product: BTreeMap<Identifier, VmValue>) -> Self {
         Self { value: product }
     }
 }
 
 impl IntoIterator for StructValue {
-    type Item = (Identifier, VmParsedValue);
-    type IntoIter = std::collections::btree_map::IntoIter<Identifier, VmParsedValue>;
+    type Item = (Identifier, VmValue);
+    type IntoIter = std::collections::btree_map::IntoIter<Identifier, VmValue>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.value.into_iter()
@@ -157,10 +165,10 @@ impl Deref for StructValue {
         &self.value
     }
 
-    type Target = BTreeMap<Identifier, VmParsedValue>;
+    type Target = BTreeMap<Identifier, VmValue>;
 }
 
-impl VmVal for StructValue {
+impl ParsedValueType for StructValue {
     fn into_unified_type_definition(self) -> Option<UnifiedTypeDefinition> {
         let mut type_fields = std::collections::BTreeMap::new();
         for (identifier, value) in self.into_iter() {
@@ -174,7 +182,7 @@ impl VmVal for StructValue {
 
     fn get_type_of_value(&self) -> UnifiedTypeDefinition {
         for field_value in self.values() {
-            if let VmParsedValue::TypeId(_) = field_value {
+            if let VmValue::TypeId(_) = field_value {
                 return UnifiedTypeDefinition::builtin(CompTimeBuiltinType::Type);
             }
         }
@@ -201,7 +209,7 @@ impl StructValue {
     }
 }
 
-impl VmVal for TypeId {
+impl ParsedValueType for TypeId {
     fn into_unified_type_definition(self) -> Option<UnifiedTypeDefinition> {
         Some(UnifiedTypeDefinition::TypeId(self))
     }
@@ -211,11 +219,12 @@ impl VmVal for TypeId {
     }
 
     fn to_vm_units(self) -> Vec<crate::vm::tree_walk::VmUnitType> {
-        vec![crate::vm::tree_walk::VmUnitType::Usize(self.into())]
+        let value=VmUnitType::HashValue(self.as_hash_value());
+        vec![value]
     }
 }
 
-impl VmVal for FuncId {
+impl ParsedValueType for FuncId {
     fn into_unified_type_definition(self) -> Option<UnifiedTypeDefinition> {
         None
     }
@@ -224,20 +233,26 @@ impl VmVal for FuncId {
         UnifiedTypeDefinition::builtin(CompTimeBuiltinType::Type)
     }
 
-    fn to_vm_units(&self) -> Vec<crate::vm::tree_walk::VmUnitType> {
-        vec![crate::vm::tree_walk::VmUnitType::Usize((*self).into())]
+    fn to_vm_units(self) -> Vec<crate::vm::tree_walk::VmUnitType> {
+        todo!()
+        //vec![crate::vm::tree_walk::VmUnitType::Usize()]
     }
 }
-#[enum_dispatch(VmVal)]
+#[enum_dispatch(ParsedValueType)]
 #[derive(Debug, Clone, PartialEq, EnumAsInner)]
-pub enum VmParsedValue {
+pub enum VmValue {
     ValuePrimitive,
     StructValue,
     TypeId,
     FuncId,
 }
 
-impl Display for VmParsedValue {
+struct VmValueGeneralized{
+    bits:Vec<VmUnitType>,
+    r#type:TypeId,
+}
+
+impl Display for VmValue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::ValuePrimitive(x) => Display::fmt(x, f),
@@ -260,25 +275,16 @@ impl Display for VmParsedValue {
     }
 }
 
-impl From<Literal> for VmParsedValue {
-    fn from(v: Literal) -> Self {
-        match v {
-            Literal::String(_) => {
-                panic!("String literals should be handled as arrays, not primitives")
-            }
-            Literal::Identifier(_) => panic!("Identifiers should be resolved before conversion"),
-            _ => Self::ValuePrimitive(ValuePrimitive::from(v)),
-        }
-    }
-}
-impl VmParsedValue {
+
+impl VmValue {
     pub fn create_unit() -> Self {
         Self::StructValue(StructValue::default())
     }
 
     pub fn is_null(&self) -> bool {
-        matches!(self, VmParsedValue::StructValue(x) if x.is_empty())
+        matches!(self, VmValue::StructValue(x) if x.is_empty())
     }
+    
 }
 
 /// Evaluates a unary operation on a VmParsedValue.
@@ -296,19 +302,19 @@ impl VmParsedValue {
 /// A `VmResult` containing the computed result or an error.
 pub fn evaluate_unary_op(
     operator: &UnaryOperator,
-    operand: &VmParsedValue,
-) -> Result<VmParsedValue, VmErrorType> {
+    operand: &VmValue,
+) -> Result<VmValue, VmErrorType> {
     match (operator, operand) {
-        (UnaryOperator::Minus, VmParsedValue::ValuePrimitive(ValuePrimitive::Integer(i))) => {
-            Ok(VmParsedValue::ValuePrimitive(ValuePrimitive::Integer(-i)))
+        (UnaryOperator::Minus, VmValue::ValuePrimitive(ValuePrimitive::Integer(i))) => {
+            Ok(VmValue::ValuePrimitive(ValuePrimitive::Integer(-i)))
         }
-        (UnaryOperator::Minus, VmParsedValue::ValuePrimitive(ValuePrimitive::Float(f))) => {
-            Ok(VmParsedValue::ValuePrimitive(ValuePrimitive::Float(-f)))
+        (UnaryOperator::Minus, VmValue::ValuePrimitive(ValuePrimitive::Float(f))) => {
+            Ok(VmValue::ValuePrimitive(ValuePrimitive::Float(-f)))
         }
-        (UnaryOperator::Not, VmParsedValue::ValuePrimitive(ValuePrimitive::Bool(b))) => {
-            Ok(VmParsedValue::ValuePrimitive(ValuePrimitive::Bool(!b)))
+        (UnaryOperator::Not, VmValue::ValuePrimitive(ValuePrimitive::Bool(b))) => {
+            Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(!b)))
         }
-        (_, VmParsedValue::StructValue(_)) => Err(VmErrorType::InvalidOperation(
+        (_, VmValue::StructValue(_)) => Err(VmErrorType::InvalidOperation(
             "Product operations not yet implemented".to_string(),
         )),
         _ => Err(VmErrorType::InvalidOperation(format!(
@@ -333,27 +339,27 @@ pub fn evaluate_unary_op(
 ///
 /// A `VmResult` containing the computed result or an error.
 pub fn evaluate_binary_op(
-    left: &VmParsedValue,
+    left: &VmValue,
     operator: &BinaryOperator,
-    right: &VmParsedValue,
-) -> Result<VmParsedValue, VmErrorType> {
+    right: &VmValue,
+) -> Result<VmValue, VmErrorType> {
     match (left, right) {
         // Bool operations
         (
-            VmParsedValue::ValuePrimitive(ValuePrimitive::Bool(l)),
-            VmParsedValue::ValuePrimitive(ValuePrimitive::Bool(r)),
+            VmValue::ValuePrimitive(ValuePrimitive::Bool(l)),
+            VmValue::ValuePrimitive(ValuePrimitive::Bool(r)),
         ) => match operator {
-            BinaryOperator::Equal => Ok(VmParsedValue::ValuePrimitive(ValuePrimitive::Bool(l == r))),
-            BinaryOperator::NotEqual => Ok(VmParsedValue::ValuePrimitive(ValuePrimitive::Bool(l != r))),
-            BinaryOperator::And => Ok(VmParsedValue::ValuePrimitive(ValuePrimitive::Bool(*l && *r))),
-            BinaryOperator::Or => Ok(VmParsedValue::ValuePrimitive(ValuePrimitive::Bool(*l || *r))),
-            BinaryOperator::Less => Ok(VmParsedValue::ValuePrimitive(ValuePrimitive::Bool(!*l && *r))), // false < true
+            BinaryOperator::Equal => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(l == r))),
+            BinaryOperator::NotEqual => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(l != r))),
+            BinaryOperator::And => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(*l && *r))),
+            BinaryOperator::Or => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(*l || *r))),
+            BinaryOperator::Less => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(!*l && *r))), // false < true
             BinaryOperator::LessEqual => {
-                Ok(VmParsedValue::ValuePrimitive(ValuePrimitive::Bool(!*l || *r)))
+                Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(!*l || *r)))
             } // false <= true, true <= true
-            BinaryOperator::Greater => Ok(VmParsedValue::ValuePrimitive(ValuePrimitive::Bool(*l && !*r))), // true > false
+            BinaryOperator::Greater => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(*l && !*r))), // true > false
             BinaryOperator::GreaterEqual => {
-                Ok(VmParsedValue::ValuePrimitive(ValuePrimitive::Bool(*l || !*r)))
+                Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(*l || !*r)))
             } // true >= false, true >= true
             _ => Err(VmErrorType::InvalidOperation(format!(
                 "Cannot apply {operator:?} to Bool"
@@ -361,33 +367,33 @@ pub fn evaluate_binary_op(
         },
         // Integer operations
         (
-            VmParsedValue::ValuePrimitive(ValuePrimitive::Integer(l)),
-            VmParsedValue::ValuePrimitive(ValuePrimitive::Integer(r)),
+            VmValue::ValuePrimitive(ValuePrimitive::Integer(l)),
+            VmValue::ValuePrimitive(ValuePrimitive::Integer(r)),
         ) => match operator {
-            BinaryOperator::Plus => Ok(VmParsedValue::ValuePrimitive(ValuePrimitive::Integer(l + r))),
-            BinaryOperator::Minus => Ok(VmParsedValue::ValuePrimitive(ValuePrimitive::Integer(l - r))),
-            BinaryOperator::Multiply => Ok(VmParsedValue::ValuePrimitive(ValuePrimitive::Integer(l * r))),
+            BinaryOperator::Plus => Ok(VmValue::ValuePrimitive(ValuePrimitive::Integer(l + r))),
+            BinaryOperator::Minus => Ok(VmValue::ValuePrimitive(ValuePrimitive::Integer(l - r))),
+            BinaryOperator::Multiply => Ok(VmValue::ValuePrimitive(ValuePrimitive::Integer(l * r))),
             BinaryOperator::Divide => {
                 if *r == BigInt::from(0) {
                     Err(VmErrorType::DivisionByZero)
                 } else {
-                    Ok(VmParsedValue::ValuePrimitive(ValuePrimitive::Integer(l / r)))
+                    Ok(VmValue::ValuePrimitive(ValuePrimitive::Integer(l / r)))
                 }
             }
             BinaryOperator::Modulo => {
                 if *r == BigInt::from(0) {
                     Err(VmErrorType::DivisionByZero)
                 } else {
-                    Ok(VmParsedValue::ValuePrimitive(ValuePrimitive::Integer(l % r)))
+                    Ok(VmValue::ValuePrimitive(ValuePrimitive::Integer(l % r)))
                 }
             }
-            BinaryOperator::Equal => Ok(VmParsedValue::ValuePrimitive(ValuePrimitive::Bool(l == r))),
-            BinaryOperator::NotEqual => Ok(VmParsedValue::ValuePrimitive(ValuePrimitive::Bool(l != r))),
-            BinaryOperator::Less => Ok(VmParsedValue::ValuePrimitive(ValuePrimitive::Bool(l < r))),
-            BinaryOperator::LessEqual => Ok(VmParsedValue::ValuePrimitive(ValuePrimitive::Bool(l <= r))),
-            BinaryOperator::Greater => Ok(VmParsedValue::ValuePrimitive(ValuePrimitive::Bool(l > r))),
+            BinaryOperator::Equal => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(l == r))),
+            BinaryOperator::NotEqual => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(l != r))),
+            BinaryOperator::Less => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(l < r))),
+            BinaryOperator::LessEqual => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(l <= r))),
+            BinaryOperator::Greater => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(l > r))),
             BinaryOperator::GreaterEqual => {
-                Ok(VmParsedValue::ValuePrimitive(ValuePrimitive::Bool(l >= r)))
+                Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(l >= r)))
             }
             _ => Err(VmErrorType::InvalidOperation(format!(
                 "Cannot apply {operator:?} to integer"
@@ -395,33 +401,33 @@ pub fn evaluate_binary_op(
         },
         // Float operations
         (
-            VmParsedValue::ValuePrimitive(ValuePrimitive::Float(l)),
-            VmParsedValue::ValuePrimitive(ValuePrimitive::Float(r)),
+            VmValue::ValuePrimitive(ValuePrimitive::Float(l)),
+            VmValue::ValuePrimitive(ValuePrimitive::Float(r)),
         ) => match operator {
-            BinaryOperator::Plus => Ok(VmParsedValue::ValuePrimitive(ValuePrimitive::Float(l + r))),
-            BinaryOperator::Minus => Ok(VmParsedValue::ValuePrimitive(ValuePrimitive::Float(l - r))),
-            BinaryOperator::Multiply => Ok(VmParsedValue::ValuePrimitive(ValuePrimitive::Float(l * r))),
+            BinaryOperator::Plus => Ok(VmValue::ValuePrimitive(ValuePrimitive::Float(l + r))),
+            BinaryOperator::Minus => Ok(VmValue::ValuePrimitive(ValuePrimitive::Float(l - r))),
+            BinaryOperator::Multiply => Ok(VmValue::ValuePrimitive(ValuePrimitive::Float(l * r))),
             BinaryOperator::Divide => {
                 if *r == BigRational::from(BigInt::from(0)) {
                     Err(VmErrorType::DivisionByZero)
                 } else {
-                    Ok(VmParsedValue::ValuePrimitive(ValuePrimitive::Float(l / r)))
+                    Ok(VmValue::ValuePrimitive(ValuePrimitive::Float(l / r)))
                 }
             }
             BinaryOperator::Modulo => {
                 if *r == BigRational::from(BigInt::from(0)) {
                     Err(VmErrorType::DivisionByZero)
                 } else {
-                    Ok(VmParsedValue::ValuePrimitive(ValuePrimitive::Float(l % r)))
+                    Ok(VmValue::ValuePrimitive(ValuePrimitive::Float(l % r)))
                 }
             }
-            BinaryOperator::Equal => Ok(VmParsedValue::ValuePrimitive(ValuePrimitive::Bool(l == r))),
-            BinaryOperator::NotEqual => Ok(VmParsedValue::ValuePrimitive(ValuePrimitive::Bool(l != r))),
-            BinaryOperator::Less => Ok(VmParsedValue::ValuePrimitive(ValuePrimitive::Bool(l < r))),
-            BinaryOperator::LessEqual => Ok(VmParsedValue::ValuePrimitive(ValuePrimitive::Bool(l <= r))),
-            BinaryOperator::Greater => Ok(VmParsedValue::ValuePrimitive(ValuePrimitive::Bool(l > r))),
+            BinaryOperator::Equal => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(l == r))),
+            BinaryOperator::NotEqual => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(l != r))),
+            BinaryOperator::Less => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(l < r))),
+            BinaryOperator::LessEqual => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(l <= r))),
+            BinaryOperator::Greater => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(l > r))),
             BinaryOperator::GreaterEqual => {
-                Ok(VmParsedValue::ValuePrimitive(ValuePrimitive::Bool(l >= r)))
+                Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(l >= r)))
             }
             _ => Err(VmErrorType::InvalidOperation(format!(
                 "Cannot apply {operator:?} to float"
@@ -429,7 +435,7 @@ pub fn evaluate_binary_op(
         },
 
         // Handle Product types - all operations return error for now
-        (VmParsedValue::StructValue(_), _) | (_, VmParsedValue::StructValue(_)) => Err(
+        (VmValue::StructValue(_), _) | (_, VmValue::StructValue(_)) => Err(
             VmErrorType::InvalidOperation("Product operations not yet implemented".to_string()),
         ),
 

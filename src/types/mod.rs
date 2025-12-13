@@ -22,7 +22,6 @@ pub enum CompTimeBuiltinType {
     Int,
     Float,
     Bool,
-    Usize,
     Type,
 }
 impl BuiltInType for CompTimeBuiltinType {}
@@ -84,7 +83,7 @@ impl From<CompTimeTypeGeneric<Self>> for UnifiedTypeDefinition {
 
 /// OptimizedTypeDefinition uses only TypeId references for efficient storage
 #[derive(Debug,Ord,PartialEq, PartialOrd,Hash,Eq,Clone)]
-pub struct OptimizedTypeDefinition(CompTimeTypeGeneric<TypeId>);
+pub struct OptimizedTypeDefinition(pub CompTimeTypeGeneric<TypeId>);
 impl OptimizedTypeDefinition {
     pub fn is_product(&self)->bool{
         self.0.as_product().is_some()
