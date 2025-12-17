@@ -1,18 +1,19 @@
 use std::collections::{HashMap, VecDeque};
 use std::fmt::{Debug, Display};
 
+use macros::generate_unchecked;
 use thiserror::Error;
 
-use crate::prelude::{ IndexPtr, SizedArray};
+use crate::prelude::{IndexPtr, SizedArray};
+use crate::vm::tree_walk::vm_value::{VmParsedValue, VmValueGeneralized};
 use crate::{
     ast::Identifier,
     types::{TypeContainer, TypeId},
-    vm::tree_walk::{VmErrorType, ParsedValueType, VmUnitType},
+    vm::tree_walk::{ParsedValueType, VmErrorType, VmUnit},
 };
-use crate::vm::tree_walk::vm_value::VmValue;
-type ExprResult=Result<VmValue,VmErrorType>;
-#[derive(Debug,Clone,Error)]
-enum Error{
+type ExprResult = Result<VmValueGeneralized, VmErrorType>;
+#[derive(Debug, Clone, Error)]
+enum Error {
     #[error("You can't mutate a constant variable")]
     MutatingConstant,
 }
@@ -23,7 +24,7 @@ enum VariableState {
     Immutable,
     Mutable,
 }
-
+pub type StackPtr=IndexPtr<VmUnit>;
 impl Display for VariableState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -34,7 +35,7 @@ impl Display for VariableState {
     }
 }
 
-pub type VmPtr=IndexPtr<VmUnitType>;
+pub type VmPtr = IndexPtr<VmUnit>;
 #[derive(Debug, Clone)]
 pub struct VariableData {
     pub type_id: TypeId,
@@ -43,7 +44,11 @@ pub struct VariableData {
 }
 
 impl VariableData {
-    fn new(type_id: TypeId, var_state: VariableState, stack_position: IndexPtr<VmUnitType>) -> Self {
+    fn new(
+        type_id: TypeId,
+        var_state: VariableState,
+        stack_position: IndexPtr<VmUnit>,
+    ) -> Self {
         Self {
             type_id,
             var_state,
@@ -51,8 +56,12 @@ impl VariableData {
         }
     }
 
-    fn get_ptr(&self) -> IndexPtr<VmUnitType> {
+    fn get_ptr(&self) -> StackPtr {
         self.stack_position
+    }
+
+    fn get_index(&self) -> usize {
+        self.get_ptr().as_index()
     }
 }
 
@@ -76,16 +85,16 @@ impl ScopeState {
 #[derive(Debug)]
 pub struct ScopeStack {
     scopes: VecDeque<ScopeState>,
-    stack: SizedArray<VmUnitType>,
+    stack: SizedArray<VmUnit>,
 }
 
 impl ScopeStack {
     /// Creates a new scope stack with global scope
     pub fn new() -> Self {
         let mut scopes = VecDeque::new();
-        let stack=SizedArray::default();
+        let stack = SizedArray::default();
         scopes.push_back(ScopeState::new(stack.len()));
-        Self { scopes,stack }
+        Self { scopes, stack }
     }
 
     pub fn create_scope(&mut self) {
@@ -105,30 +114,41 @@ impl ScopeStack {
     pub fn insert_variable(
         &mut self,
         identifier: Identifier,
-        value: VmValue,
+        value: VmParsedValue,
         type_container: &mut crate::types::TypeContainer,
     ) {
         let type_id = value.get_type_id_of_value(type_container);
-        self.insert_variable_with_type(identifier, value, type_id, VariableState::Immutable, type_container);
+        self.insert_variable_with_type(
+            identifier,
+            value,
+            type_id,
+            VariableState::Immutable,
+            type_container,
+        );
     }
 
     fn insert_variable_with_type(
         &mut self,
         identifier: Identifier,
-        value: VmValue,
+        value: VmParsedValue,
         type_id: TypeId,
         var_state: VariableState,
         type_container: &TypeContainer,
     ) {
         let stack_position = self.stack.len_as_ptr();
-        self.flatten_and_push(value, type_id,type_container);
+        self.flatten_and_push(value, type_id, type_container);
         let var_data = VariableData::new(type_id, var_state, stack_position);
         if let Some(current_scope) = self.scopes.back_mut() {
             current_scope.variables.insert(identifier, var_data);
         }
     }
 
-    fn flatten_and_push(&mut self, value: VmValue, of_type:TypeId,type_container: &TypeContainer) {
+    fn flatten_and_push(
+        &mut self,
+        value: VmParsedValue,
+        of_type: TypeId,
+        type_container: &TypeContainer,
+    ) {
         //TODO:I need to do somethinng for union type,example expanding it.
         let units = value.to_vm_units();
         for unit in units {
@@ -140,24 +160,33 @@ impl ScopeStack {
     pub fn insert_variable_check(
         &mut self,
         identifier: Identifier,
-        value: VmValue,
+        value: VmParsedValue,
         expected_type_id: TypeId,
         type_container: &mut crate::types::TypeContainer,
     ) -> Result<(), VmErrorType> {
         if !value.of_type(expected_type_id, type_container) {
-            return Err(VmErrorType::TypeMismatch("Value type does not match expected type"));
+            return Err(VmErrorType::TypeMismatch(
+                "Value type does not match expected type",
+            ));
         }
-        self.insert_variable_with_type(identifier, value, expected_type_id, VariableState::Immutable, type_container);
+        self.insert_variable_with_type(
+            identifier,
+            value,
+            expected_type_id,
+            VariableState::Immutable,
+            type_container,
+        );
         Ok(())
     }
 
-    pub fn set_value_from_index(
+    pub fn set_value_from_name(
         &mut self,
         identifier: &Identifier,
-        value: VmValue,
+        value: VmParsedValue,
         type_container: &mut TypeContainer,
     ) -> Result<(), VmErrorType> {
-        let var_data = self.get_variable_data(identifier)
+        let var_data = self
+            .get_variable_data(identifier)
             .ok_or_else(|| VmErrorType::UndefinedIdentifier(identifier.clone()))?;
         let expected_type_id = var_data.type_id;
         let value_type_id = value.get_type_id_of_value(type_container);
@@ -170,23 +199,25 @@ impl ScopeStack {
         self.overwrite_at_position(stack_position.as_index(), value, type_container);
         Ok(())
     }
-
-    fn overwrite_at_position(&mut self, position: usize, value: VmValue, type_container: &TypeContainer) {
-        let units = value.to_vm_units();
-        for (i, unit) in units.into_iter().enumerate() {
-            if let Some(slot) = self.stack.get_mut(position + i) {
-                *slot = unit;
-            }
-        }
-    }
-
-    pub fn set_value_from_name(
+    #[generate_unchecked]
+    fn overwrite_at_position_checked(
         &mut self,
-        identifier: &Identifier,
-        value: VmValue,
-        type_container: &mut TypeContainer,
+        position: usize,
+        value: VmParsedValue,
+        type_container: &TypeContainer,
     ) -> Result<(), VmErrorType> {
-        self.set_value_from_index(identifier, value, type_container)
+        let units = value.to_vm_units();
+        if self.stack.len() <= position + units.len() {
+            return Err(VmErrorType::InvalidStackAccess);
+        }
+        for (i, unit) in units.into_iter().enumerate() {
+            let slot = &mut self.stack[position + i];
+            *slot = unit;
+        }
+        Ok(())
+    }
+    fn set_value_from_ptr(&mut self,position: StackPtr,value:VmParsedValue,type_container: &TypeContainer)->Result<(),VmErrorType>{
+        self.overwrite_at_position_checked(position.as_index(), value, type_container)
     }
 
     pub fn get_variable_data(&self, identifier: &Identifier) -> Option<&VariableData> {
@@ -197,53 +228,26 @@ impl ScopeStack {
         }
         None
     }
-    pub fn get_index_from_name(&self,identifier: &Identifier)->Option<IndexPtr<VmUnitType>>{
+    pub fn get_index_from_name(&self, identifier: &Identifier) -> Option<IndexPtr<VmUnit>> {
         Some(self.get_variable_data(identifier)?.get_ptr())
     }
 
-    fn reconstruct_value(&self, identifier: &Identifier, type_container: &TypeContainer) -> Option<VmValue> {
-        let var_data = self.get_variable_data(identifier)?;
-        let type_id = var_data.type_id;
-        let position = var_data.stack_position;
-        self.reconstruct_from_type(position.as_index(), type_id, type_container)
-    }
-
-    fn reconstruct_from_type(&self, position: usize, type_id: TypeId, type_container: &TypeContainer) -> Option<VmValue> {
-        let optimized_type = type_container.get_type(&type_id)?;
-        match optimized_type.0{
-            crate::types::CompTimeTypeGeneric::Builtin(_) => {
-                let prim = self.stack.get(position)?.clone();
-                Some(VmValue::ValuePrimitive(prim))
-            }
-            crate::types::CompTimeTypeGeneric::Reference(_) => {
-                let prim = self.stack.get(position)?.clone();
-                Some(VmValue::ValuePrimitive(prim))
-            }
-            crate::types::CompTimeTypeGeneric::Product(fields) => {
-                let mut current_pos = position;
-                let mut struct_fields = std::collections::BTreeMap::new();
-                for (field_name, field_type_id) in fields {
-                    let field_value = self.reconstruct_from_type(current_pos, field_type_id, type_container)?;
-                    let field_size = type_container.get_metadata(&field_type_id)?.size;
-                    struct_fields.insert(field_name.clone(), field_value);
-                    current_pos += field_size;
-                }
-                Some(VmValue::StructValue(crate::vm::tree_walk::StructValue::new(struct_fields)))
-            }
-            crate::types::CompTimeTypeGeneric::Sum(_variants) => {
-                let prim = self.stack.get(position)?.clone();
-                Some(VmValue::ValuePrimitive(prim))
-            }
-        }
-    }
-
-    pub fn get_value_from_name(&self, identifier: &Identifier, type_container: &TypeContainer) -> Option<VmValue> {
-        self.reconstruct_value(identifier, type_container)
-    }
-
-    pub fn get_value_or_err(&self, identifier: &Identifier, type_container: &TypeContainer) -> ExprResult {
-        self.reconstruct_value(identifier, type_container)
-            .ok_or_else(|| VmErrorType::UndefinedIdentifier(identifier.clone()))
+    pub fn get_value_from_name(
+        &self,
+        identifier: &Identifier,
+        type_container: &TypeContainer,
+    ) -> ExprResult {
+        let variable_data = self
+            .get_variable_data(identifier)
+            .ok_or(VmErrorType::UndefinedIdentifier(identifier.clone()))?;
+        let type_id = variable_data.type_id;
+        let index = variable_data.get_index();
+        let size = type_container.get_metadata(&type_id).unwrap().size;
+        let slice = &self.stack[index..index + size];
+        Ok(VmValueGeneralized {
+            bits: slice.to_vec(),
+            r#type: type_id,
+        })
     }
 
     pub fn has_variable(&self, identifier: &Identifier) -> bool {
@@ -257,8 +261,16 @@ impl ScopeStack {
     fn current_scope(&self) -> &ScopeState {
         self.scopes.back().unwrap()
     }
-}
 
+    pub(crate) fn set_value_from_index(
+        &mut self,
+        ptr: StackPtr,
+        value: VmParsedValue,
+        type_container: &mut TypeContainer,
+    ) -> Result<(), VmErrorType> {
+        self.overwrite_at_position_checked(ptr.as_index(), value, type_container)
+    }
+}
 
 impl Default for ScopeStack {
     fn default() -> Self {
@@ -274,7 +286,11 @@ impl Display for ScopeStack {
         }
         writeln!(f, "  Scopes:")?;
         for (scope_idx, scope) in self.scopes.iter().enumerate() {
-            writeln!(f, "    Scope {scope_idx} (stack_size: {}): {:?}", scope.stack_size_at_creation, scope.variables)?;
+            writeln!(
+                f,
+                "    Scope {scope_idx} (stack_size: {}): {:?}",
+                scope.stack_size_at_creation, scope.variables
+            )?;
         }
         write!(f, "}}")?;
         Ok(())

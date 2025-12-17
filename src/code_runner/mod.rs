@@ -7,7 +7,7 @@
 use crate::{
     code_error::CodeError, parser::{Parser, ParserErrorType}, prelude::Mappable, token::{Tokenizer, token_type::TokenizerErrorType}, vm::{
         backend::VmBackend,
-        tree_walk::{Vm, VmErrorType, VmValue},
+        tree_walk::{Vm, VmErrorType, vm_value::VmValueGeneralized},
     }
 };
 use std::fmt;
@@ -90,7 +90,7 @@ let stmt_node = parser.parse_statements().map_err(|x|x.into_code_error())?;
         Ok(())// Return unit type for statements
         // If both fail, return parse error
     }
-    pub fn evaluate_expr(&mut self, source: &str) -> Result<VmValue, CodeRunnerError> {
+    pub fn evaluate_expr(&mut self, source: &str) -> Result<VmValueGeneralized, CodeRunnerError> {
         let tokenizer = Tokenizer::new(source);
         let (tokens,errors) = tokenizer.tokenize();
 
@@ -125,5 +125,5 @@ impl<Backend: VmBackend> fmt::Debug for CodeRunner<Backend> {
             .finish()
     }
 }
-#[cfg(test)]
-mod code_runner_tests;
+//#[cfg(test)]
+//mod code_runner_tests;

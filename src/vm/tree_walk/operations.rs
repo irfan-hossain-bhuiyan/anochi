@@ -1,6 +1,6 @@
 use crate::ast::{BinaryOperator, UnaryOperator};
 use crate::types::{CompTimeBuiltinType, CompTimeTypeGeneric, UnifiedTypeDefinition};
-use crate::vm::tree_walk::vm_value::{VmParsedValue, ValuePrimitive};
+use crate::vm::tree_walk::vm_value::{VmValueGeneralized, ValuePrimitive};
 use crate::vm::tree_walk::vm_error::VmErrorType;
 use num_bigint::BigInt;
 use num_rational::BigRational;
@@ -16,25 +16,25 @@ pub trait Evaluable: Sized {
     fn unary_op(op: &UnaryOperator, operand: Self) -> Result<Self, Self::Error>;
 }
 
-impl Evaluable for VmParsedValue {
+impl Evaluable for VmValueGeneralized {
     type Error = VmErrorType;
     
     fn bool_value(b: bool) -> Self {
-        VmParsedValue::ValuePrimitive(ValuePrimitive::Bool(b))
+        VmValueGeneralized::ValuePrimitive(ValuePrimitive::Bool(b))
     }
     
     fn int_value(i: BigInt) -> Self {
-        VmParsedValue::ValuePrimitive(ValuePrimitive::Integer(i))
+        VmValueGeneralized::ValuePrimitive(ValuePrimitive::Integer(i))
     }
     
     fn float_value(f: BigRational) -> Self {
-        VmParsedValue::ValuePrimitive(ValuePrimitive::Float(f))
+        VmValueGeneralized::ValuePrimitive(ValuePrimitive::Float(f))
     }
     
     fn binary_op(left: Self, op: &BinaryOperator, right: Self) -> Result<Self, Self::Error> {
         match (left, right) {
-            (VmParsedValue::ValuePrimitive(ValuePrimitive::Bool(l)), 
-             VmParsedValue::ValuePrimitive(ValuePrimitive::Bool(r))) => {
+            (VmValueGeneralized::ValuePrimitive(ValuePrimitive::Bool(l)), 
+             VmValueGeneralized::ValuePrimitive(ValuePrimitive::Bool(r))) => {
                 match op {
                     BinaryOperator::Equal => Ok(Self::bool_value(l == r)),
                     BinaryOperator::NotEqual => Ok(Self::bool_value(l != r)),
@@ -47,8 +47,8 @@ impl Evaluable for VmParsedValue {
                     _ => Err(VmErrorType::InvalidOperation(format!("Cannot apply {:?} to Bool", op)))
                 }
             }
-            (VmParsedValue::ValuePrimitive(ValuePrimitive::Integer(l)), 
-             VmParsedValue::ValuePrimitive(ValuePrimitive::Integer(r))) => {
+            (VmValueGeneralized::ValuePrimitive(ValuePrimitive::Integer(l)), 
+             VmValueGeneralized::ValuePrimitive(ValuePrimitive::Integer(r))) => {
                 match op {
                     BinaryOperator::Plus => Ok(Self::int_value(l + r)),
                     BinaryOperator::Minus => Ok(Self::int_value(l - r)),
@@ -76,8 +76,8 @@ impl Evaluable for VmParsedValue {
                     _ => Err(VmErrorType::InvalidOperation(format!("Cannot apply {:?} to integer", op)))
                 }
             }
-            (VmParsedValue::ValuePrimitive(ValuePrimitive::Float(l)), 
-             VmParsedValue::ValuePrimitive(ValuePrimitive::Float(r))) => {
+            (VmValueGeneralized::ValuePrimitive(ValuePrimitive::Float(l)), 
+             VmValueGeneralized::ValuePrimitive(ValuePrimitive::Float(r))) => {
                 match op {
                     BinaryOperator::Plus => Ok(Self::float_value(l + r)),
                     BinaryOperator::Minus => Ok(Self::float_value(l - r)),
@@ -105,7 +105,7 @@ impl Evaluable for VmParsedValue {
                     _ => Err(VmErrorType::InvalidOperation(format!("Cannot apply {:?} to float", op)))
                 }
             }
-            (VmParsedValue::StructValue(_), _) | (_, VmParsedValue::StructValue(_)) => {
+            (VmValueGeneralized::StructValue(_), _) | (_, VmValueGeneralized::StructValue(_)) => {
                 Err(VmErrorType::InvalidOperation("Product operations not yet implemented".to_string()))
             }
             _ => Err(VmErrorType::InvalidOperation("The operation is not implemented yet".into()))
@@ -114,16 +114,16 @@ impl Evaluable for VmParsedValue {
     
     fn unary_op(op: &UnaryOperator, operand: Self) -> Result<Self, Self::Error> {
         match (op, operand) {
-            (UnaryOperator::Minus, VmParsedValue::ValuePrimitive(ValuePrimitive::Integer(i))) => {
+            (UnaryOperator::Minus, VmValueGeneralized::ValuePrimitive(ValuePrimitive::Integer(i))) => {
                 Ok(Self::int_value(-i))
             }
-            (UnaryOperator::Minus, VmParsedValue::ValuePrimitive(ValuePrimitive::Float(f))) => {
+            (UnaryOperator::Minus, VmValueGeneralized::ValuePrimitive(ValuePrimitive::Float(f))) => {
                 Ok(Self::float_value(-f))
             }
-            (UnaryOperator::Not, VmParsedValue::ValuePrimitive(ValuePrimitive::Bool(b))) => {
+            (UnaryOperator::Not, VmValueGeneralized::ValuePrimitive(ValuePrimitive::Bool(b))) => {
                 Ok(Self::bool_value(!b))
             }
-            (_, VmParsedValue::StructValue(_)) => {
+            (_, VmValueGeneralized::StructValue(_)) => {
                 Err(VmErrorType::InvalidOperation("Product operations not yet implemented".to_string()))
             }
             _ => Err(VmErrorType::InvalidOperation(format!("Cannot apply {:?} to operand", op)))

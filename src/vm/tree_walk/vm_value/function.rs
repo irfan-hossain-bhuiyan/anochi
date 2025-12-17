@@ -22,7 +22,7 @@ impl VmFunc {
         body: StatementNode,
         type_container: &TypeContainer,
     ) -> Option<Self> {
-        if !type_container.get_type(&param)?.is_product() {
+        if type_container.get_type(&param)?.as_product().is_none() {
             return None;
         }
         Some(Self {

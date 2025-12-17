@@ -1,8 +1,8 @@
 use crate::ast::{BinaryOperator, Identifier, Literal, UnaryOperator};
 use crate::types::{
-    CompTimeBuiltinType, CompTimeTypeGeneric, TypeContainer, TypeDefinition, TypeGeneric, TypeId, UnifiedTypeDefinition
+    CompTimeBuiltinType, CompTimeTypeGeneric, TypeContainer, TypeDefinition, TypeId, UnifiedTypeDefinition
 };
-use crate::vm::tree_walk::VmUnitType;
+use crate::vm::tree_walk::VmUnit;
 use crate::vm::tree_walk::scope_stack::VmPtr;
 use crate::vm::tree_walk::vm_error::VmErrorType;
 use enum_as_inner::EnumAsInner;
@@ -22,7 +22,7 @@ pub trait ParsedValueType
 where Self:Sized{
     fn into_unified_type_definition(self) -> Option<UnifiedTypeDefinition>;
     fn get_type_of_value(&self) -> UnifiedTypeDefinition;
-    fn to_vm_units(self) -> Vec<crate::vm::tree_walk::VmUnitType>;
+    fn to_vm_units(self) -> Vec<VmUnit>;
     fn to_vm_value_generalized(self,type_container: &mut TypeContainer)->VmValueGeneralized{
         let type_id=self.get_type_id_of_value(type_container);
         VmValueGeneralized { bits: self.to_vm_units(), r#type: type_id }
@@ -78,13 +78,13 @@ impl ParsedValueType for ValuePrimitive {
         }
     }
 
-    fn to_vm_units(self) -> Vec<crate::vm::tree_walk::VmUnitType> {
+    fn to_vm_units(self) -> Vec<crate::vm::tree_walk::VmUnit> {
         match self {
-            ValuePrimitive::Bool(b) => vec![VmUnitType::Bool(b)],
-            ValuePrimitive::Integer(i) => vec![VmUnitType::Integer(i)],
-            ValuePrimitive::Float(f) => vec![VmUnitType::Float(f)],
+            ValuePrimitive::Bool(b) => vec![VmUnit::Bool(b)],
+            ValuePrimitive::Integer(i) => vec![VmUnit::Integer(i)],
+            ValuePrimitive::Float(f) => vec![VmUnit::Float(f)],
             ValuePrimitive::Reference(stack_pos, _) => {
-                vec![VmUnitType::Usize(stack_pos.as_index())]
+                vec![VmUnit::Usize(stack_pos.as_index())]
             }
         }
     }
@@ -111,6 +111,129 @@ impl ValuePrimitive {
 
     pub fn from_bigrational(value: BigRational) -> Self {
         Self::Float(value)
+    }
+
+    pub fn binary_op(
+        &self,
+        operator: &BinaryOperator,
+        right: &Self,
+    ) -> Result<Self, VmErrorType> {
+        match (self, right) {
+            // Bool operations
+            (
+                ValuePrimitive::Bool(l),
+                ValuePrimitive::Bool(r),
+            ) => match operator {
+                BinaryOperator::Equal => Ok(ValuePrimitive::Bool(l == r)),
+                BinaryOperator::NotEqual => Ok(ValuePrimitive::Bool(l != r)),
+                BinaryOperator::And => Ok(ValuePrimitive::Bool(*l && *r)),
+                BinaryOperator::Or => Ok(ValuePrimitive::Bool(*l || *r)),
+                BinaryOperator::Less => Ok(ValuePrimitive::Bool(!*l && *r)), // false < true
+                BinaryOperator::LessEqual => {
+                    Ok(ValuePrimitive::Bool(!*l || *r))
+                } // false <= true, true <= true
+                BinaryOperator::Greater => Ok(ValuePrimitive::Bool(*l && !*r)), // true > false
+                BinaryOperator::GreaterEqual => {
+                    Ok(ValuePrimitive::Bool(*l || !*r))
+                } // true >= false, true >= true
+                _ => Err(VmErrorType::InvalidOperation(format!(
+                    "Cannot apply {operator:?} to Bool"
+                ))),
+            },
+            // Integer operations
+            (
+                ValuePrimitive::Integer(l),
+                ValuePrimitive::Integer(r),
+            ) => match operator {
+                BinaryOperator::Plus => Ok(ValuePrimitive::Integer(l + r)),
+                BinaryOperator::Minus => Ok(ValuePrimitive::Integer(l - r)),
+                BinaryOperator::Multiply => Ok(ValuePrimitive::Integer(l * r)),
+                BinaryOperator::Divide => {
+                    if *r == BigInt::from(0) {
+                        Err(VmErrorType::DivisionByZero)
+                    } else {
+                        Ok(ValuePrimitive::Integer(l / r))
+                    }
+                }
+                BinaryOperator::Modulo => {
+                    if *r == BigInt::from(0) {
+                        Err(VmErrorType::DivisionByZero)
+                    } else {
+                        Ok(ValuePrimitive::Integer(l % r))
+                    }
+                }
+                BinaryOperator::Equal => Ok(ValuePrimitive::Bool(l == r)),
+                BinaryOperator::NotEqual => Ok(ValuePrimitive::Bool(l != r)),
+                BinaryOperator::Less => Ok(ValuePrimitive::Bool(l < r)),
+                BinaryOperator::LessEqual => Ok(ValuePrimitive::Bool(l <= r)),
+                BinaryOperator::Greater => Ok(ValuePrimitive::Bool(l > r)),
+                BinaryOperator::GreaterEqual => {
+                    Ok(ValuePrimitive::Bool(l >= r))
+                }
+                _ => Err(VmErrorType::InvalidOperation(format!(
+                    "Cannot apply {operator:?} to integer"
+                ))),
+            },
+            // Float operations
+            (
+                ValuePrimitive::Float(l),
+                ValuePrimitive::Float(r),
+            ) => match operator {
+                BinaryOperator::Plus => Ok(ValuePrimitive::Float(l + r)),
+                BinaryOperator::Minus => Ok(ValuePrimitive::Float(l - r)),
+                BinaryOperator::Multiply => Ok(ValuePrimitive::Float(l * r)),
+                BinaryOperator::Divide => {
+                    if *r == BigRational::from(BigInt::from(0)) {
+                        Err(VmErrorType::DivisionByZero)
+                    } else {
+                        Ok(ValuePrimitive::Float(l / r))
+                    }
+                }
+                BinaryOperator::Modulo => {
+                    if *r == BigRational::from(BigInt::from(0)) {
+                        Err(VmErrorType::DivisionByZero)
+                    } else {
+                        Ok(ValuePrimitive::Float(l % r))
+                    }
+                }
+                BinaryOperator::Equal => Ok(ValuePrimitive::Bool(l == r)),
+                BinaryOperator::NotEqual => Ok(ValuePrimitive::Bool(l != r)),
+                BinaryOperator::Less => Ok(ValuePrimitive::Bool(l < r)),
+                BinaryOperator::LessEqual => Ok(ValuePrimitive::Bool(l <= r)),
+                BinaryOperator::Greater => Ok(ValuePrimitive::Bool(l > r)),
+                BinaryOperator::GreaterEqual => {
+                    Ok(ValuePrimitive::Bool(l >= r))
+                }
+                _ => Err(VmErrorType::InvalidOperation(format!(
+                    "Cannot apply {operator:?} to float"
+                ))),
+            },
+
+            // Type mismatch for other combinations
+            _ => Err(VmErrorType::InvalidOperation(
+                "The operation is not implemented yet".into(),
+            )),
+        }
+    }
+
+    pub fn unary_op(
+        &self,
+        operator: &UnaryOperator,
+    ) -> Result<Self, VmErrorType> {
+        match (operator, self) {
+            (UnaryOperator::Minus, ValuePrimitive::Integer(i)) => {
+                Ok(ValuePrimitive::Integer(-i))
+            }
+            (UnaryOperator::Minus, ValuePrimitive::Float(f)) => {
+                Ok(ValuePrimitive::Float(-f))
+            }
+            (UnaryOperator::Not, ValuePrimitive::Bool(b)) => {
+                Ok(ValuePrimitive::Bool(!b))
+            }
+            _ => Err(VmErrorType::InvalidOperation(format!(
+                "Cannot apply {operator:?} to {self:?}",
+            ))),
+        }
     }
 }
 
@@ -142,18 +265,18 @@ impl From<Literal> for ValuePrimitive {
 }
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct StructValue {
-    value: BTreeMap<Identifier, VmValue>,
+    value: BTreeMap<Identifier, VmParsedValue>,
 }
 
 impl StructValue {
-    pub fn new(product: BTreeMap<Identifier, VmValue>) -> Self {
+    pub fn new(product: BTreeMap<Identifier, VmParsedValue>) -> Self {
         Self { value: product }
     }
 }
 
 impl IntoIterator for StructValue {
-    type Item = (Identifier, VmValue);
-    type IntoIter = std::collections::btree_map::IntoIter<Identifier, VmValue>;
+    type Item = (Identifier, VmParsedValue);
+    type IntoIter = std::collections::btree_map::IntoIter<Identifier, VmParsedValue>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.value.into_iter()
@@ -165,7 +288,7 @@ impl Deref for StructValue {
         &self.value
     }
 
-    type Target = BTreeMap<Identifier, VmValue>;
+    type Target = BTreeMap<Identifier, VmParsedValue>;
 }
 
 impl ParsedValueType for StructValue {
@@ -182,7 +305,7 @@ impl ParsedValueType for StructValue {
 
     fn get_type_of_value(&self) -> UnifiedTypeDefinition {
         for field_value in self.values() {
-            if let VmValue::TypeId(_) = field_value {
+            if let VmParsedValue::TypeId(_) = field_value {
                 return UnifiedTypeDefinition::builtin(CompTimeBuiltinType::Type);
             }
         }
@@ -194,7 +317,7 @@ impl ParsedValueType for StructValue {
         UnifiedTypeDefinition::TypeDef(CompTimeTypeGeneric::Product(type_fields))
     }
 
-    fn to_vm_units(self) -> Vec<crate::vm::tree_walk::VmUnitType> {
+    fn to_vm_units(self) -> Vec<crate::vm::tree_walk::VmUnit> {
         let mut units = Vec::new();
         for (_field_name, field_value) in self {
             units.extend(field_value.to_vm_units());
@@ -218,8 +341,8 @@ impl ParsedValueType for TypeId {
         UnifiedTypeDefinition::builtin(CompTimeBuiltinType::Type)
     }
 
-    fn to_vm_units(self) -> Vec<crate::vm::tree_walk::VmUnitType> {
-        let value=VmUnitType::HashValue(self.as_hash_value());
+    fn to_vm_units(self) -> Vec<crate::vm::tree_walk::VmUnit> {
+        let value=VmUnit::HashValue(self.as_hash_value());
         vec![value]
     }
 }
@@ -233,26 +356,84 @@ impl ParsedValueType for FuncId {
         UnifiedTypeDefinition::builtin(CompTimeBuiltinType::Type)
     }
 
-    fn to_vm_units(self) -> Vec<crate::vm::tree_walk::VmUnitType> {
+    fn to_vm_units(self) -> Vec<crate::vm::tree_walk::VmUnit> {
         todo!()
         //vec![crate::vm::tree_walk::VmUnitType::Usize()]
     }
 }
 #[enum_dispatch(ParsedValueType)]
 #[derive(Debug, Clone, PartialEq, EnumAsInner)]
-pub enum VmValue {
+pub enum VmParsedValue {
     ValuePrimitive,
     StructValue,
     TypeId,
     FuncId,
 }
 
-struct VmValueGeneralized{
-    bits:Vec<VmUnitType>,
-    r#type:TypeId,
+pub struct VmValueGeneralized{
+    pub bits:Vec<VmUnit>,
+    pub r#type:TypeId,
 }
 
-impl Display for VmValue {
+impl VmValueGeneralized {
+    pub fn from_parsed_value(parsed: VmParsedValue, type_container: &mut TypeContainer) -> Self {
+        parsed.to_vm_value_generalized(type_container)
+    }
+    
+    pub fn try_to_primitive(&self, type_container: &TypeContainer) -> Option<ValuePrimitive> {
+        if self.bits.len() != 1 {
+            return None;
+        }
+        
+        match &self.bits[0] {
+            VmUnit::Bool(b) => Some(ValuePrimitive::Bool(*b)),
+            VmUnit::Integer(i) => Some(ValuePrimitive::Integer(i.clone())),
+            VmUnit::Float(f) => Some(ValuePrimitive::Float(f.clone())),
+            VmUnit::Usize(ptr_index) => {
+                let ptr = VmPtr::from_index(*ptr_index);
+                Some(ValuePrimitive::Reference(ptr, self.r#type.clone()))
+            }
+            VmUnit::HashValue(_) => None,
+        }
+    }
+    
+    pub fn binary_op(
+        left: Self,
+        operator: &BinaryOperator,
+        right: Self,
+        type_container: &TypeContainer,
+    ) -> Result<Self, VmErrorType> {
+        let left_prim = left.try_to_primitive(type_container)
+            .ok_or_else(|| VmErrorType::InvalidOperation("Cannot convert left operand to primitive".to_string()))?;
+        let right_prim = right.try_to_primitive(type_container)
+            .ok_or_else(|| VmErrorType::InvalidOperation("Cannot convert right operand to primitive".to_string()))?;
+        
+        let result_prim = left_prim.binary_op(operator, &right_prim)?;
+        
+        // Convert back to VmValueGeneralized
+        let mut temp_container = type_container.clone();
+        let result_parsed = VmParsedValue::ValuePrimitive(result_prim);
+        Ok(result_parsed.to_vm_value_generalized(&mut temp_container))
+    }
+    
+    pub fn unary_op(
+        operand: Self,
+        operator: &UnaryOperator,
+        type_container: &TypeContainer,
+    ) -> Result<Self, VmErrorType> {
+        let operand_prim = operand.try_to_primitive(type_container)
+            .ok_or_else(|| VmErrorType::InvalidOperation("Cannot convert operand to primitive".to_string()))?;
+        
+        let result_prim = operand_prim.unary_op(operator)?;
+        
+        // Convert back to VmValueGeneralized
+        let mut temp_container = type_container.clone();
+        let result_parsed = VmParsedValue::ValuePrimitive(result_prim);
+        Ok(result_parsed.to_vm_value_generalized(&mut temp_container))
+    }
+}
+
+impl Display for VmParsedValue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::ValuePrimitive(x) => Display::fmt(x, f),
@@ -276,172 +457,15 @@ impl Display for VmValue {
 }
 
 
-impl VmValue {
+impl VmParsedValue {
     pub fn create_unit() -> Self {
         Self::StructValue(StructValue::default())
     }
 
     pub fn is_null(&self) -> bool {
-        matches!(self, VmValue::StructValue(x) if x.is_empty())
+        matches!(self, VmParsedValue::StructValue(x) if x.is_empty())
     }
     
 }
 
-/// Evaluates a unary operation on a VmParsedValue.
-///
-/// This is a standalone function that handles negation and logical NOT operations
-/// on numeric and boolean values. It doesn't require any VM state and can be used independently.
-///
-/// # Arguments
-///
-/// * `operator` - The unary operator
-/// * `operand` - The operand value
-///
-/// # Returns
-///
-/// A `VmResult` containing the computed result or an error.
-pub fn evaluate_unary_op(
-    operator: &UnaryOperator,
-    operand: &VmValue,
-) -> Result<VmValue, VmErrorType> {
-    match (operator, operand) {
-        (UnaryOperator::Minus, VmValue::ValuePrimitive(ValuePrimitive::Integer(i))) => {
-            Ok(VmValue::ValuePrimitive(ValuePrimitive::Integer(-i)))
-        }
-        (UnaryOperator::Minus, VmValue::ValuePrimitive(ValuePrimitive::Float(f))) => {
-            Ok(VmValue::ValuePrimitive(ValuePrimitive::Float(-f)))
-        }
-        (UnaryOperator::Not, VmValue::ValuePrimitive(ValuePrimitive::Bool(b))) => {
-            Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(!b)))
-        }
-        (_, VmValue::StructValue(_)) => Err(VmErrorType::InvalidOperation(
-            "Product operations not yet implemented".to_string(),
-        )),
-        _ => Err(VmErrorType::InvalidOperation(format!(
-            "Cannot apply {operator:?} to {operand:?}",
-        ))),
-    }
-}
 
-/// Evaluates a binary operation between two VmParsedValues.
-///
-/// This is a standalone function that handles arithmetic, comparison, and logical
-/// operations with type coercion between integers and floats when necessary.
-/// It doesn't require any VM state and can be used independently.
-///
-/// # Arguments
-///
-/// * `left` - The left operand value
-/// * `operator` - The binary operator
-/// * `right` - The right operand value
-///
-/// # Returns
-///
-/// A `VmResult` containing the computed result or an error.
-pub fn evaluate_binary_op(
-    left: &VmValue,
-    operator: &BinaryOperator,
-    right: &VmValue,
-) -> Result<VmValue, VmErrorType> {
-    match (left, right) {
-        // Bool operations
-        (
-            VmValue::ValuePrimitive(ValuePrimitive::Bool(l)),
-            VmValue::ValuePrimitive(ValuePrimitive::Bool(r)),
-        ) => match operator {
-            BinaryOperator::Equal => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(l == r))),
-            BinaryOperator::NotEqual => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(l != r))),
-            BinaryOperator::And => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(*l && *r))),
-            BinaryOperator::Or => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(*l || *r))),
-            BinaryOperator::Less => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(!*l && *r))), // false < true
-            BinaryOperator::LessEqual => {
-                Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(!*l || *r)))
-            } // false <= true, true <= true
-            BinaryOperator::Greater => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(*l && !*r))), // true > false
-            BinaryOperator::GreaterEqual => {
-                Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(*l || !*r)))
-            } // true >= false, true >= true
-            _ => Err(VmErrorType::InvalidOperation(format!(
-                "Cannot apply {operator:?} to Bool"
-            ))),
-        },
-        // Integer operations
-        (
-            VmValue::ValuePrimitive(ValuePrimitive::Integer(l)),
-            VmValue::ValuePrimitive(ValuePrimitive::Integer(r)),
-        ) => match operator {
-            BinaryOperator::Plus => Ok(VmValue::ValuePrimitive(ValuePrimitive::Integer(l + r))),
-            BinaryOperator::Minus => Ok(VmValue::ValuePrimitive(ValuePrimitive::Integer(l - r))),
-            BinaryOperator::Multiply => Ok(VmValue::ValuePrimitive(ValuePrimitive::Integer(l * r))),
-            BinaryOperator::Divide => {
-                if *r == BigInt::from(0) {
-                    Err(VmErrorType::DivisionByZero)
-                } else {
-                    Ok(VmValue::ValuePrimitive(ValuePrimitive::Integer(l / r)))
-                }
-            }
-            BinaryOperator::Modulo => {
-                if *r == BigInt::from(0) {
-                    Err(VmErrorType::DivisionByZero)
-                } else {
-                    Ok(VmValue::ValuePrimitive(ValuePrimitive::Integer(l % r)))
-                }
-            }
-            BinaryOperator::Equal => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(l == r))),
-            BinaryOperator::NotEqual => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(l != r))),
-            BinaryOperator::Less => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(l < r))),
-            BinaryOperator::LessEqual => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(l <= r))),
-            BinaryOperator::Greater => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(l > r))),
-            BinaryOperator::GreaterEqual => {
-                Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(l >= r)))
-            }
-            _ => Err(VmErrorType::InvalidOperation(format!(
-                "Cannot apply {operator:?} to integer"
-            ))),
-        },
-        // Float operations
-        (
-            VmValue::ValuePrimitive(ValuePrimitive::Float(l)),
-            VmValue::ValuePrimitive(ValuePrimitive::Float(r)),
-        ) => match operator {
-            BinaryOperator::Plus => Ok(VmValue::ValuePrimitive(ValuePrimitive::Float(l + r))),
-            BinaryOperator::Minus => Ok(VmValue::ValuePrimitive(ValuePrimitive::Float(l - r))),
-            BinaryOperator::Multiply => Ok(VmValue::ValuePrimitive(ValuePrimitive::Float(l * r))),
-            BinaryOperator::Divide => {
-                if *r == BigRational::from(BigInt::from(0)) {
-                    Err(VmErrorType::DivisionByZero)
-                } else {
-                    Ok(VmValue::ValuePrimitive(ValuePrimitive::Float(l / r)))
-                }
-            }
-            BinaryOperator::Modulo => {
-                if *r == BigRational::from(BigInt::from(0)) {
-                    Err(VmErrorType::DivisionByZero)
-                } else {
-                    Ok(VmValue::ValuePrimitive(ValuePrimitive::Float(l % r)))
-                }
-            }
-            BinaryOperator::Equal => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(l == r))),
-            BinaryOperator::NotEqual => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(l != r))),
-            BinaryOperator::Less => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(l < r))),
-            BinaryOperator::LessEqual => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(l <= r))),
-            BinaryOperator::Greater => Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(l > r))),
-            BinaryOperator::GreaterEqual => {
-                Ok(VmValue::ValuePrimitive(ValuePrimitive::Bool(l >= r)))
-            }
-            _ => Err(VmErrorType::InvalidOperation(format!(
-                "Cannot apply {operator:?} to float"
-            ))),
-        },
-
-        // Handle Product types - all operations return error for now
-        (VmValue::StructValue(_), _) | (_, VmValue::StructValue(_)) => Err(
-            VmErrorType::InvalidOperation("Product operations not yet implemented".to_string()),
-        ),
-
-        // Type mismatch for other combinations
-        _ => Err(VmErrorType::InvalidOperation(
-            "The operation is not implemented yet".into(),
-        )),
-    }
-}

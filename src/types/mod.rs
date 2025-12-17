@@ -10,11 +10,11 @@ use crate::prelude::{HashCons, Mappable};
 use crate::{ast::Identifier, prelude::HashPtr};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 pub mod type_def;
+use derive_more::Deref;
 use enum_as_inner::EnumAsInner;
 pub use type_def::TypeDefinition;
 
-
-trait BuiltInType{}
+trait BuiltInType {}
 /// Represents primitive types that are built into the type system.
 /// These types are pre-registered in the TypeContainer and cannot be user-defined.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -23,6 +23,7 @@ pub enum CompTimeBuiltinType {
     Float,
     Bool,
     Type,
+    Usize,
 }
 impl BuiltInType for CompTimeBuiltinType {}
 
@@ -40,15 +41,15 @@ pub struct VmTypeMetaData {
 }
 
 pub type TypeId = HashPtr<OptimizedTypeDefinition>;
-impl TypeId{
-    pub fn to_type_def(&self,container:&TypeContainer)->Option<TypeDefinition>{
+impl TypeId {
+    pub fn to_type_def(&self, container: &TypeContainer) -> Option<TypeDefinition> {
         container.get_type_def(self)
     }
 }
 
 /// Generic type container that can hold product types, sum types, and builtins
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord,EnumAsInner)]
-pub enum TypeGeneric<T,B:BuiltInType> {
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, EnumAsInner)]
+pub enum TypeGeneric<T, B: BuiltInType> {
     /// Product type: a collection of named fields (struct-like).
     /// Fields are stored as a BTreeMap mapping field names to their types.
     Product(BTreeMap<Identifier, T>),
@@ -60,7 +61,7 @@ pub enum TypeGeneric<T,B:BuiltInType> {
     /// Reference type: a pointer to another type
     Reference(Box<T>),
 }
-pub type CompTimeTypeGeneric<T>=TypeGeneric<T,CompTimeBuiltinType>;
+pub type CompTimeTypeGeneric<T> = TypeGeneric<T, CompTimeBuiltinType>;
 
 /// UnifiedTypeDefinition is the main type that can contain both direct types and references
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -81,15 +82,9 @@ impl From<CompTimeTypeGeneric<Self>> for UnifiedTypeDefinition {
     }
 }
 
-/// OptimizedTypeDefinition uses only TypeId references for efficient storage
-#[derive(Debug,Ord,PartialEq, PartialOrd,Hash,Eq,Clone)]
-pub struct OptimizedTypeDefinition(pub CompTimeTypeGeneric<TypeId>);
-impl OptimizedTypeDefinition {
-    pub fn is_product(&self)->bool{
-        self.0.as_product().is_some()
-    }
-}
-
+/// Never remove the newtype,else you are gonna get circular type
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Deref)]
+pub struct OptimizedTypeDefinition(CompTimeTypeGeneric<TypeId>);
 
 /// TypeContainer provides optimization and deduplication for types.
 /// It stores TypeDefinitions and returns TypeIds for comparison and retrieval.
@@ -121,11 +116,11 @@ impl TypeContainer {
 
     /// Store a UnifiedTypeDefinition by converting to optimized form and return its TypeId
     pub fn store_unified_type(&mut self, unified_def: UnifiedTypeDefinition) -> TypeId {
-        let optimized:OptimizedTypeDefinition = match unified_def{
-            UnifiedTypeDefinition::TypeId(x)=>return x,
-            UnifiedTypeDefinition::TypeDef(x)=> OptimizedTypeDefinition(x.inner_map(&mut |x|self.store_unified_type(x)))
+        let optimized = match unified_def {
+            UnifiedTypeDefinition::TypeId(x) => return x,
+            UnifiedTypeDefinition::TypeDef(x) => x.inner_map(&mut |x| self.store_unified_type(x)),
         };
-        self.store_type(optimized)
+        self.store_type(OptimizedTypeDefinition(optimized))
     }
     pub fn get_type(&self, hash_ptr: &TypeId) -> Option<&OptimizedTypeDefinition> {
         self.storage.get(hash_ptr)
@@ -142,7 +137,7 @@ impl TypeContainer {
     }
 
     fn store_type_def(&mut self, type1: TypeDefinition) -> TypeId {
-        let optimized=type1.into_optimized(self);
+        let optimized = type1.into_optimized(self);
         self.store_type(optimized)
     }
 }
@@ -154,27 +149,30 @@ impl Default for TypeContainer {
 }
 
 // Implementation of Mappable trait for TypeGeneric
-impl<T, U:Ord> Mappable<T, U> for CompTimeTypeGeneric<T> {
+impl<T, U: Ord> Mappable<T, U> for CompTimeTypeGeneric<T> {
     type Mapped = CompTimeTypeGeneric<U>;
-    fn inner_map<F>(self, f:&mut F) -> Self::Mapped
+    fn inner_map<F>(self, f: &mut F) -> Self::Mapped
     where
         F: FnMut(T) -> U,
     {
         match self {
-            CompTimeTypeGeneric::Product(fields) => CompTimeTypeGeneric::Product(fields.inner_map(f)),
-            
+            CompTimeTypeGeneric::Product(fields) => {
+                CompTimeTypeGeneric::Product(fields.inner_map(f))
+            }
+
             CompTimeTypeGeneric::Sum(variants) => CompTimeTypeGeneric::Sum(variants.inner_map(f)),
-            
-            CompTimeTypeGeneric::Reference(inner) => CompTimeTypeGeneric::Reference(Box::new(f(*inner))),
+
+            CompTimeTypeGeneric::Reference(inner) => {
+                CompTimeTypeGeneric::Reference(Box::new(f(*inner)))
+            }
             CompTimeTypeGeneric::Builtin(kind) => CompTimeTypeGeneric::Builtin(kind),
         }
     }
 }
 
-
 // Implementation for UnifiedTypeDefinition
 impl UnifiedTypeDefinition {
-    pub fn reference(r#type:Self)->Self{
+    pub fn reference(r#type: Self) -> Self {
         Self::TypeDef(CompTimeTypeGeneric::Reference(Box::new(r#type)))
     }
     pub fn product(fields: BTreeMap<Identifier, Self>) -> Self {
@@ -193,7 +191,7 @@ impl UnifiedTypeDefinition {
         Self::TypeId(id)
     }
 
-    pub(crate) fn get_id(self,container:&mut TypeContainer) -> TypeId{
+    pub(crate) fn get_id(self, container: &mut TypeContainer) -> TypeId {
         container.store_unified_type(self)
     }
 
@@ -213,10 +211,6 @@ impl UnifiedTypeDefinition {
 
 // Implementation for OptimizedTypeDefinition
 impl OptimizedTypeDefinition {
-    pub fn new(type_generic: CompTimeTypeGeneric<TypeId>) -> Self {
-        Self(type_generic)
-    }
-
     pub fn calculate_metadata(&self, container: &TypeContainer) -> VmTypeMetaData {
         match &self.0 {
             CompTimeTypeGeneric::Builtin(_) => VmTypeMetaData {
@@ -230,15 +224,16 @@ impl OptimizedTypeDefinition {
             CompTimeTypeGeneric::Product(fields) => {
                 let mut offset = 0;
                 let mut field_offsets = HashMap::new();
-                
+
                 for (field_name, type_id) in fields {
                     field_offsets.insert(field_name.clone(), offset);
-                    let field_size = container.get_metadata(type_id)
+                    let field_size = container
+                        .get_metadata(&type_id)
                         .map(|meta| meta.size)
                         .unwrap_or(0);
                     offset += field_size;
                 }
-                
+
                 VmTypeMetaData {
                     size: offset,
                     layout: TypeLayout::Product(field_offsets),
@@ -248,17 +243,18 @@ impl OptimizedTypeDefinition {
                 let mut tag_index = 0;
                 let mut variant_tags = HashMap::new();
                 let mut max_size = 0;
-                
+
                 for variant_id in variants {
                     variant_tags.insert(variant_id.clone(), tag_index);
                     tag_index += 1;
-                    
-                    let variant_size = container.get_metadata(variant_id)
+
+                    let variant_size = container
+                        .get_metadata(&variant_id)
                         .map(|meta| meta.size)
                         .unwrap_or(0);
                     max_size = max_size.max(variant_size);
                 }
-                
+
                 VmTypeMetaData {
                     size: max_size + 1,
                     layout: TypeLayout::Sum(variant_tags),
@@ -268,7 +264,6 @@ impl OptimizedTypeDefinition {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -276,19 +271,21 @@ mod tests {
     #[test]
     fn test_reference_type_cycle() {
         let mut container = TypeContainer::new();
-        
+
         // Create i64 type
         let i64_def = UnifiedTypeDefinition::builtin(CompTimeBuiltinType::Int);
-        
+
         // Create reference to i64
         let ref_def = UnifiedTypeDefinition::reference(i64_def);
-        
+
         // Store in container
         let type_id = container.store_unified_type(ref_def);
-        
+
         // Retrieve back as TypeDefinition
-        let retrieved_def = container.get_type_def(&type_id).expect("Should retrieve type");
-        
+        let retrieved_def = container
+            .get_type_def(&type_id)
+            .expect("Should retrieve type");
+
         // Verify it is a reference to i64
         match retrieved_def.inner() {
             CompTimeTypeGeneric::Reference(inner) => {
@@ -298,4 +295,3 @@ mod tests {
         }
     }
 }
-

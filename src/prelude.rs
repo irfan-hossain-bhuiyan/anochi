@@ -8,6 +8,7 @@ use std::ops::{Deref, DerefMut, Index, IndexMut};
 
 use enum_dispatch::enum_dispatch;
 use macros::generate_unchecked;
+
 pub struct ZeroSizePopError;
 /// Type alias for hash values - can be easily changed to u128 or larger in the future
 pub type HashValue = u64;
@@ -16,11 +17,31 @@ pub type HashValue = u64;
 /// to store objects and detect duplicates. Each push operation returns a hash that
 /// serves as a pointer to the object, enabling O(1) access and deduplication.
 /// Type-safe hash pointer for HashCons
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug,Hash)]
 pub struct HashPtr<T: ?Sized> {
     hash: HashValue,
     _marker: std::marker::PhantomData<T>,
 }
+impl<T:?Sized> PartialEq for HashPtr<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.hash == other.hash
+    }
+}
+impl<T:?Sized> Eq for HashPtr<T>{}
+impl<T:?Sized> Ord for HashPtr<T>{
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.hash.cmp(&other.hash)
+    }
+}
+impl<T:?Sized> PartialOrd for HashPtr<T> {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.hash.partial_cmp(&other.hash)
+    }
+}
+// PartialOrd returns Option<cmp::Ordering>,Like in partial ordering you can't guarentee.So Option
+// And Ord is the super from.
+
+
 
 impl<T> HashPtr<T> {
     pub fn as_hash_value(self) -> HashValue {
@@ -421,7 +442,7 @@ impl<T, const MAX_SIZE: usize> SizedArray<T, MAX_SIZE> {
         self.size
     }
 
-    pub(crate) fn len_as_ptr(&self) -> IndexPtr<crate::vm::tree_walk::VmUnitType> {
+    pub(crate) fn len_as_ptr(&self) -> IndexPtr<crate::vm::tree_walk::VmUnit> {
         IndexPtr { index: self.len(), _marker: PhantomData::default() }
     }
 }

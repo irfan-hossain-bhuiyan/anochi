@@ -1,6 +1,6 @@
 use super::*;
 use crate::ast::{Statement};
-use crate::vm::tree_walk::vm_value::{ValuePrimitive, ParsedValueType, VmValue};
+use crate::vm::tree_walk::vm_value::{ValuePrimitive, ParsedValueType, VmParsedValue};
 use crate::vm::tree_walk::vm_error::{VmError, VmErrorType};
 use crate::vm::tree_walk::evaluation::{evaluate_expr, get_reference};
 
@@ -52,7 +52,7 @@ pub(super) fn execute_statement<Backend: VmBackend>(
         }
         Statement::StatementBlock(stmtblock) => vm.run_block(&stmtblock),
         Statement::If { condition, on_true } => {
-            let VmValue::ValuePrimitive(ValuePrimitive::Bool(x)) =
+            let VmParsedValue::ValuePrimitive(ValuePrimitive::Bool(x)) =
                 evaluate_expr(vm,condition)?
             else {
                 return Err(map_err(VmErrorType::TypeMismatch(
@@ -70,7 +70,7 @@ pub(super) fn execute_statement<Backend: VmBackend>(
             on_true,
             on_false,
         } => {
-            let VmValue::ValuePrimitive(ValuePrimitive::Bool(x)) =
+            let VmParsedValue::ValuePrimitive(ValuePrimitive::Bool(x)) =
                 evaluate_expr(vm,condition)?
             else {
                 return Err(map_err(VmErrorType::TypeMismatch(
@@ -114,7 +114,7 @@ pub(super) fn execute_statement<Backend: VmBackend>(
         Statement::Return(x)=>{
             let return_value=match x {
                 Some(value)=>evaluate_expr(vm,value)?,
-                None=>VmValue::create_unit(),
+                None=>VmParsedValue::create_unit(),
             };
             Ok(StatementEvent::Return(return_value))
         }

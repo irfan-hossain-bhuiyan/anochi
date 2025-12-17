@@ -17,8 +17,6 @@ pub enum VmErrorType {
     /// Invalid operation error
     #[error("Invalid operation: {0}")]
     InvalidOperation(String),
-    #[error("Unsupproted Operation {0:?}")]
-    Unsupported(String),
     #[error("Error for that are not supported yet.")]
     InvalidTypeDefination,
     #[error("Having same name in scope")]
@@ -27,6 +25,8 @@ pub enum VmErrorType {
     CallingNonFunc,
     #[error("Function input parameter is not struct.")]
     FuncInvalidInput,
+    #[error("Accessing index of stack,that is invalid.")]
+    InvalidStackAccess,
 }
 pub type VmError=CodeError<VmErrorType>;
 impl crate::code_error::CodeErrorType for VmErrorType {}

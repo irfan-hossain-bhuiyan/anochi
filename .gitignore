@@ -1,5 +1,4 @@
 /target
 /docs
-/.DEBUG_TESTS_SUMMARY.md
-/.todo.md
-/.check_output.txt
+/DEBUG_TESTS_SUMMARY.md
+/check_output.txt

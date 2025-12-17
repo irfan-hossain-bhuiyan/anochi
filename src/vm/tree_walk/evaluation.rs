@@ -1,17 +1,16 @@
 use super::*;
 use crate::ast::{Expression, CodeMetaData, Literal, UnaryOperator};
-use crate::vm::tree_walk::vm_value::{self, ValuePrimitive, ParsedValueType, VmValue};
+use crate::vm::tree_walk::vm_value::{self, ValuePrimitive, ParsedValueType, VmParsedValue};
 use crate::ast::expression::ExprNodeGeneric;
 use crate::vm::tree_walk::vm_error::{VmError, VmErrorType};
 use crate::prelude::IndexPtr;
-use crate::types::UnifiedTypeDefinition;
+use crate::types::{UnifiedTypeDefinition};
 use std::collections::{BTreeMap, BTreeSet};
-use crate::vm::tree_walk::scope_stack::VariableData;
 
 pub(super) fn get_reference<Backend: VmBackend>(
     vm: &mut Vm<Backend>,
     expression_node: &ExprNodeGeneric<CodeMetaData>,
-) -> Result<IndexPtr<VmUnitType>, VmError> {
+) -> Result<IndexPtr<VmUnit>, VmError> {
     let node_data = expression_node.data().get_position().clone();
     let map_err = |e| VmError::new(e, node_data.clone());
     let expression = &expression_node.exp;
@@ -23,7 +22,7 @@ pub(super) fn get_reference<Backend: VmBackend>(
         }
         Expression::Unary { operator: UnaryOperator::Deref, operand } => {
             let value = evaluate_expr(vm, operand)?;
-            if let VmValue::ValuePrimitive(ValuePrimitive::Reference(ptr, _)) = value {
+            if let VmParsedValue::ValuePrimitive(ValuePrimitive::Reference(ptr, _)) = value {
                 Ok(ptr)
             } else {
                 Err(map_err(VmErrorType::TypeMismatch(
@@ -67,11 +66,9 @@ pub(super) fn type_evaluation<Backend: VmBackend>(
                 Ok(vm.types.store_unified_type(type_def))
             }
             Literal::String(_) => {
-                Err(map_err(VmErrorType::Unsupported(
-                    "String literals not yet supported".to_string(),
-                )))
+                unimplemented!()
             }
-        },
+        }
         Expression::Binary { left, operator, right } => {
             let left_type = type_evaluation(vm, left)?;
             let right_type = type_evaluation(vm, right)?;
@@ -87,20 +84,18 @@ pub(super) fn type_evaluation<Backend: VmBackend>(
         Expression::Unary { operator, operand } => match operator {
             UnaryOperator::Ref => {
                 let operand_type = type_evaluation(vm, operand)?;
-                let type_def = UnifiedTypeDefinition::builtin(crate::types::CompTimeBuiltinType::Usize);
+                let type_def=UnifiedTypeDefinition::reference(UnifiedTypeDefinition::TypeId(operand_type));
                 Ok(vm.types.store_unified_type(type_def))
             }
             UnaryOperator::Deref => {
                 let _operand_type = type_evaluation(vm, operand)?;
-                Err(map_err(VmErrorType::Unsupported(
-                    "Dereference type checking not yet implemented".to_string(),
-                )))
+                unimplemented!()
             }
             _ => {
                 let operand_type = type_evaluation(vm, operand)?;
                 Ok(operand_type)
-            }
-        },
+            },
+        }
         Expression::Grouping { expression } => type_evaluation(vm, expression),
         Expression::Product { data } => {
             let mut product_types = BTreeMap::new();
@@ -139,15 +134,11 @@ pub(super) fn evaluate_expr<Backend: VmBackend>(
     let expression = &expression_node.exp;
     match expression {
         Expression::Literal(literal) => match literal {
-            Literal::Identifier(x) => vm.variables.get_value_or_err(&x).map_err(map_err),
+            Literal::Identifier(x) => vm.variables.get_value_from_name(&x,&vm.types).map_err(map_err),
             Literal::Bool(_) | Literal::Float(_) | Literal::Integer(_) => Ok(
-                VmValue::ValuePrimitive(ValuePrimitive::from(literal.clone())),
+                VmParsedValue::ValuePrimitive(ValuePrimitive::from(literal.clone())),
             ),
-            Literal::String(_) => {
-                Err(map_err(VmErrorType::Unsupported(
-                    "String literals not yet supported as arrays".to_string(),
-                )))
-            }
+            Literal::String(_) => {unimplemented!()}
         },
         Expression::Binary {
             left,
@@ -162,11 +153,11 @@ pub(super) fn evaluate_expr<Backend: VmBackend>(
             UnaryOperator::Ref => {
                 let ptr = get_reference(vm, operand)?;
                 let type_id = vm.variables.get_variable_entry_from_index(ptr).type_id;
-                Ok(VmValue::ValuePrimitive(ValuePrimitive::Reference(ptr, type_id)))
+                Ok(VmParsedValue::ValuePrimitive(ValuePrimitive::Reference(ptr, type_id)))
             }
             UnaryOperator::Deref => {
                 let operand_val = vm.evaluate_expr(operand)?;
-                if let VmValue::ValuePrimitive(ValuePrimitive::Reference(ptr, _)) = operand_val {
+                if let VmParsedValue::ValuePrimitive(ValuePrimitive::Reference(ptr, _)) = operand_val {
                     Ok(vm.variables.get_value_from_index(ptr).clone())
                 } else {
                     Err(map_err(VmErrorType::TypeMismatch(
@@ -185,13 +176,13 @@ pub(super) fn evaluate_expr<Backend: VmBackend>(
             for (key, value) in data.iter() {
                 product.insert(key.clone(), vm.evaluate_expr(value)?);
             }
-            Ok(VmValue::StructValue(StructValue::new(product)))
+            Ok(VmParsedValue::StructValue(StructValue::new(product)))
         }
         Expression::Sum { data } => {
             let mut type_set = BTreeSet::new();
             for expr in data.iter() {
                 match vm.evaluate_expr(expr)? {
-                    VmValue::TypeId(type_id) => {
+                    VmParsedValue::TypeId(type_id) => {
                         type_set.insert(type_id);
                     }
                     _ => {
@@ -217,7 +208,7 @@ pub(super) fn evaluate_expr<Backend: VmBackend>(
 
             let unified = crate::types::UnifiedTypeDefinition::sum(variants);
             let type_id = vm.types.store_unified_type(unified);
-            Ok(VmValue::TypeId(type_id))
+            Ok(VmParsedValue::TypeId(type_id))
         }
         Expression::MemberAccess { .. } => todo!(),
         Expression::Function {
@@ -250,7 +241,7 @@ pub(super) fn evaluate_expr<Backend: VmBackend>(
         Expression::FnCall { caller, callee } => {
             let caller = vm.evaluate_expr(caller)?;
             let callee = vm.evaluate_expr(callee)?;
-            let VmValue::FuncId(func_id) = caller else {
+            let VmParsedValue::FuncId(func_id) = caller else {
                 return Err(map_err(VmErrorType::CallingNonFunc));
             };
             let param_type = vm.get_func(func_id).get_param();
