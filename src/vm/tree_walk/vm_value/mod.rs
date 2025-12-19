@@ -24,7 +24,7 @@ pub trait ParsedValueType: Display
 where
     Self: Sized,
 {
-    fn into_unified_type_definition(self) -> Option<UnifiedTypeDefinition>;
+    fn into_unified_type_definition(self,type_container:&TypeContainer) -> Option<UnifiedTypeDefinition>;
     fn get_type_of_value(&self) -> UnifiedTypeDefinition;
 
     fn into_vm_units(self) -> Vec<VmUnit>;
@@ -39,7 +39,8 @@ where
     where
         Self: Sized,
     {
-        let type_id = container.store_unified_type(self.into_unified_type_definition()?);
+        let unified_type_definition = self.into_unified_type_definition(container)?;
+        let type_id = container.store_unified_type(unified_type_definition);
         type_id.to_type_def(container)
     }
 
@@ -47,7 +48,7 @@ where
     where
         Self: Sized,
     {
-        self.into_unified_type_definition()
+        self.into_unified_type_definition(type_container)
             .map(|x| type_container.store_unified_type(x))
     }
 
@@ -83,7 +84,7 @@ impl Display for Reference {
     }
 }
 impl ParsedValueType for Reference {
-    fn into_unified_type_definition(self) -> Option<UnifiedTypeDefinition> {
+    fn into_unified_type_definition(self, _type_container: &TypeContainer) -> Option<UnifiedTypeDefinition> {
         None
     }
 
@@ -106,7 +107,7 @@ pub enum ValuePrimitive {
 }
 
 impl ParsedValueType for ValuePrimitive {
-    fn into_unified_type_definition(self) -> Option<UnifiedTypeDefinition> {
+    fn into_unified_type_definition(self, _type_container: &TypeContainer) -> Option<UnifiedTypeDefinition> {
         None
     }
 
@@ -292,8 +293,14 @@ impl ParsedValueType for StructValue {
         units
     }
 
-    fn into_unified_type_definition(self) -> Option<UnifiedTypeDefinition> {
-        todo!()
+    fn into_unified_type_definition(self, type_container: &TypeContainer) -> Option<UnifiedTypeDefinition> {
+        let mut fields = std::collections::BTreeMap::new();
+        for (field_name, field_value) in self.value {
+            let simplified = field_value.into_simplified_value(type_container);
+            let field_type = simplified.into_unified_type_definition(type_container)?;
+            fields.insert(field_name, field_type);
+        }
+        Some(UnifiedTypeDefinition::product(fields))
     }
 
     fn get_type_of_value(&self) -> UnifiedTypeDefinition {
@@ -334,7 +341,7 @@ impl Display for TypeId {
 }
 
 impl ParsedValueType for TypeId {
-    fn into_unified_type_definition(self) -> Option<UnifiedTypeDefinition> {
+    fn into_unified_type_definition(self, _type_container: &TypeContainer) -> Option<UnifiedTypeDefinition> {
         Some(UnifiedTypeDefinition::TypeId(self))
     }
 
@@ -355,7 +362,7 @@ impl Display for FuncId {
 }
 
 impl ParsedValueType for FuncId {
-    fn into_unified_type_definition(self) -> Option<UnifiedTypeDefinition> {
+    fn into_unified_type_definition(self, _type_container: &TypeContainer) -> Option<UnifiedTypeDefinition> {
         None
     }
 
