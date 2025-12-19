@@ -60,7 +60,7 @@ impl<'a, T> From<T> for AstNode< T> {
 
     
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq,Default)]
 pub struct CodeMetaData {
     pub pos: Position,
     pub type_data: Option<TypeId>,

@@ -101,6 +101,10 @@ let stmt_node = parser.parse_statements().map_err(|x|x.into_code_error())?;
         Ok(value)
     }
     
+    pub fn evaluate_expr_simple(&mut self, source: &str) -> Result<crate::vm::tree_walk::VmSimplifiedValue, CodeRunnerError> {
+        let value = self.evaluate_expr(source)?;
+        Ok(value.into_simplified_value(self.vm.get_type_container()))
+    }
 
     pub fn vm(&self) -> &Vm<Backend> {
         &self.vm
@@ -125,5 +129,5 @@ impl<Backend: VmBackend> fmt::Debug for CodeRunner<Backend> {
             .finish()
     }
 }
-//#[cfg(test)]
-//mod code_runner_tests;
+#[cfg(test)]
+mod code_runner_tests;

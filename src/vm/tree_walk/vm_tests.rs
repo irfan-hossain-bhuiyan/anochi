@@ -1,44 +1,46 @@
-use ast::{BinaryOperator, Expression, Statement};
+use ast::{BinaryOperator, expression::ExpressionGeneric, StatementGeneric, CodeMetaData};
 use token::Identifier;
 use vm::backend::IoBackend;
-use vm::tree_walk::{Vm, VmValue};
+use vm::tree_walk::{Vm };
 
+use crate::prelude::Mappable;
+use crate::vm::tree_walk::vm_value::{VmSimplifiedValue, ValuePrimitive, ParsedValueType};
 use crate::{ast, token, vm};
 
 #[test]
 fn test_vm_basic_operations() {
     let mut vm = Vm::new(IoBackend::new());
 
-    // Test assignment and variable lookup
-    let assignment = Statement::assignment_no_type(Identifier::new("x"), Expression::from_i64(42).to_node(()));
-    vm.execute_statement(&assignment.to_node(()))
+    let assignment = StatementGeneric::assignment_no_type(Identifier::new("x"), ExpressionGeneric::from_i64(42).to_node(())).to_node(());
+    let assignment = assignment.inner_map(&mut |_x|CodeMetaData::default());
+    vm.execute_statement(&assignment)
         .unwrap();
 
-    let var_expr = Expression::identifier(Identifier::new("x".to_string()));
-    let result = vm.evaluate_expr(&var_expr.to_node(())).unwrap();
-    assert_eq!(result, VmValue::from_i64(42));
+    let var_expr = ExpressionGeneric::identifier(Identifier::new("x".to_string()));
+    let result = vm.evaluate_expr(&var_expr.to_node(CodeMetaData::default())).unwrap();
+    let expected = ValuePrimitive::from_i64(42).into_vm_value_generalized(&mut vm.types);
+    assert_eq!(result, expected);
 
-    // Test boolean operations
-    let undefined_expr = Expression::identifier(Identifier::new("undefined_variable".to_string()));
-    let undefined_result = vm.evaluate_expr(&undefined_expr.to_node(()));
-    assert!(undefined_result.is_err()); // Should error for undefined variable
+    let undefined_expr = ExpressionGeneric::identifier(Identifier::new("undefined_variable".to_string()));
+    let undefined_result = vm.evaluate_expr(&undefined_expr.to_node(CodeMetaData::default()));
+    assert!(undefined_result.is_err());
 
-    let and_expr = Expression::binary(
-        Expression::from_bool(true).to_node(()),
+    let and_expr = ExpressionGeneric::binary(
+        ExpressionGeneric::from_bool(true).to_node(CodeMetaData::default()),
         BinaryOperator::And,
-        Expression::from_bool(false).to_node(()),
+        ExpressionGeneric::from_bool(false).to_node(CodeMetaData::default()),
     );
-    let result = vm.evaluate_expr(&and_expr.to_node(())).unwrap();
-    assert_eq!(result, VmValue::from_bool(false));
+    let result = vm.evaluate_expr(&and_expr.to_node(CodeMetaData::default())).unwrap();
+    let expected = ValuePrimitive::from_bool(false).into_vm_value_generalized(&mut vm.types);
+    assert_eq!(result, expected);
 }
 
 #[test]
 fn test_vm_error_handling() {
     let mut vm = Vm::new(IoBackend::new());
 
-    // Test undefined variable error
-    let undefined_expr = Expression::identifier(Identifier::new("undefined_variable".to_string()));
-    let result = vm.evaluate_expr(&undefined_expr.to_node(()));
+    let undefined_expr = ExpressionGeneric::identifier(Identifier::new("undefined_variable".to_string()));
+    let result = vm.evaluate_expr(&undefined_expr.to_node(CodeMetaData::default()));
     assert!(result.is_err());
 }
 
@@ -48,14 +50,11 @@ fn test_debug_statement_single_value() {
     let backend = TestBackend::new();
     let mut vm: Vm<TestBackend> = Vm::new(backend);
 
-    // Create a debug statement with a single integer expression
-    let expr = Expression::from_i64(42).to_node(());
-    let debug_stmt = Statement::debug(vec![expr]).to_node(());
-
-    // Execute the debug statement
+    let expr = ExpressionGeneric::from_i64(42).to_node(());
+    let debug_stmt = StatementGeneric::debug(vec![expr]).to_node(());
+    let debug_stmt=debug_stmt.inner_map(&mut |_x|CodeMetaData::default());
     vm.execute_statement(&debug_stmt).unwrap();
 
-    // Verify the debug output
     let debug_output = vm.backend.get_debug_output();
     assert_eq!(debug_output, "42");
 }

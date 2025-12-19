@@ -1,22 +1,22 @@
-use crate::{code_runner::CodeRunner, vm::tree_walk::{ValuePrimitive}};
+use crate::{
+    code_runner::CodeRunner,
+    vm::tree_walk::ValuePrimitive,
+};
 
 #[test]
 fn test_basic_functionality() {
     let mut runner = CodeRunner::default();
 
-    // Test basic arithmetic and variables
     runner
         .run_statements(
             "let a = 15;
         let b = 3;",
         )
         .unwrap();
-    //runner.run_statements("let b = 3;").unwrap();
-    let result = runner.evaluate_expr("(a + b) * 2 - 5").unwrap();
+    let result = runner.evaluate_expr_simple("(a + b) * 2 - 5").unwrap();
     assert_eq!(result, ValuePrimitive::from_i64(31).into());
 
-    // Test boolean operations
-    let result = runner.evaluate_expr("a > b").unwrap();
+    let result = runner.evaluate_expr_simple("a > b").unwrap();
     assert_eq!(result, ValuePrimitive::from_bool(true).into());
 }
 
@@ -24,10 +24,8 @@ fn test_basic_functionality() {
 fn test_control_flow() {
     let mut runner = CodeRunner::default();
 
-    // Test if statement
     runner.run_statements("let x = 0;if (2>1){x=42;}").unwrap();
-    //runner.run_statements("if (2 > 1) { x = 42; }").unwrap();
-    let result = runner.evaluate_expr("x").unwrap();
+    let result = runner.evaluate_expr_simple("x").unwrap();
     assert_eq!(result, ValuePrimitive::from_i64(42).into());
 }
 #[test]
@@ -36,10 +34,8 @@ fn test_scope() {
     runner
         .run_statements("let y=0;let x=10;{let x=20;y=x;}")
         .unwrap();
-    //runner.run_statements("let x=0;").unwrap();
-    //runner.run_statements("{let x=10;y=x;}").unwrap();
-    let x = runner.evaluate_expr("x").unwrap();
-    let y = runner.evaluate_expr("y").unwrap();
+    let x = runner.evaluate_expr_simple("x").unwrap();
+    let y = runner.evaluate_expr_simple("y").unwrap();
     assert_eq!(x, ValuePrimitive::from_i64(10).into());
     assert_eq!(y, ValuePrimitive::from_i64(20).into());
 }
@@ -48,11 +44,11 @@ fn test_scope() {
 fn test_type_check() {
     let mut runner = CodeRunner::default();
     let output = runner.run_statements(
-        r"let vec2={x=i64,y=i64};
+        r"let vec2={x=int,y=int};
 let y={x=50,y=50};
-let y3:{x=i64,y=i64}={x=50,y=50};
-let y1:{x=i64,y=bool}={x=50,y=50};
-let y2:{x=i64,y=i64}={x=50,y=50};",
+let y3:{x=int,y=int}={x=50,y=50};
+let y1:{x=int,y=bool}={x=50,y=50};
+let y2:{x=int,y=int}={x=50,y=50};",
     );
     let yes = output.is_err_and(|x| x.is_runtime_error_and(|x| x.is_type_mismatch()));
     assert!(yes);
@@ -71,7 +67,7 @@ fn test_if() {
     ",
         )
         .unwrap();
-    let output = runner.evaluate_expr("x").unwrap();
+    let output = runner.evaluate_expr_simple("x").unwrap();
     assert_eq!(output, ValuePrimitive::from_i64(20).into())
 }
 
@@ -88,7 +84,7 @@ fn test_loop() {
     }",
         )
         .unwrap();
-    let output = runner.evaluate_expr("x").unwrap();
+    let output = runner.evaluate_expr_simple("x").unwrap();
     assert_eq!(output, ValuePrimitive::from_i64(31).into())
 }
 #[test]
@@ -96,12 +92,12 @@ fn test_function_call() {
     let mut runner = CodeRunner::default();
     runner
         .run_statements(
-            r"let add = fn {x=i64} -> i64 { return x*x; };
+            r"let add = fn {x=int} -> int { return x*x; };
     let result = add!{x=5};
     ",
         )
         .unwrap();
-    let output = runner.evaluate_expr("result").unwrap();
+    let output = runner.evaluate_expr_simple("result").unwrap();
     assert_eq!(output, ValuePrimitive::from_i64(25).into())
 }
 
@@ -120,16 +116,13 @@ fn test_reference_and_dereference() {
         )
         .unwrap();
     
-    // Check if y got the value 10 (dereferenced from r which pointed to x)
-    let y = runner.evaluate_expr("y").unwrap();
+    let y = runner.evaluate_expr_simple("y").unwrap();
     assert_eq!(y, ValuePrimitive::from_i64(10).into());
     
-    // Check if modifying *r changed x
-    let x = runner.evaluate_expr("x").unwrap();
+    let x = runner.evaluate_expr_simple("x").unwrap();
     assert_eq!(x, ValuePrimitive::from_i64(20).into());
     
-    // Check if z got the updated value of x
-    let z = runner.evaluate_expr("z").unwrap();
+    let z = runner.evaluate_expr_simple("z").unwrap();
     assert_eq!(z, ValuePrimitive::from_i64(20).into());
 }
 

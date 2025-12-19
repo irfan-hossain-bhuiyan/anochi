@@ -139,6 +139,10 @@ impl<Backend: VmBackend> Vm<Backend> {
         evaluation::evaluate_expr(self, expr_node)
     }
 
+    pub fn get_type_container(&self) -> &TypeContainer {
+        &self.types
+    }
+
     pub(crate) fn print_stack(&self) {
         println!("{}", self.variables);
     }
@@ -224,5 +228,5 @@ impl<Backend: VmBackend> Vm<Backend> {
 
 #[cfg(test)]
 mod scope_stack_tests;
-//#[cfg(test)]
-//mod vm_tests;
+#[cfg(test)]
+mod vm_tests;
