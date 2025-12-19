@@ -1,7 +1,7 @@
 mod parser_error;
 
-//#[cfg(test)]
-//mod parser_tests;
+#[cfg(test)]
+mod parser_tests;
 
 use crate::ast::{
     BinaryOperator, Expression, ExpressionNode, CodeMetaData, Statement,
