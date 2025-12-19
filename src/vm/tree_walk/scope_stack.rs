@@ -111,7 +111,12 @@ impl ScopeStack {
     pub fn insert_variable_default(&mut self, identifier: Identifier, value: VmValueGeneralized) {
         self.insert_variable(identifier, value, VariableState::Immutable);
     }
-    pub fn insert_variable(&mut self,identifier: Identifier,value: VmValueGeneralized,var_state:VariableState) {
+    pub fn insert_variable(
+        &mut self,
+        identifier: Identifier,
+        value: VmValueGeneralized,
+        var_state: VariableState,
+    ) {
         let type_id = value.r#type;
         let ptr = self.flatten_and_push(value);
         let var_data = VariableData::new(type_id, var_state, ptr);
@@ -131,10 +136,7 @@ impl ScopeStack {
                 "Value type does not match expected type",
             ));
         }
-        self.insert_variable_default(
-            identifier,
-            value,
-        );
+        self.insert_variable_default(identifier, value);
         Ok(())
     }
 
@@ -195,7 +197,15 @@ impl ScopeStack {
     pub fn has_variable_current(&self, target: &Identifier) -> bool {
         self.current_scope().variables.contains_key(target)
     }
-
+    /// Overwrite middle of a stack given the index,
+    /// It is useful if you want to edit the middle of a stack.
+    pub unsafe fn set_value_from_index(
+        &mut self,
+        ptr: StackPtr,
+        value: VmValueGeneralized,
+    ) -> Result<(), VmErrorType> {
+        self.overwrite_at_position_checked(ptr.as_index(), value)
+    }
     #[generate_unchecked]
     fn overwrite_at_position_checked(
         &mut self,
@@ -203,7 +213,7 @@ impl ScopeStack {
         value: VmValueGeneralized,
     ) -> Result<(), VmErrorType> {
         let units = value.bits;
-        if self.stack.len() <= position + units.len() {
+        if self.stack.len() < position + units.len() {
             return Err(VmErrorType::InvalidStackAccess);
         }
         for (i, unit) in units.into_iter().enumerate() {
@@ -212,25 +222,11 @@ impl ScopeStack {
         }
         Ok(())
     }
-    fn set_value_from_ptr(
-        &mut self,
-        position: StackPtr,
-        value: VmValueGeneralized,
-    ) -> Result<(), VmErrorType> {
-        self.overwrite_at_position_checked(position.as_index(), value)
-    }
 
     fn current_scope(&self) -> &ScopeState {
         self.scopes.back().unwrap()
     }
 
-    pub fn set_value_from_index(
-        &mut self,
-        ptr: StackPtr,
-        value: VmValueGeneralized,
-    ) -> Result<(), VmErrorType> {
-        self.overwrite_at_position_checked(ptr.as_index(), value)
-    }
     fn flatten_and_push(&mut self, value: VmValueGeneralized) -> IndexPtr<VmUnit> {
         //TODO:I need to do somethinng for union type,example expanding it.
         self.stack.append(value.bits)
