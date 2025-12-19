@@ -1,7 +1,7 @@
 use super::*;
 use crate::ast::{Expression, CodeMetaData, Literal, UnaryOperator};
 
-use crate::vm::tree_walk::vm_value::{self, ValuePrimitive, ParsedValueType, VmSimplifiedValue};
+use crate::vm::tree_walk::vm_value::{ ValuePrimitive, ParsedValueType, VmSimplifiedValue};
 use crate::ast::expression::ExprNodeGeneric;
 use crate::vm::tree_walk::vm_error::{VmError, VmErrorType};
 use crate::prelude::IndexPtr;

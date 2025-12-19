@@ -71,7 +71,11 @@ impl Reference {
         Self { ptr, type_id }
     }
 }
-
+impl Display for Reference{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f,"{type_id:?}* {ptr:?}",type_id=self.type_id,ptr=self.ptr)
+    }
+}
 impl ParsedValueType for Reference {
     fn into_unified_type_definition(self) -> Option<UnifiedTypeDefinition> {
         todo!()
@@ -265,7 +269,7 @@ impl From<Literal> for ValuePrimitive {
 #[derive(Debug, Default, Clone, PartialEq, Deref)]
 pub struct StructValue {
     #[deref]
-    value: BTreeMap<Identifier, VmValueGeneralized>,
+    pub value: BTreeMap<Identifier, VmValueGeneralized>,
 }
 
 impl StructValue {
@@ -273,7 +277,6 @@ impl StructValue {
         Self { value: product }
     }
 }
-
 impl ParsedValueType for StructValue {
     fn into_vm_units(self) -> Vec<crate::vm::tree_walk::VmUnit> {
         let mut units = Vec::new();
@@ -292,9 +295,30 @@ impl ParsedValueType for StructValue {
     }
 }
 
+impl Display for StructValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{{")?;
+        let mut first = true;
+        for (key, value) in self.value.iter() {
+            if !first {
+                write!(f, ", ")?;
+            }
+            write!(f, "{}: {}", key, value)?;
+            first = false;
+        }
+        write!(f, "}}")
+    }
+}
+
 impl StructValue {
     pub fn create_unit() -> Self {
         Self::default()
+    }
+}
+
+impl Display for TypeId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "TypeId({:?})", self.as_hash_value())
     }
 }
 
@@ -310,6 +334,12 @@ impl ParsedValueType for TypeId {
     fn into_vm_units(self) -> Vec<crate::vm::tree_walk::VmUnit> {
         let value = VmUnit::HashValue(self.as_hash_value());
         vec![value]
+    }
+}
+
+impl Display for FuncId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "FuncId({:?})", self)
     }
 }
 
@@ -335,6 +365,18 @@ pub enum VmSimplifiedValue {
     Reference,
     TypeId,
     FuncId,
+}
+
+impl Display for VmSimplifiedValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            VmSimplifiedValue::ValuePrimitive(v) => write!(f, "{}", v),
+            VmSimplifiedValue::StructValue(v) => write!(f, "{}", v),
+            VmSimplifiedValue::Reference(v) => write!(f, "{}", v),
+            VmSimplifiedValue::TypeId(v) => write!(f, "{}", v),
+            VmSimplifiedValue::FuncId(v) => write!(f, "{}", v),
+        }
+    }
 }
 
 impl VmSimplifiedValue {
@@ -466,4 +508,13 @@ impl VmValueGeneralized {
         }
     }
 
+    pub(crate) fn of_type(&self, expected_type_id: TypeId, types: &mut TypeContainer) -> bool {
+        self.r#type.can_cast_to(&expected_type_id, types)
+    }
+}
+
+impl Display for VmValueGeneralized {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "VmValue(type={:?}, bits={:?})", self.r#type.as_hash_value(), self.bits)
+    }
 }

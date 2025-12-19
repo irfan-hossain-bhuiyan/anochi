@@ -116,7 +116,7 @@ impl<Backend: VmBackend> Vm<Backend> {
         }
     }
     pub fn extract_struct(&mut self, strct: StructValue) -> Result<(), VmErrorType> {
-        for (k, v) in (*strct).into_iter() {
+        for (k, v) in strct.value {
             self.insert_variable(k, v)?;
         }
         Ok(())
@@ -214,6 +214,12 @@ impl<Backend: VmBackend> Vm<Backend> {
     }
     fn get_func_mut(&mut self, func_id: FuncId) -> &mut VmFunc {
         self.funcs.get_mut_checked(func_id).unwrap()
+    }
+
+    fn into_type(&mut self, input: VmValueGeneralized) -> Result<TypeId,VmErrorType > {
+        let simplified = input.into_simplified_value(&self.types);
+        ParsedValueType::into_type_id(simplified, &mut self.types)
+            .ok_or(VmErrorType::InvalidTypeDefination)
     }
 
 }

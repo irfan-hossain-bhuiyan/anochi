@@ -81,7 +81,7 @@ impl TypeDefinition {
     /// Convert TypeDefinition to UnifiedTypeDefinition
     pub fn from_optimized(other: OptimizedTypeDefinition, container: &TypeContainer) -> TypeDefinition {
         let mut func=|x:TypeId|{container.get_type_def(&x).unwrap()};
-        let output=other.inner_map(&mut func);
+        let output=other.0.inner_map(&mut func);
         TypeDefinition(output)
         //TypeDefinition(other.inner_map(&mut |x|container.get_type_def(&x).unwrap()))
     }

@@ -1,6 +1,6 @@
 use super::*;
 use crate::ast::{Statement};
-use crate::vm::tree_walk::vm_value::{ValuePrimitive, ParsedValueType, VmSimplifiedValue};
+use crate::vm::tree_walk::vm_value::{ValuePrimitive, ParsedValueType};
 use crate::vm::tree_walk::vm_error::{VmError, VmErrorType};
 use crate::vm::tree_walk::evaluation::{evaluate_expr, get_reference};
 
@@ -19,7 +19,7 @@ pub(super) fn execute_statement<Backend: VmBackend>(
         } => {
             let value = evaluate_expr(vm,value)?;
             if let Some(type_expr) = r#type {
-                let type_value = evaluate_expr(vm,type_expr)?;
+                let type_value = evaluate_expr(vm,type_expr)?.into_simplified_value(&mut vm.types);
                 let expected_type_id = ParsedValueType::into_type_id(type_value, &mut vm.types)
                     .ok_or(VmErrorType::InvalidTypeDefination).map_err(map_err)?;
                 if !value.of_type(expected_type_id, &mut vm.types) {
@@ -46,14 +46,13 @@ pub(super) fn execute_statement<Backend: VmBackend>(
             vm.variables.set_value_from_index(
                 ptr,
                 evaluated_value,
-                &mut vm.types,
             ).map_err(map_err)?;
             Ok(StatementEvent::None)
         }
         Statement::StatementBlock(stmtblock) => vm.run_block(&stmtblock),
         Statement::If { condition, on_true } => {
-            let VmSimplifiedValue::ValuePrimitive(ValuePrimitive::Bool(x)) =
-                evaluate_expr(vm,condition)?
+            let Some(ValuePrimitive::Bool(x)) =
+                evaluate_expr(vm,condition)?.try_into_primitive(&vm.types)
             else {
                 return Err(map_err(VmErrorType::TypeMismatch(
                     "The expression in if should be boolean",
@@ -70,8 +69,8 @@ pub(super) fn execute_statement<Backend: VmBackend>(
             on_true,
             on_false,
         } => {
-            let VmSimplifiedValue::ValuePrimitive(ValuePrimitive::Bool(x)) =
-                evaluate_expr(vm,condition)?
+            let Some(ValuePrimitive::Bool(x)) =
+                evaluate_expr(vm,condition)?.try_into_primitive(&vm.types)
             else {
                 return Err(map_err(VmErrorType::TypeMismatch(
                     "The expression on ifelse should be bool",
