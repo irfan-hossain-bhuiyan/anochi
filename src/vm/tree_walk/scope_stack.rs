@@ -5,11 +5,11 @@ use macros::generate_unchecked;
 use thiserror::Error;
 
 use crate::prelude::{IndexPtr, SizedArray};
-use crate::vm::tree_walk::vm_value::{VmParsedValue, VmValueGeneralized};
+use crate::vm::tree_walk::vm_value::VmValueGeneralized;
 use crate::{
     ast::Identifier,
     types::{TypeContainer, TypeId},
-    vm::tree_walk::{ParsedValueType, VmErrorType, VmUnit},
+    vm::tree_walk::{VmErrorType, VmUnit},
 };
 type ExprResult = Result<VmValueGeneralized, VmErrorType>;
 #[derive(Debug, Clone, Error)]
@@ -19,12 +19,13 @@ enum Error {
 }
 
 #[derive(Debug, Clone)]
+/// Check if the variable is immutable,mutable etc.
 enum VariableState {
     Constant,
     Immutable,
     Mutable,
 }
-pub type StackPtr=IndexPtr<VmUnit>;
+pub type StackPtr = IndexPtr<VmUnit>;
 impl Display for VariableState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -44,11 +45,7 @@ pub struct VariableData {
 }
 
 impl VariableData {
-    fn new(
-        type_id: TypeId,
-        var_state: VariableState,
-        stack_position: IndexPtr<VmUnit>,
-    ) -> Self {
+    fn new(type_id: TypeId, var_state: VariableState, stack_position: IndexPtr<VmUnit>) -> Self {
         Self {
             type_id,
             var_state,
@@ -111,70 +108,32 @@ impl ScopeStack {
     }
 
     /// Inserts a variable in current scope, automatically inferring its type
-    pub fn insert_variable(
-        &mut self,
-        identifier: Identifier,
-        value: VmParsedValue,
-        type_container: &mut crate::types::TypeContainer,
-    ) {
-        let type_id = value.get_type_id_of_value(type_container);
-        self.insert_variable_with_type(
-            identifier,
-            value,
-            type_id,
-            VariableState::Immutable,
-            type_container,
-        );
+    pub fn insert_variable_default(&mut self, identifier: Identifier, value: VmValueGeneralized) {
+        self.insert_variable(identifier, value, VariableState::Immutable);
     }
-
-    fn insert_variable_with_type(
-        &mut self,
-        identifier: Identifier,
-        value: VmParsedValue,
-        type_id: TypeId,
-        var_state: VariableState,
-        type_container: &TypeContainer,
-    ) {
-        let stack_position = self.stack.len_as_ptr();
-        self.flatten_and_push(value, type_id, type_container);
-        let var_data = VariableData::new(type_id, var_state, stack_position);
+    pub fn insert_variable(&mut self,identifier: Identifier,value: VmValueGeneralized,var_state:VariableState) {
+        let type_id = value.r#type;
+        let ptr = self.flatten_and_push(value);
+        let var_data = VariableData::new(type_id, var_state, ptr);
         if let Some(current_scope) = self.scopes.back_mut() {
             current_scope.variables.insert(identifier, var_data);
         }
     }
-
-    fn flatten_and_push(
-        &mut self,
-        value: VmParsedValue,
-        of_type: TypeId,
-        type_container: &TypeContainer,
-    ) {
-        //TODO:I need to do somethinng for union type,example expanding it.
-        let units = value.to_vm_units();
-        for unit in units {
-            self.stack.push_back(unit);
-        }
-    }
-
-    /// Inserts a variable with type checking against expected type
     pub fn insert_variable_check(
         &mut self,
         identifier: Identifier,
-        value: VmParsedValue,
+        value: VmValueGeneralized,
         expected_type_id: TypeId,
         type_container: &mut crate::types::TypeContainer,
     ) -> Result<(), VmErrorType> {
-        if !value.of_type(expected_type_id, type_container) {
+        if !value.r#type.can_cast_to(&expected_type_id, type_container) {
             return Err(VmErrorType::TypeMismatch(
                 "Value type does not match expected type",
             ));
         }
-        self.insert_variable_with_type(
+        self.insert_variable_default(
             identifier,
             value,
-            expected_type_id,
-            VariableState::Immutable,
-            type_container,
         );
         Ok(())
     }
@@ -182,42 +141,21 @@ impl ScopeStack {
     pub fn set_value_from_name(
         &mut self,
         identifier: &Identifier,
-        value: VmParsedValue,
-        type_container: &mut TypeContainer,
+        value: VmValueGeneralized,
     ) -> Result<(), VmErrorType> {
         let var_data = self
             .get_variable_data(identifier)
             .ok_or_else(|| VmErrorType::UndefinedIdentifier(identifier.clone()))?;
         let expected_type_id = var_data.type_id;
-        let value_type_id = value.get_type_id_of_value(type_container);
+        let value_type_id = value.r#type;
         if value_type_id != expected_type_id {
             return Err(VmErrorType::TypeMismatch(
                 "Value type does not match variable type",
             ));
         }
         let stack_position = var_data.stack_position;
-        self.overwrite_at_position(stack_position.as_index(), value, type_container);
+        self.overwrite_at_position(stack_position.as_index(), value);
         Ok(())
-    }
-    #[generate_unchecked]
-    fn overwrite_at_position_checked(
-        &mut self,
-        position: usize,
-        value: VmParsedValue,
-        type_container: &TypeContainer,
-    ) -> Result<(), VmErrorType> {
-        let units = value.to_vm_units();
-        if self.stack.len() <= position + units.len() {
-            return Err(VmErrorType::InvalidStackAccess);
-        }
-        for (i, unit) in units.into_iter().enumerate() {
-            let slot = &mut self.stack[position + i];
-            *slot = unit;
-        }
-        Ok(())
-    }
-    fn set_value_from_ptr(&mut self,position: StackPtr,value:VmParsedValue,type_container: &TypeContainer)->Result<(),VmErrorType>{
-        self.overwrite_at_position_checked(position.as_index(), value, type_container)
     }
 
     pub fn get_variable_data(&self, identifier: &Identifier) -> Option<&VariableData> {
@@ -254,21 +192,48 @@ impl ScopeStack {
         self.get_index_from_name(identifier).is_some()
     }
     /// Check if variable exists in current scope
-    pub(crate) fn has_variable_current(&self, target: &Identifier) -> bool {
+    pub fn has_variable_current(&self, target: &Identifier) -> bool {
         self.current_scope().variables.contains_key(target)
+    }
+
+    #[generate_unchecked]
+    fn overwrite_at_position_checked(
+        &mut self,
+        position: usize,
+        value: VmValueGeneralized,
+    ) -> Result<(), VmErrorType> {
+        let units = value.bits;
+        if self.stack.len() <= position + units.len() {
+            return Err(VmErrorType::InvalidStackAccess);
+        }
+        for (i, unit) in units.into_iter().enumerate() {
+            let slot = &mut self.stack[position + i];
+            *slot = unit;
+        }
+        Ok(())
+    }
+    fn set_value_from_ptr(
+        &mut self,
+        position: StackPtr,
+        value: VmValueGeneralized,
+    ) -> Result<(), VmErrorType> {
+        self.overwrite_at_position_checked(position.as_index(), value)
     }
 
     fn current_scope(&self) -> &ScopeState {
         self.scopes.back().unwrap()
     }
 
-    pub(crate) fn set_value_from_index(
+    pub fn set_value_from_index(
         &mut self,
         ptr: StackPtr,
-        value: VmParsedValue,
-        type_container: &mut TypeContainer,
+        value: VmValueGeneralized,
     ) -> Result<(), VmErrorType> {
-        self.overwrite_at_position_checked(ptr.as_index(), value, type_container)
+        self.overwrite_at_position_checked(ptr.as_index(), value)
+    }
+    fn flatten_and_push(&mut self, value: VmValueGeneralized) -> IndexPtr<VmUnit> {
+        //TODO:I need to do somethinng for union type,example expanding it.
+        self.stack.append(value.bits)
     }
 }
 

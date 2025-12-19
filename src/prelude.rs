@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
-use std::mem::{MaybeUninit};
+use std::mem::MaybeUninit;
 use std::ops::{Deref, DerefMut, Index, IndexMut};
 
 use enum_dispatch::enum_dispatch;
@@ -17,31 +17,38 @@ pub type HashValue = u64;
 /// to store objects and detect duplicates. Each push operation returns a hash that
 /// serves as a pointer to the object, enabling O(1) access and deduplication.
 /// Type-safe hash pointer for HashCons
-#[derive(Debug,Hash)]
+#[derive(Debug, Hash)]
 pub struct HashPtr<T: ?Sized> {
     hash: HashValue,
     _marker: std::marker::PhantomData<T>,
 }
-impl<T:?Sized> PartialEq for HashPtr<T> {
+
+impl<T: ?Sized> HashPtr<T> {
+    pub unsafe fn new(hash: HashValue) -> Self {
+        Self {
+            hash,
+            _marker: PhantomData::default(),
+        }
+    }
+}
+impl<T: ?Sized> PartialEq for HashPtr<T> {
     fn eq(&self, other: &Self) -> bool {
         self.hash == other.hash
     }
 }
-impl<T:?Sized> Eq for HashPtr<T>{}
-impl<T:?Sized> Ord for HashPtr<T>{
+impl<T: ?Sized> Eq for HashPtr<T> {}
+impl<T: ?Sized> Ord for HashPtr<T> {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         self.hash.cmp(&other.hash)
     }
 }
-impl<T:?Sized> PartialOrd for HashPtr<T> {
+impl<T: ?Sized> PartialOrd for HashPtr<T> {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         self.hash.partial_cmp(&other.hash)
     }
 }
 // PartialOrd returns Option<cmp::Ordering>,Like in partial ordering you can't guarentee.So Option
 // And Ord is the super from.
-
-
 
 impl<T> HashPtr<T> {
     pub fn as_hash_value(self) -> HashValue {
@@ -65,11 +72,11 @@ impl FreeRange {
     fn new(start: usize, end: usize) -> Self {
         Self { start, end }
     }
-    
+
     fn contains(&self, index: usize) -> bool {
         index >= self.start && index <= self.end
     }
-    
+
     fn len(&self) -> usize {
         self.end - self.start + 1
     }
@@ -87,41 +94,49 @@ impl Ord for FreeRange {
     }
 }
 
-#[derive(Debug,)]
-pub struct IndexPtr<T> {
+#[derive(Debug)]
+pub struct IndexPtr<T: ?Sized> {
     index: usize,
     _marker: std::marker::PhantomData<T>,
 }
-impl<T> Clone for IndexPtr<T>{
-    fn clone(&self) -> Self { *self }
+impl<T: ?Sized> Clone for IndexPtr<T> {
+    fn clone(&self) -> Self {
+        Self {
+            index: self.index,
+            _marker: self._marker,
+        }
+    }
 }
-impl<T> Copy for IndexPtr<T> {}
-impl<T> PartialEq for IndexPtr<T> {
+impl<T:?Sized> Copy for IndexPtr<T> {}
+impl<T:?Sized> PartialEq for IndexPtr<T> {
     fn eq(&self, other: &Self) -> bool {
-        self.index==other.index
+        self.index == other.index
     }
 }
 
-impl<T> IndexPtr<T> {
+impl<T:?Sized> IndexPtr<T> {
     pub fn as_index(&self) -> usize {
         self.index
     }
+    pub unsafe fn new(index:usize)->Self{
+        Self { index, _marker: PhantomData::default() }
+    }
 }
-pub trait Allocator<T>{
-    fn get_from_ptr_checked(&self,ptr:IndexPtr<T>)->Option<&T>;
-    fn get_mut_from_ptr_checked(&mut self,ptr:IndexPtr<T>)->Option<&mut T>;
-    fn get_from_ptr(&self,ptr:IndexPtr<T>)->&T {
+pub trait Allocator<T> {
+    fn get_from_ptr_checked(&self, ptr: IndexPtr<T>) -> Option<&T>;
+    fn get_mut_from_ptr_checked(&mut self, ptr: IndexPtr<T>) -> Option<&mut T>;
+    fn get_from_ptr(&self, ptr: IndexPtr<T>) -> &T {
         self.get_from_ptr_checked(ptr).unwrap()
     }
-    fn get_mut_from_ptr(&mut self,ptr:IndexPtr<T>)->&mut T {
+    fn get_mut_from_ptr(&mut self, ptr: IndexPtr<T>) -> &mut T {
         self.get_mut_from_ptr_checked(ptr).unwrap()
     }
 }
-impl<T> Allocator<T> for IndexCons<T>{
-    fn get_from_ptr_checked(&self,ptr:IndexPtr<T>)->Option<&T> {
+impl<T> Allocator<T> for IndexCons<T> {
+    fn get_from_ptr_checked(&self, ptr: IndexPtr<T>) -> Option<&T> {
         self.get_checked(ptr)
     }
-    fn get_mut_from_ptr_checked(&mut self,ptr:IndexPtr<T>)->Option<&mut T> {
+    fn get_mut_from_ptr_checked(&mut self, ptr: IndexPtr<T>) -> Option<&mut T> {
         self.get_mut_checked(ptr)
     }
 }
@@ -143,13 +158,13 @@ impl<T> IndexCons<T> {
         if let Some(range) = self.free_ranges.iter().next().cloned() {
             let index = range.start;
             self.storage[index] = Some(obj);
-            
+
             self.free_ranges.remove(&range);
             if range.start < range.end {
                 let new_range = FreeRange::new(index + 1, range.end);
                 self.free_ranges.insert(new_range);
             }
-            
+
             IndexPtr {
                 index,
                 _marker: std::marker::PhantomData,
@@ -166,37 +181,38 @@ impl<T> IndexCons<T> {
     pub fn remove(&mut self, index_ptr: &IndexPtr<T>) -> Option<T> {
         let index = index_ptr.index;
         let value = self.storage.get_mut(index)?.take()?;
-        
+
         let prev_range = if index > 0 {
             let search = FreeRange::new(index - 1, index - 1);
             self.free_ranges.range(..=search).next_back().cloned()
         } else {
             None
         };
-        
+
         let next_range = {
             let search = FreeRange::new(index + 1, index + 1);
             self.free_ranges.range(search..).next().cloned()
         };
-        
+
         let mut merged_start = index;
         let mut merged_end = index;
-        
+
         if let Some(prev) = prev_range {
             if prev.end == index - 1 {
                 merged_start = prev.start;
                 self.free_ranges.remove(&prev);
             }
         }
-        
+
         if let Some(next) = next_range {
             if next.start == index + 1 {
                 merged_end = next.end;
                 self.free_ranges.remove(&next);
             }
         }
-        
-        self.free_ranges.insert(FreeRange::new(merged_start, merged_end));
+
+        self.free_ranges
+            .insert(FreeRange::new(merged_start, merged_end));
         Some(value)
     }
     #[generate_unchecked]
@@ -355,18 +371,17 @@ pub struct SizedArray<T, const MAX_SIZE: usize = 1024> {
 }
 
 impl<T, const MAX_SIZE: usize> Allocator<T> for SizedArray<T, MAX_SIZE> {
-    fn get_from_ptr_checked(&self,ptr:IndexPtr<T>)->Option<&T> {
+    fn get_from_ptr_checked(&self, ptr: IndexPtr<T>) -> Option<&T> {
         self.get_checked(ptr.index)
     }
-    fn get_mut_from_ptr_checked(&mut self,ptr:IndexPtr<T>)->Option<&mut T> {
+    fn get_mut_from_ptr_checked(&mut self, ptr: IndexPtr<T>) -> Option<&mut T> {
         self.get_mut_checked(ptr.index)
     }
 }
 
-
-impl<T:Debug, const MAX_SIZE: usize> Debug for SizedArray<T, MAX_SIZE> {
+impl<T: Debug, const MAX_SIZE: usize> Debug for SizedArray<T, MAX_SIZE> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        Debug::fmt(&self.array[0..self.size],f)
+        Debug::fmt(&self.array[0..self.size], f)
     }
 }
 
@@ -378,7 +393,6 @@ impl<T, const MAX_SIZE: usize> Deref for SizedArray<T, MAX_SIZE> {
     }
 }
 impl<T, const MAX_SIZE: usize> DerefMut for SizedArray<T, MAX_SIZE> {
-
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.array[0..self.size]
     }
@@ -419,23 +433,25 @@ impl<T, const MAX_SIZE: usize> SizedArray<T, MAX_SIZE> {
         None
     }
     #[generate_unchecked]
-    fn pop_checked(&mut self)->Result<(),&'static str>{
-        if self.is_empty(){Err("You poped the array when size is 0")}
-        else {
-            self.size-=1;
+    fn pop_checked(&mut self) -> Result<(), &'static str> {
+        if self.is_empty() {
+            Err("You poped the array when size is 0")
+        } else {
+            self.size -= 1;
             Ok(())
         }
     }
-    pub fn shrink_size(&mut self,new_size:usize)->Result<(),&'static str>{
-        if self.size<new_size{Err("You resized the array to grow")}
-        else {
-            self.size=new_size;
+    pub fn shrink_size(&mut self, new_size: usize) -> Result<(), &'static str> {
+        if self.size < new_size {
+            Err("You resized the array to grow")
+        } else {
+            self.size = new_size;
             Ok(())
         }
     }
 
     fn is_empty(&self) -> bool {
-        self.size==0
+        self.size == 0
     }
 
     pub(crate) fn size(&self) -> usize {
@@ -443,8 +459,21 @@ impl<T, const MAX_SIZE: usize> SizedArray<T, MAX_SIZE> {
     }
 
     pub(crate) fn len_as_ptr(&self) -> IndexPtr<crate::vm::tree_walk::VmUnit> {
-        IndexPtr { index: self.len(), _marker: PhantomData::default() }
+        IndexPtr {
+            index: self.len(),
+            _marker: PhantomData::default(),
+        }
+    }
+
+    pub(crate) fn append(&mut self, bits: impl IntoIterator<Item = T>) -> IndexPtr<T> {
+        let start_index = self.size;
+        for item in bits {
+            self.array[self.size] = item;
+            self.size += 1;
+        }
+        IndexPtr {
+            index: start_index,
+            _marker: PhantomData,
+        }
     }
 }
-
-

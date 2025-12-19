@@ -115,15 +115,7 @@ in checking phase,their will be type checking,and the container will have which 
         - [ ] make it 
 - [ ] Changing the tokenization code simplify.
 ## Todo:
-- [ ] dereference struct,create a function for it.that will extract all the variable from struct and push to stack.
-- [ ] A operation that will extract it,Add it in the ast,but not decide what will it be,make it "**" for now.
-- [ ] Add const. in variable state.
-- [ ] support for function and for function verification.
-- [ ] support for a.x operation,and I can do something like a.x=10;
-- [ ] Change the assignment to have comptime,let,None
-    - [ ] It will check for keyword first before the assignment.
-- [ ] Change the ast to encompass it,to know what kind of assignment is this 
-
+- [ ] 
 ## QnA:
 > Why use third bracket for statement,not first bracket?
 Add struct based type in Literal,where I can create {x=10,y=10},

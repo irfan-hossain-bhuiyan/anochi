@@ -6,7 +6,7 @@
 use super::{CompTimeBuiltinType, CompTimeTypeGeneric};
 use crate::ast::Identifier;
 use crate::prelude::Mappable;
-use crate::types::{OptimizedTypeDefinition, TypeContainer};
+use crate::types::{OptimizedTypeDefinition, TypeContainer, TypeId};
 use std::collections::{BTreeMap, BTreeSet};
 
 /// TypeDefinition wraps TypeGeneric<Self> to create a proper recursive type
@@ -80,7 +80,8 @@ impl TypeDefinition {
 
     /// Convert TypeDefinition to UnifiedTypeDefinition
     pub fn from_optimized(other: OptimizedTypeDefinition, container: &TypeContainer) -> TypeDefinition {
-        let output=other.inner_map(&mut |x| -> TypeDefinition {container.get_type_def(&x).unwrap()});
+        let mut func=|x:TypeId|{container.get_type_def(&x).unwrap()};
+        let output=other.inner_map(&mut func);
         TypeDefinition(output)
         //TypeDefinition(other.inner_map(&mut |x|container.get_type_def(&x).unwrap()))
     }

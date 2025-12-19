@@ -1,15 +1,18 @@
 //! Virtual Machine for the Anochi programming language.
 
+use std::ops::Deref;
+
 use crate::{
     ast::{StatNodeGeneric, expression::ExprNodeGeneric},
     prelude::HashValue,
 };
+use enum_as_inner::EnumAsInner;
 use num_bigint::BigInt;
 use num_rational::BigRational;
 use vm_value::VmValueGeneralized;
 /// Untyped VM unit - the fundamental storage unit on the VM stack
 /// All type information is tracked separately via TypeContainer and VariableData
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq,EnumAsInner)]
 pub enum VmUnit {
     Bool(bool),
     Integer(BigInt),
@@ -31,7 +34,7 @@ impl std::fmt::Display for VmUnit {
 }
 
 pub mod vm_value;
-pub use vm_value::{ParsedValueType, StructValue, ValuePrimitive, VmParsedValue};
+pub use vm_value::{ParsedValueType, StructValue, ValuePrimitive, VmSimplifiedValue};
 
 use crate::{
     ast::{ExpressionNode, Identifier, StatementNode, StatmentBlockNode},
@@ -58,7 +61,7 @@ pub type StatementResult = Result<StatementEvent, VmError>;
 pub enum StatementEvent {
     Break,
     Continue,
-    Return(VmParsedValue),
+    Return(VmValueGeneralized),
     None,
 }
 
@@ -106,35 +109,29 @@ impl<Backend: VmBackend> Vm<Backend> {
         for (name, builtin_kind) in builtin_types {
             let type_def = UnifiedTypeDefinition::builtin(builtin_kind);
             let type_id = self.types.store_unified_type(type_def);
-            self.variables.insert_variable(
+            self.variables.insert_variable_default(
                 Identifier::new(name.to_string()),
-                VmParsedValue::TypeId(type_id),
-                &mut self.types,
+                VmSimplifiedValue::TypeId(type_id).into_vm_value_generalized(&mut self.types),
             );
         }
     }
     pub fn extract_struct(&mut self, strct: StructValue) -> Result<(), VmErrorType> {
-        for (k, v) in strct.into_iter() {
+        for (k, v) in (*strct).into_iter() {
             self.insert_variable(k, v)?;
         }
         Ok(())
     }
-
-    pub(super) fn to_type(&mut self, value: VmParsedValue) -> Result<TypeId, VmErrorType> {
-        value
-            .get_type_id(&mut self.types)
-            .ok_or(VmErrorType::InvalidTypeDefination)
-    }
+    
     pub(super) fn insert_variable(
         &mut self,
         target: Identifier,
-        value: VmParsedValue,
+        value: VmValueGeneralized,
     ) -> Result<(), VmErrorType> {
         if self.variables.has_variable_current(&target) {
             return Err(VmErrorType::SameVariableName);
         }
         self.variables
-            .insert_variable(target, value, &mut self.types);
+            .insert_variable_default(target, value );
         Ok(())
     }
     pub fn execute_statement(&mut self, stat_node: &StatementNode) -> StatementResult {
@@ -151,7 +148,7 @@ impl<Backend: VmBackend> Vm<Backend> {
     pub fn insert_variable_check(
         &mut self,
         identifier: Identifier,
-        value: VmParsedValue,
+        value: VmValueGeneralized,
         expected_type_id: TypeId,
         type_container: &mut crate::types::TypeContainer,
     ) -> Result<(), VmErrorType> {
@@ -191,7 +188,7 @@ impl<Backend: VmBackend> Vm<Backend> {
         self.funcs.push(func)
     }
     /// It type check the function that is currently passed,and execute it.
-    fn execute_function(&mut self, func_id: FuncId, inputs: VmParsedValue) -> VmExprResult {
+    fn execute_function(&mut self, func_id: FuncId, inputs: VmSimplifiedValue) -> VmExprResult {
         let func = self.get_func(func_id);
         let param_type = func.get_param();
         if !inputs.of_type(param_type, &mut self.types) {
@@ -206,7 +203,7 @@ impl<Backend: VmBackend> Vm<Backend> {
             //the const ptr isn't mutating elsewhere.
             match self.execute_statement(unsafe { body.as_ref().unwrap() })? {
                 StatementEvent::Return(value) => Ok(value),
-                _ => Ok(VmParsedValue::create_unit()),
+                _ => Ok(VmValueGeneralized::create_unit(&mut self.types)),
             }
         })();
         self.drop_scope();
@@ -219,12 +216,6 @@ impl<Backend: VmBackend> Vm<Backend> {
         self.funcs.get_mut_checked(func_id).unwrap()
     }
 
-    fn type_match(&mut self, r#type: TypeId, object: VmParsedValue) -> Result<(), VmErrorType> {
-        if self.to_type(object)? == r#type {
-            return Ok(());
-        }
-        Err(VmErrorType::TypeMismatch(""))
-    }
 }
 
 //#[cfg(test)]

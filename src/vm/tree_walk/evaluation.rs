@@ -1,6 +1,7 @@
 use super::*;
 use crate::ast::{Expression, CodeMetaData, Literal, UnaryOperator};
-use crate::vm::tree_walk::vm_value::{self, ValuePrimitive, ParsedValueType, VmParsedValue};
+
+use crate::vm::tree_walk::vm_value::{self, ValuePrimitive, ParsedValueType, VmSimplifiedValue};
 use crate::ast::expression::ExprNodeGeneric;
 use crate::vm::tree_walk::vm_error::{VmError, VmErrorType};
 use crate::prelude::IndexPtr;
@@ -9,7 +10,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 pub(super) fn get_reference<Backend: VmBackend>(
     vm: &mut Vm<Backend>,
-    expression_node: &ExprNodeGeneric<CodeMetaData>,
+    expression_node: &ExpressionNode,
 ) -> Result<IndexPtr<VmUnit>, VmError> {
     let node_data = expression_node.data().get_position().clone();
     let map_err = |e| VmError::new(e, node_data.clone());
@@ -22,8 +23,8 @@ pub(super) fn get_reference<Backend: VmBackend>(
         }
         Expression::Unary { operator: UnaryOperator::Deref, operand } => {
             let value = evaluate_expr(vm, operand)?;
-            if let VmParsedValue::ValuePrimitive(ValuePrimitive::Reference(ptr, _)) = value {
-                Ok(ptr)
+            if let VmSimplifiedValue::Reference(reference) = value.into_simplified_value(&vm.types) {
+                Ok(reference.ptr)
             } else {
                 Err(map_err(VmErrorType::TypeMismatch(
                     "Dereference operator (*) requires a reference value",
@@ -69,7 +70,7 @@ pub(super) fn type_evaluation<Backend: VmBackend>(
                 unimplemented!()
             }
         }
-        Expression::Binary { left, operator, right } => {
+        Expression::Binary { left, operator: _operator, right } => {
             let left_type = type_evaluation(vm, left)?;
             let right_type = type_evaluation(vm, right)?;
             
@@ -135,9 +136,10 @@ pub(super) fn evaluate_expr<Backend: VmBackend>(
     match expression {
         Expression::Literal(literal) => match literal {
             Literal::Identifier(x) => vm.variables.get_value_from_name(&x,&vm.types).map_err(map_err),
-            Literal::Bool(_) | Literal::Float(_) | Literal::Integer(_) => Ok(
-                VmParsedValue::ValuePrimitive(ValuePrimitive::from(literal.clone())),
-            ),
+            Literal::Bool(_) | Literal::Float(_) | Literal::Integer(_) => {
+                let value=ValuePrimitive::from(literal.clone());
+                Ok(value.into_vm_value_generalized(&mut vm.types))
+            },
             Literal::String(_) => {unimplemented!()}
         },
         Expression::Binary {
@@ -147,27 +149,33 @@ pub(super) fn evaluate_expr<Backend: VmBackend>(
         } => {
             let left_val = vm.evaluate_expr(left)?;
             let right_val = vm.evaluate_expr(right)?;
-            vm_value::evaluate_binary_op(&left_val, &operator, &right_val).map_err(map_err)
+            //vm_value::evaluate_binary_op(&left_val, &operator, &right_val).map_err(map_err)
+            VmValueGeneralized::binary_op(left_val,operator,right_val,&mut vm.types).map_err(map_err)
         }
         Expression::Unary { operator, operand } => match operator {
             UnaryOperator::Ref => {
-                let ptr = get_reference(vm, operand)?;
-                let type_id = vm.variables.get_variable_entry_from_index(ptr).type_id;
-                Ok(VmParsedValue::ValuePrimitive(ValuePrimitive::Reference(ptr, type_id)))
+                //let ptr = get_reference(vm, operand)?;
+                //let type_id = vm.variables.get_variable_data(ptr).type_id;
+                //Ok(ValuePrimitive::Reference(Reference { field1: ptr, field2: type_id }))
+                todo!()
             }
             UnaryOperator::Deref => {
-                let operand_val = vm.evaluate_expr(operand)?;
-                if let VmParsedValue::ValuePrimitive(ValuePrimitive::Reference(ptr, _)) = operand_val {
-                    Ok(vm.variables.get_value_from_index(ptr).clone())
-                } else {
-                    Err(map_err(VmErrorType::TypeMismatch(
-                        "Dereference operator (*) requires a reference value",
-                    )))
-                }
+                //let operand_val = vm.evaluate_expr(operand)?;
+                //if let ValuePrimitive::Reference(Reference { field1: ptr, field2: _ }) = operand_val {
+                //    Ok(vm.variables.get_value_from_index(ptr).clone())
+                //} else {
+                //    Err(map_err(VmErrorType::TypeMismatch(
+                //        "Dereference operator (*) requires a reference value",
+                //    )))
+                //}
+                todo!()
             }
             _ => {
                 let operand_val = vm.evaluate_expr(operand)?;
-                vm_value::evaluate_unary_op(&operator, &operand_val).map_err(map_err)
+                let operand_val= operand_val.try_into_primitive(&vm.types).ok_or(VmErrorType::InvalidOperation("Operation isn't 
+                        implemented for this type".to_owned())).map_err(map_err)?;
+                let operand_val=operand_val.unary_op(operator).map_err(map_err).map(|x|x.into_vm_value_generalized(&mut vm.types));
+                operand_val
             }
         },
         Expression::Grouping { expression } => vm.evaluate_expr(expression),
@@ -176,39 +184,11 @@ pub(super) fn evaluate_expr<Backend: VmBackend>(
             for (key, value) in data.iter() {
                 product.insert(key.clone(), vm.evaluate_expr(value)?);
             }
-            Ok(VmParsedValue::StructValue(StructValue::new(product)))
+            Ok(StructValue::new(product).into_vm_value_generalized(&mut vm.types))
         }
         Expression::Sum { data } => {
-            let mut type_set = BTreeSet::new();
-            for expr in data.iter() {
-                match vm.evaluate_expr(expr)? {
-                    VmParsedValue::TypeId(type_id) => {
-                        type_set.insert(type_id);
-                    }
-                    _ => {
-                        return Err(map_err(VmErrorType::InvalidOperation(
-                            "Sum types can only contain type values".to_string(),
-                        )));
-                    }
-                }
-            }
-
-            // For sum types, we need to convert TypeIds back to TypeDefinitions to create the sum type
-            let mut variants = BTreeSet::new();
-            for type_id in type_set {
-                if vm.types.has_type(&type_id) {
-                    // Store the TypeId directly as UnifiedTypeDefinition::TypeId
-                    variants.insert(UnifiedTypeDefinition::TypeId(type_id));
-                } else {
-                    return Err(map_err(VmErrorType::InvalidOperation(
-                        "Type not found in container".to_string(),
-                    )));
-                }
-            }
-
-            let unified = crate::types::UnifiedTypeDefinition::sum(variants);
-            let type_id = vm.types.store_unified_type(unified);
-            Ok(VmParsedValue::TypeId(type_id))
+            //let mut type_set = BTreeSet::new();
+            todo!()
         }
         Expression::MemberAccess { .. } => todo!(),
         Expression::Function {
@@ -217,7 +197,7 @@ pub(super) fn evaluate_expr<Backend: VmBackend>(
             statements,
         } => {
             let input = vm.evaluate_expr(input)?;
-            let input_type=match vm.to_type(input) {
+            let input_type=match vm.into_type(input) {
                 Ok(x)=>x,
                 Err(x)=>return Err(map_err(x)),
             };
@@ -225,7 +205,7 @@ pub(super) fn evaluate_expr<Backend: VmBackend>(
                 None => None,
                 Some(x) => {
                     let output = vm.evaluate_expr(x)?;
-                    let output_type =match vm.to_type(output){
+                    let output_type =match vm.into_type(output){
                         Ok(x)=>x,
                         Err(x)=>return Err(map_err(x)),
                     };
@@ -236,20 +216,21 @@ pub(super) fn evaluate_expr<Backend: VmBackend>(
                 VmFunc::new_checked(input_type, output_type, *statements.clone(), &vm.types)
                     .ok_or(VmErrorType::FuncInvalidInput).map_err(map_err)?;
             let func_id = vm.add_function(func);
-            Ok(func_id.into())
+            todo!()
         }
         Expression::FnCall { caller, callee } => {
             let caller = vm.evaluate_expr(caller)?;
             let callee = vm.evaluate_expr(callee)?;
-            let VmParsedValue::FuncId(func_id) = caller else {
-                return Err(map_err(VmErrorType::CallingNonFunc));
-            };
-            let param_type = vm.get_func(func_id).get_param();
-            if !callee.of_type(param_type, &mut vm.types) {
-                return Err(map_err(VmErrorType::FuncInvalidInput));
-            }
-            // type check already gaurentee that callee is of struct type
-            vm.execute_function(func_id, callee)
+            todo!()
+            //let VmSimplifiedValue::FuncId(func_id) = caller else {
+            //    return Err(map_err(VmErrorType::CallingNonFunc));
+            //};
+            //let param_type = vm.get_func(func_id).get_param();
+            //if !callee.of_type(param_type, &mut vm.types) {
+            //    return Err(map_err(VmErrorType::FuncInvalidInput));
+            //}
+            //// type check already gaurentee that callee is of struct type
+            //vm.execute_function(func_id, callee)
         }
     }
 }

@@ -1,6 +1,6 @@
 use super::*;
 use crate::ast::{Statement};
-use crate::vm::tree_walk::vm_value::{ValuePrimitive, ParsedValueType, VmParsedValue};
+use crate::vm::tree_walk::vm_value::{ValuePrimitive, ParsedValueType, VmSimplifiedValue};
 use crate::vm::tree_walk::vm_error::{VmError, VmErrorType};
 use crate::vm::tree_walk::evaluation::{evaluate_expr, get_reference};
 
@@ -20,7 +20,7 @@ pub(super) fn execute_statement<Backend: VmBackend>(
             let value = evaluate_expr(vm,value)?;
             if let Some(type_expr) = r#type {
                 let type_value = evaluate_expr(vm,type_expr)?;
-                let expected_type_id = ParsedValueType::get_type_id(type_value, &mut vm.types)
+                let expected_type_id = ParsedValueType::into_type_id(type_value, &mut vm.types)
                     .ok_or(VmErrorType::InvalidTypeDefination).map_err(map_err)?;
                 if !value.of_type(expected_type_id, &mut vm.types) {
                     return Err(map_err(VmErrorType::TypeMismatch("")));
@@ -52,7 +52,7 @@ pub(super) fn execute_statement<Backend: VmBackend>(
         }
         Statement::StatementBlock(stmtblock) => vm.run_block(&stmtblock),
         Statement::If { condition, on_true } => {
-            let VmParsedValue::ValuePrimitive(ValuePrimitive::Bool(x)) =
+            let VmSimplifiedValue::ValuePrimitive(ValuePrimitive::Bool(x)) =
                 evaluate_expr(vm,condition)?
             else {
                 return Err(map_err(VmErrorType::TypeMismatch(
@@ -70,7 +70,7 @@ pub(super) fn execute_statement<Backend: VmBackend>(
             on_true,
             on_false,
         } => {
-            let VmParsedValue::ValuePrimitive(ValuePrimitive::Bool(x)) =
+            let VmSimplifiedValue::ValuePrimitive(ValuePrimitive::Bool(x)) =
                 evaluate_expr(vm,condition)?
             else {
                 return Err(map_err(VmErrorType::TypeMismatch(
@@ -89,7 +89,7 @@ pub(super) fn execute_statement<Backend: VmBackend>(
             } else {
                 for expr in expr_vec.iter() {
                     let expr = evaluate_expr(vm,expr)?;
-                    vm.backend.debug_print(&expr.to_string()).unwrap();
+                    vm.backend.debug_print(&expr.into_simplified_value(&vm.types).to_string()).unwrap();
                 }
             }
             Ok(StatementEvent::None)
@@ -114,7 +114,7 @@ pub(super) fn execute_statement<Backend: VmBackend>(
         Statement::Return(x)=>{
             let return_value=match x {
                 Some(value)=>evaluate_expr(vm,value)?,
-                None=>VmParsedValue::create_unit(),
+                None=>VmValueGeneralized::create_unit(&mut vm.types),
             };
             Ok(StatementEvent::Return(return_value))
         }

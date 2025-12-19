@@ -45,6 +45,9 @@ impl TypeId {
     pub fn to_type_def(&self, container: &TypeContainer) -> Option<TypeDefinition> {
         container.get_type_def(self)
     }
+    pub fn can_cast_to(&self,other:&Self,container:&TypeContainer)->bool{
+        self==other
+    }
 }
 
 /// Generic type container that can hold product types, sum types, and builtins
@@ -84,7 +87,7 @@ impl From<CompTimeTypeGeneric<Self>> for UnifiedTypeDefinition {
 
 /// Never remove the newtype,else you are gonna get circular type
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Deref)]
-pub struct OptimizedTypeDefinition(CompTimeTypeGeneric<TypeId>);
+pub struct OptimizedTypeDefinition(pub CompTimeTypeGeneric<TypeId>);
 
 /// TypeContainer provides optimization and deduplication for types.
 /// It stores TypeDefinitions and returns TypeIds for comparison and retrieval.
@@ -139,6 +142,15 @@ impl TypeContainer {
     fn store_type_def(&mut self, type1: TypeDefinition) -> TypeId {
         let optimized = type1.into_optimized(self);
         self.store_type(optimized)
+    }
+
+    pub(crate) fn get_unit_type(&mut self) -> HashPtr<OptimizedTypeDefinition> {
+        self.store_optimized(OptimizedTypeDefinition(CompTimeTypeGeneric::Product(Default::default())))
+    }
+
+    pub fn get_builtin_type_id(&mut self, builtin_type: CompTimeBuiltinType) -> TypeId {
+        let unified = UnifiedTypeDefinition::builtin(builtin_type);
+        self.store_unified_type(unified)
     }
 }
 

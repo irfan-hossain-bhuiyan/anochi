@@ -1,10 +1,12 @@
 use crate::ast::{BinaryOperator, Identifier, Literal, UnaryOperator};
 use crate::types::{
-    CompTimeBuiltinType, CompTimeTypeGeneric, TypeContainer, TypeDefinition, TypeId, UnifiedTypeDefinition
+    CompTimeBuiltinType, CompTimeTypeGeneric, TypeContainer, TypeDefinition, TypeId,
+    UnifiedTypeDefinition,
 };
 use crate::vm::tree_walk::VmUnit;
 use crate::vm::tree_walk::scope_stack::VmPtr;
 use crate::vm::tree_walk::vm_error::VmErrorType;
+use derive_more::Deref;
 use enum_as_inner::EnumAsInner;
 use enum_dispatch::enum_dispatch;
 use num_bigint::BigInt;
@@ -12,20 +14,25 @@ use num_rational::BigRational;
 use std::any::Any;
 use std::collections::BTreeMap;
 use std::fmt::Display;
-use std::ops::Deref;
+use std::mem::take;
 
 mod function;
 pub use function::{FuncId, VmFunc};
 
 #[enum_dispatch]
-pub trait ParsedValueType 
-where Self:Sized{
+pub trait ParsedValueType:Display
+where
+    Self: Sized,
+{
     fn into_unified_type_definition(self) -> Option<UnifiedTypeDefinition>;
     fn get_type_of_value(&self) -> UnifiedTypeDefinition;
-    fn to_vm_units(self) -> Vec<VmUnit>;
-    fn to_vm_value_generalized(self,type_container: &mut TypeContainer)->VmValueGeneralized{
-        let type_id=self.get_type_id_of_value(type_container);
-        VmValueGeneralized { bits: self.to_vm_units(), r#type: type_id }
+    fn into_vm_units(self) -> Vec<VmUnit>;
+    fn into_vm_value_generalized(self, type_container: &mut TypeContainer) -> VmValueGeneralized {
+        let type_id = self.get_type_id_of_value(type_container);
+        VmValueGeneralized {
+            bits: self.into_vm_units(),
+            r#type: type_id,
+        }
     }
     fn into_type_definition(self, container: &mut TypeContainer) -> Option<TypeDefinition>
     where
@@ -35,7 +42,7 @@ where Self:Sized{
         type_id.to_type_def(container)
     }
 
-    fn get_type_id(self, type_container: &mut TypeContainer) -> Option<TypeId>
+    fn into_type_id(self, type_container: &mut TypeContainer) -> Option<TypeId>
     where
         Self: Sized,
     {
@@ -53,18 +60,44 @@ where Self:Sized{
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct Reference {
+    pub ptr: VmPtr,
+    pub type_id: TypeId,
+}
+
+impl Reference {
+    pub fn new(ptr: VmPtr, type_id: TypeId) -> Self {
+        Self { ptr, type_id }
+    }
+}
+
+impl ParsedValueType for Reference {
+    fn into_unified_type_definition(self) -> Option<UnifiedTypeDefinition> {
+        todo!()
+    }
+
+    fn get_type_of_value(&self) -> UnifiedTypeDefinition {
+        todo!()
+    }
+
+    fn into_vm_units(self) -> Vec<VmUnit> {
+        todo!()
+    }
+}
+
 /// Primitive values that can be stored in the VM
 #[derive(Debug, Clone, PartialEq)]
 pub enum ValuePrimitive {
     Bool(bool),
     Integer(BigInt),
     Float(BigRational),
-    Reference(VmPtr, TypeId),
+    Index(usize), // This one is for indexing in an array.
 }
 
 impl ParsedValueType for ValuePrimitive {
     fn into_unified_type_definition(self) -> Option<UnifiedTypeDefinition> {
-        None
+        todo!()
     }
 
     fn get_type_of_value(&self) -> UnifiedTypeDefinition {
@@ -72,20 +105,16 @@ impl ParsedValueType for ValuePrimitive {
             ValuePrimitive::Bool(_) => UnifiedTypeDefinition::builtin(CompTimeBuiltinType::Bool),
             ValuePrimitive::Integer(_) => UnifiedTypeDefinition::builtin(CompTimeBuiltinType::Int),
             ValuePrimitive::Float(_) => UnifiedTypeDefinition::builtin(CompTimeBuiltinType::Float),
-            ValuePrimitive::Reference(_, type_id) => {
-                UnifiedTypeDefinition::reference(UnifiedTypeDefinition::type_id(type_id.clone()))
-            }
+            ValuePrimitive::Index(_) => UnifiedTypeDefinition::builtin(CompTimeBuiltinType::Usize),
         }
     }
 
-    fn to_vm_units(self) -> Vec<crate::vm::tree_walk::VmUnit> {
+    fn into_vm_units(self) -> Vec<crate::vm::tree_walk::VmUnit> {
         match self {
             ValuePrimitive::Bool(b) => vec![VmUnit::Bool(b)],
             ValuePrimitive::Integer(i) => vec![VmUnit::Integer(i)],
             ValuePrimitive::Float(f) => vec![VmUnit::Float(f)],
-            ValuePrimitive::Reference(stack_pos, _) => {
-                vec![VmUnit::Usize(stack_pos.as_index())]
-            }
+            ValuePrimitive::Index(index) => vec![VmUnit::Usize(index)],
         }
     }
 }
@@ -113,38 +142,24 @@ impl ValuePrimitive {
         Self::Float(value)
     }
 
-    pub fn binary_op(
-        &self,
-        operator: &BinaryOperator,
-        right: &Self,
-    ) -> Result<Self, VmErrorType> {
+    pub fn binary_op(&self, operator: &BinaryOperator, right: &Self) -> Result<Self, VmErrorType> {
         match (self, right) {
             // Bool operations
-            (
-                ValuePrimitive::Bool(l),
-                ValuePrimitive::Bool(r),
-            ) => match operator {
+            (ValuePrimitive::Bool(l), ValuePrimitive::Bool(r)) => match operator {
                 BinaryOperator::Equal => Ok(ValuePrimitive::Bool(l == r)),
                 BinaryOperator::NotEqual => Ok(ValuePrimitive::Bool(l != r)),
                 BinaryOperator::And => Ok(ValuePrimitive::Bool(*l && *r)),
                 BinaryOperator::Or => Ok(ValuePrimitive::Bool(*l || *r)),
                 BinaryOperator::Less => Ok(ValuePrimitive::Bool(!*l && *r)), // false < true
-                BinaryOperator::LessEqual => {
-                    Ok(ValuePrimitive::Bool(!*l || *r))
-                } // false <= true, true <= true
-                BinaryOperator::Greater => Ok(ValuePrimitive::Bool(*l && !*r)), // true > false
-                BinaryOperator::GreaterEqual => {
-                    Ok(ValuePrimitive::Bool(*l || !*r))
-                } // true >= false, true >= true
+                BinaryOperator::LessEqual => Ok(ValuePrimitive::Bool(!*l || *r)), // false <= true, true <= true
+                BinaryOperator::Greater => Ok(ValuePrimitive::Bool(*l && !*r)),   // true > false
+                BinaryOperator::GreaterEqual => Ok(ValuePrimitive::Bool(*l || !*r)), // true >= false, true >= true
                 _ => Err(VmErrorType::InvalidOperation(format!(
                     "Cannot apply {operator:?} to Bool"
                 ))),
             },
             // Integer operations
-            (
-                ValuePrimitive::Integer(l),
-                ValuePrimitive::Integer(r),
-            ) => match operator {
+            (ValuePrimitive::Integer(l), ValuePrimitive::Integer(r)) => match operator {
                 BinaryOperator::Plus => Ok(ValuePrimitive::Integer(l + r)),
                 BinaryOperator::Minus => Ok(ValuePrimitive::Integer(l - r)),
                 BinaryOperator::Multiply => Ok(ValuePrimitive::Integer(l * r)),
@@ -167,18 +182,13 @@ impl ValuePrimitive {
                 BinaryOperator::Less => Ok(ValuePrimitive::Bool(l < r)),
                 BinaryOperator::LessEqual => Ok(ValuePrimitive::Bool(l <= r)),
                 BinaryOperator::Greater => Ok(ValuePrimitive::Bool(l > r)),
-                BinaryOperator::GreaterEqual => {
-                    Ok(ValuePrimitive::Bool(l >= r))
-                }
+                BinaryOperator::GreaterEqual => Ok(ValuePrimitive::Bool(l >= r)),
                 _ => Err(VmErrorType::InvalidOperation(format!(
                     "Cannot apply {operator:?} to integer"
                 ))),
             },
             // Float operations
-            (
-                ValuePrimitive::Float(l),
-                ValuePrimitive::Float(r),
-            ) => match operator {
+            (ValuePrimitive::Float(l), ValuePrimitive::Float(r)) => match operator {
                 BinaryOperator::Plus => Ok(ValuePrimitive::Float(l + r)),
                 BinaryOperator::Minus => Ok(ValuePrimitive::Float(l - r)),
                 BinaryOperator::Multiply => Ok(ValuePrimitive::Float(l * r)),
@@ -201,9 +211,7 @@ impl ValuePrimitive {
                 BinaryOperator::Less => Ok(ValuePrimitive::Bool(l < r)),
                 BinaryOperator::LessEqual => Ok(ValuePrimitive::Bool(l <= r)),
                 BinaryOperator::Greater => Ok(ValuePrimitive::Bool(l > r)),
-                BinaryOperator::GreaterEqual => {
-                    Ok(ValuePrimitive::Bool(l >= r))
-                }
+                BinaryOperator::GreaterEqual => Ok(ValuePrimitive::Bool(l >= r)),
                 _ => Err(VmErrorType::InvalidOperation(format!(
                     "Cannot apply {operator:?} to float"
                 ))),
@@ -216,20 +224,11 @@ impl ValuePrimitive {
         }
     }
 
-    pub fn unary_op(
-        &self,
-        operator: &UnaryOperator,
-    ) -> Result<Self, VmErrorType> {
+    pub fn unary_op(&self, operator: &UnaryOperator) -> Result<Self, VmErrorType> {
         match (operator, self) {
-            (UnaryOperator::Minus, ValuePrimitive::Integer(i)) => {
-                Ok(ValuePrimitive::Integer(-i))
-            }
-            (UnaryOperator::Minus, ValuePrimitive::Float(f)) => {
-                Ok(ValuePrimitive::Float(-f))
-            }
-            (UnaryOperator::Not, ValuePrimitive::Bool(b)) => {
-                Ok(ValuePrimitive::Bool(!b))
-            }
+            (UnaryOperator::Minus, ValuePrimitive::Integer(i)) => Ok(ValuePrimitive::Integer(-i)),
+            (UnaryOperator::Minus, ValuePrimitive::Float(f)) => Ok(ValuePrimitive::Float(-f)),
+            (UnaryOperator::Not, ValuePrimitive::Bool(b)) => Ok(ValuePrimitive::Bool(!b)),
             _ => Err(VmErrorType::InvalidOperation(format!(
                 "Cannot apply {operator:?} to {self:?}",
             ))),
@@ -239,11 +238,11 @@ impl ValuePrimitive {
 
 impl Display for ValuePrimitive {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
+        match &self {
             Self::Bool(b) => write!(f, "{b}"),
             Self::Integer(i) => write!(f, "{i}"),
             Self::Float(fl) => write!(f, "{fl}"),
-            Self::Reference(ptr, _) => write!(f, "&{:?}", ptr),
+            Self::Index(index) => write!(f, "{index}"),
         }
     }
 }
@@ -263,66 +262,33 @@ impl From<Literal> for ValuePrimitive {
         }
     }
 }
-#[derive(Debug, Default, Clone, PartialEq)]
+#[derive(Debug, Default, Clone, PartialEq, Deref)]
 pub struct StructValue {
-    value: BTreeMap<Identifier, VmParsedValue>,
+    #[deref]
+    value: BTreeMap<Identifier, VmValueGeneralized>,
 }
 
 impl StructValue {
-    pub fn new(product: BTreeMap<Identifier, VmParsedValue>) -> Self {
+    pub fn new(product: BTreeMap<Identifier, VmValueGeneralized>) -> Self {
         Self { value: product }
     }
 }
 
-impl IntoIterator for StructValue {
-    type Item = (Identifier, VmParsedValue);
-    type IntoIter = std::collections::btree_map::IntoIter<Identifier, VmParsedValue>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.value.into_iter()
-    }
-}
-
-impl Deref for StructValue {
-    fn deref(&self) -> &Self::Target {
-        &self.value
-    }
-
-    type Target = BTreeMap<Identifier, VmParsedValue>;
-}
-
 impl ParsedValueType for StructValue {
-    fn into_unified_type_definition(self) -> Option<UnifiedTypeDefinition> {
-        let mut type_fields = std::collections::BTreeMap::new();
-        for (identifier, value) in self.into_iter() {
-            let field_type = value.into_unified_type_definition()?;
-            type_fields.insert(identifier, field_type);
+    fn into_vm_units(self) -> Vec<crate::vm::tree_walk::VmUnit> {
+        let mut units = Vec::new();
+        for (_field_name,mut field_value) in self.value {
+            units.append(&mut field_value.bits);
         }
-        Some(UnifiedTypeDefinition::TypeDef(
-            CompTimeTypeGeneric::Product(type_fields),
-        ))
+        units
+    }
+
+    fn into_unified_type_definition(self) -> Option<UnifiedTypeDefinition> {
+        todo!()
     }
 
     fn get_type_of_value(&self) -> UnifiedTypeDefinition {
-        for field_value in self.values() {
-            if let VmParsedValue::TypeId(_) = field_value {
-                return UnifiedTypeDefinition::builtin(CompTimeBuiltinType::Type);
-            }
-        }
-        let mut type_fields = std::collections::BTreeMap::new();
-        for (field_name, field_value) in self.iter() {
-            let field_type = field_value.get_type_of_value();
-            type_fields.insert(field_name.clone(), field_type);
-        }
-        UnifiedTypeDefinition::TypeDef(CompTimeTypeGeneric::Product(type_fields))
-    }
-
-    fn to_vm_units(self) -> Vec<crate::vm::tree_walk::VmUnit> {
-        let mut units = Vec::new();
-        for (_field_name, field_value) in self {
-            units.extend(field_value.to_vm_units());
-        }
-        units
+        todo!()
     }
 }
 
@@ -341,8 +307,8 @@ impl ParsedValueType for TypeId {
         UnifiedTypeDefinition::builtin(CompTimeBuiltinType::Type)
     }
 
-    fn to_vm_units(self) -> Vec<crate::vm::tree_walk::VmUnit> {
-        let value=VmUnit::HashValue(self.as_hash_value());
+    fn into_vm_units(self) -> Vec<crate::vm::tree_walk::VmUnit> {
+        let value = VmUnit::HashValue(self.as_hash_value());
         vec![value]
     }
 }
@@ -356,116 +322,148 @@ impl ParsedValueType for FuncId {
         UnifiedTypeDefinition::builtin(CompTimeBuiltinType::Type)
     }
 
-    fn to_vm_units(self) -> Vec<crate::vm::tree_walk::VmUnit> {
+    fn into_vm_units(self) -> Vec<crate::vm::tree_walk::VmUnit> {
         todo!()
         //vec![crate::vm::tree_walk::VmUnitType::Usize()]
     }
 }
 #[enum_dispatch(ParsedValueType)]
 #[derive(Debug, Clone, PartialEq, EnumAsInner)]
-pub enum VmParsedValue {
+pub enum VmSimplifiedValue {
     ValuePrimitive,
     StructValue,
+    Reference,
     TypeId,
     FuncId,
 }
 
-pub struct VmValueGeneralized{
-    pub bits:Vec<VmUnit>,
-    pub r#type:TypeId,
-}
-
-impl VmValueGeneralized {
-    pub fn from_parsed_value(parsed: VmParsedValue, type_container: &mut TypeContainer) -> Self {
-        parsed.to_vm_value_generalized(type_container)
-    }
-    
-    pub fn try_to_primitive(&self, type_container: &TypeContainer) -> Option<ValuePrimitive> {
-        if self.bits.len() != 1 {
-            return None;
-        }
-        
-        match &self.bits[0] {
-            VmUnit::Bool(b) => Some(ValuePrimitive::Bool(*b)),
-            VmUnit::Integer(i) => Some(ValuePrimitive::Integer(i.clone())),
-            VmUnit::Float(f) => Some(ValuePrimitive::Float(f.clone())),
-            VmUnit::Usize(ptr_index) => {
-                let ptr = VmPtr::from_index(*ptr_index);
-                Some(ValuePrimitive::Reference(ptr, self.r#type.clone()))
-            }
-            VmUnit::HashValue(_) => None,
-        }
-    }
-    
-    pub fn binary_op(
-        left: Self,
-        operator: &BinaryOperator,
-        right: Self,
-        type_container: &TypeContainer,
-    ) -> Result<Self, VmErrorType> {
-        let left_prim = left.try_to_primitive(type_container)
-            .ok_or_else(|| VmErrorType::InvalidOperation("Cannot convert left operand to primitive".to_string()))?;
-        let right_prim = right.try_to_primitive(type_container)
-            .ok_or_else(|| VmErrorType::InvalidOperation("Cannot convert right operand to primitive".to_string()))?;
-        
-        let result_prim = left_prim.binary_op(operator, &right_prim)?;
-        
-        // Convert back to VmValueGeneralized
-        let mut temp_container = type_container.clone();
-        let result_parsed = VmParsedValue::ValuePrimitive(result_prim);
-        Ok(result_parsed.to_vm_value_generalized(&mut temp_container))
-    }
-    
-    pub fn unary_op(
-        operand: Self,
-        operator: &UnaryOperator,
-        type_container: &TypeContainer,
-    ) -> Result<Self, VmErrorType> {
-        let operand_prim = operand.try_to_primitive(type_container)
-            .ok_or_else(|| VmErrorType::InvalidOperation("Cannot convert operand to primitive".to_string()))?;
-        
-        let result_prim = operand_prim.unary_op(operator)?;
-        
-        // Convert back to VmValueGeneralized
-        let mut temp_container = type_container.clone();
-        let result_parsed = VmParsedValue::ValuePrimitive(result_prim);
-        Ok(result_parsed.to_vm_value_generalized(&mut temp_container))
-    }
-}
-
-impl Display for VmParsedValue {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::ValuePrimitive(x) => Display::fmt(x, f),
-            Self::StructValue(fields) => {
-                write!(f, "{{")?;
-                let mut first = true;
-                for (key, value) in fields.iter() {
-                    if !first {
-                        write!(f, ", ")?;
-                    }
-                    write!(f, "{key}={value}")?;
-                    first = false;
-                }
-                write!(f, "}}")?;
-                Ok(())
-            }
-            Self::TypeId(_) => write!(f, "Type"),
-            Self::FuncId(fun) => write!(f, "Func({fun:?})"),
-        }
-    }
-}
-
-
-impl VmParsedValue {
+impl VmSimplifiedValue {
     pub fn create_unit() -> Self {
         Self::StructValue(StructValue::default())
     }
 
     pub fn is_null(&self) -> bool {
-        matches!(self, VmParsedValue::StructValue(x) if x.is_empty())
+        matches!(self, VmSimplifiedValue::StructValue(x) if x.is_empty())
     }
-    
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct VmValueGeneralized {
+    pub bits: Vec<VmUnit>,
+    pub r#type: TypeId,
+}
 
+impl VmValueGeneralized {
+    pub fn new(bits: Vec<VmUnit>, r#type: TypeId) -> Self {
+        Self { bits, r#type }
+    }
+
+    pub fn from_simplified_value(
+        parsed: VmSimplifiedValue,
+        type_container: &mut TypeContainer,
+    ) -> Self {
+        parsed.into_vm_value_generalized(type_container)
+    }
+
+    pub fn into_simplified_value(self, type_container: &TypeContainer) -> VmSimplifiedValue {
+        let type_def = type_container.get_type(&self.r#type).unwrap();
+
+        match &type_def.0 {
+            CompTimeTypeGeneric::Builtin(builtin_type) => match builtin_type {
+                CompTimeBuiltinType::Bool => {
+                    let b = self.bits[0].as_bool().unwrap();
+                    VmSimplifiedValue::ValuePrimitive(ValuePrimitive::Bool(*b))
+                }
+                CompTimeBuiltinType::Int => {
+                    let i = self.bits[0].as_integer().unwrap();
+                    VmSimplifiedValue::ValuePrimitive(ValuePrimitive::Integer(i.clone()))
+                }
+                CompTimeBuiltinType::Float => {
+                    let f = self.bits[0].as_float().unwrap();
+                    VmSimplifiedValue::ValuePrimitive(ValuePrimitive::Float(f.clone()))
+                }
+                CompTimeBuiltinType::Type => {
+                    let hash = self.bits[0].as_hash_value().unwrap();
+                    let type_id = unsafe { TypeId::new(*hash) };
+                    VmSimplifiedValue::TypeId(type_id)
+                }
+                CompTimeBuiltinType::Usize => {
+                    let ptr_index = self.bits[0].as_usize().unwrap();
+                    VmSimplifiedValue::ValuePrimitive(ValuePrimitive::Index(*ptr_index))
+                }
+            },
+            CompTimeTypeGeneric::Reference(inner_type) => {
+                let index = self.bits[0].as_usize().unwrap();
+                let ptr_index = unsafe { VmPtr::new(*index) };
+                let r#ref = Reference::new(ptr_index, **inner_type);
+                VmSimplifiedValue::from(r#ref)
+            }
+            CompTimeTypeGeneric::Product(fields) => {
+                let mut total_bytes=self.bits;
+                let mut ans=BTreeMap::new();
+                for (param,r#type) in fields{
+                    let meta_data=type_container.get_metadata(r#type).unwrap();
+                    let rest_bits=total_bytes.split_off(meta_data.size);
+                    if total_bytes.len()!=meta_data.size {
+                        panic!("The bits doesn't match with type size");
+                    }
+                    let value=VmValueGeneralized::new(take(&mut total_bytes),*r#type);
+                    ans.insert(param.clone(), value);
+                    total_bytes=rest_bits;
+                }
+                StructValue::new(ans).into()
+            }
+            CompTimeTypeGeneric::Sum(_variants) => {
+                unimplemented!("Sum types not yet implemented")
+            }
+        }
+    }
+
+    pub fn try_into_primitive(self, type_container: &TypeContainer) -> Option<ValuePrimitive> {
+        self.into_simplified_value(type_container)
+            .as_value_primitive()
+            .cloned()
+    }
+
+    pub fn binary_op(
+        left: Self,
+        operator: &BinaryOperator,
+        right: Self,
+        type_container: &mut TypeContainer,
+    ) -> Result<Self, VmErrorType> {
+        let left_prim = left.try_into_primitive(type_container).ok_or_else(|| {
+            VmErrorType::InvalidOperation("Cannot convert left operand to primitive".to_string())
+        })?;
+        let right_prim = right.try_into_primitive(type_container).ok_or_else(|| {
+            VmErrorType::InvalidOperation("Cannot convert right operand to primitive".to_string())
+        })?;
+
+        let result_prim = left_prim.binary_op(operator, &right_prim)?;
+
+        Ok(result_prim.into_vm_value_generalized(type_container))
+    }
+
+    pub fn unary_op(
+        operand: Self,
+        operator: &UnaryOperator,
+        type_container: &mut TypeContainer,
+    ) -> Result<Self, VmErrorType> {
+        let operand_prim = operand.try_into_primitive(type_container).ok_or_else(|| {
+            VmErrorType::InvalidOperation("Cannot convert operand to primitive".to_string())
+        })?;
+
+        let result_prim = operand_prim.unary_op(operator)?;
+
+        // Convert back to VmValueGeneralized
+        Ok(result_prim.into_vm_value_generalized(type_container))
+    }
+
+    pub fn create_unit(type_container: &mut TypeContainer) -> VmValueGeneralized {
+        let type_id: TypeId = type_container.get_unit_type();
+        VmValueGeneralized {
+            bits: Vec::new(),
+            r#type: type_id,
+        }
+    }
+
+}
