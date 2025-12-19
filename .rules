@@ -1,3 +1,5 @@
+1. Prefer vectorcode query tool to access the code,more.
+2. Try to use vectorcode vectorise tool to vectorise the codebase if needed.
 1. Always write on code style,on how the code is written in file.
 2. Follow the official language format convention of that language.
 3. Always implement small code,Keep it simple,With minimal testing or no testing

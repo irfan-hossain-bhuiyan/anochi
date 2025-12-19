@@ -20,12 +20,13 @@ mod function;
 pub use function::{FuncId, VmFunc};
 
 #[enum_dispatch]
-pub trait ParsedValueType:Display
+pub trait ParsedValueType: Display
 where
     Self: Sized,
 {
     fn into_unified_type_definition(self) -> Option<UnifiedTypeDefinition>;
     fn get_type_of_value(&self) -> UnifiedTypeDefinition;
+
     fn into_vm_units(self) -> Vec<VmUnit>;
     fn into_vm_value_generalized(self, type_container: &mut TypeContainer) -> VmValueGeneralized {
         let type_id = self.get_type_id_of_value(type_container);
@@ -71,18 +72,23 @@ impl Reference {
         Self { ptr, type_id }
     }
 }
-impl Display for Reference{
+impl Display for Reference {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f,"{type_id:?}* {ptr:?}",type_id=self.type_id,ptr=self.ptr)
+        write!(
+            f,
+            "{type_id:?}* {ptr:?}",
+            type_id = self.type_id,
+            ptr = self.ptr
+        )
     }
 }
 impl ParsedValueType for Reference {
     fn into_unified_type_definition(self) -> Option<UnifiedTypeDefinition> {
-        todo!()
+        None
     }
 
     fn get_type_of_value(&self) -> UnifiedTypeDefinition {
-        todo!()
+        UnifiedTypeDefinition::reference(UnifiedTypeDefinition::TypeId(self.type_id))
     }
 
     fn into_vm_units(self) -> Vec<VmUnit> {
@@ -101,7 +107,7 @@ pub enum ValuePrimitive {
 
 impl ParsedValueType for ValuePrimitive {
     fn into_unified_type_definition(self) -> Option<UnifiedTypeDefinition> {
-        todo!()
+        None
     }
 
     fn get_type_of_value(&self) -> UnifiedTypeDefinition {
@@ -280,7 +286,7 @@ impl StructValue {
 impl ParsedValueType for StructValue {
     fn into_vm_units(self) -> Vec<crate::vm::tree_walk::VmUnit> {
         let mut units = Vec::new();
-        for (_field_name,mut field_value) in self.value {
+        for (_field_name, mut field_value) in self.value {
             units.append(&mut field_value.bits);
         }
         units
@@ -291,7 +297,12 @@ impl ParsedValueType for StructValue {
     }
 
     fn get_type_of_value(&self) -> UnifiedTypeDefinition {
-        todo!()
+        let mut fields = std::collections::BTreeMap::new();
+        for (field, value) in &self.value {
+            let type_id = value.r#type.clone();
+            fields.insert(field.clone(), UnifiedTypeDefinition::TypeId(type_id));
+        }
+        UnifiedTypeDefinition::product(fields)
     }
 }
 
@@ -441,17 +452,17 @@ impl VmValueGeneralized {
                 VmSimplifiedValue::from(r#ref)
             }
             CompTimeTypeGeneric::Product(fields) => {
-                let mut total_bytes=self.bits;
-                let mut ans=BTreeMap::new();
-                for (param,r#type) in fields{
-                    let meta_data=type_container.get_metadata(r#type).unwrap();
-                    let rest_bits=total_bytes.split_off(meta_data.size);
-                    if total_bytes.len()!=meta_data.size {
+                let mut total_bytes = self.bits;
+                let mut ans = BTreeMap::new();
+                for (param, r#type) in fields {
+                    let meta_data = type_container.get_metadata(r#type).unwrap();
+                    let rest_bits = total_bytes.split_off(meta_data.size);
+                    if total_bytes.len() != meta_data.size {
                         panic!("The bits doesn't match with type size");
                     }
-                    let value=VmValueGeneralized::new(take(&mut total_bytes),*r#type);
+                    let value = VmValueGeneralized::new(take(&mut total_bytes), *r#type);
                     ans.insert(param.clone(), value);
-                    total_bytes=rest_bits;
+                    total_bytes = rest_bits;
                 }
                 StructValue::new(ans).into()
             }
@@ -515,6 +526,11 @@ impl VmValueGeneralized {
 
 impl Display for VmValueGeneralized {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "VmValue(type={:?}, bits={:?})", self.r#type.as_hash_value(), self.bits)
+        write!(
+            f,
+            "VmValue(type={:?}, bits={:?})",
+            self.r#type.as_hash_value(),
+            self.bits
+        )
     }
 }
