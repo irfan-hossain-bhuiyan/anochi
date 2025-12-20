@@ -1,30 +1,31 @@
 use super::*;
 use crate::ast::{Expression, CodeMetaData, Literal, UnaryOperator};
 
-use crate::vm::tree_walk::vm_value::{ValuePrimitive, ParsedValueType, VmSimplifiedValue};
+use crate::vm::tree_walk::vm_value::{ParsedValueType, Reference, ValuePrimitive, VmSimplifiedValue};
 use crate::ast::expression::ExprNodeGeneric;
 use crate::vm::tree_walk::vm_error::{VmError, VmErrorType};
 use crate::prelude::IndexPtr;
 use crate::types::{UnifiedTypeDefinition};
 use std::collections::{BTreeMap, BTreeSet};
-
+/// get_reference is used to get reference from expression,this is used,
+/// this is used on assignment to get the address,
 pub(super) fn get_reference<Backend: VmBackend>(
     vm: &mut Vm<Backend>,
     expression_node: &ExpressionNode,
-) -> Result<IndexPtr<VmUnit>, VmError> {
+) -> Result<Reference, VmError> {
     let node_data = expression_node.data().get_position().clone();
     let map_err = |e| VmError::new(e, node_data.clone());
     let expression = &expression_node.exp;
     
     match expression {
         Expression::Literal(Literal::Identifier(id)) => {
-            vm.variables.get_index_from_name(id)
+            vm.variables.get_reference_from_name(id)
                 .ok_or_else(|| map_err(VmErrorType::UndefinedIdentifier(id.clone())))
         }
         Expression::Unary { operator: UnaryOperator::Deref, operand } => {
             let value = evaluate_expr(vm, operand)?;
             if let VmSimplifiedValue::Reference(reference) = value.into_simplified_value(&vm.types) {
-                Ok(reference.ptr)
+                Ok(reference)
             } else {
                 Err(map_err(VmErrorType::TypeMismatch(
                     "Dereference operator (*) requires a reference value",
@@ -154,21 +155,17 @@ pub(super) fn evaluate_expr<Backend: VmBackend>(
         }
         Expression::Unary { operator, operand } => match operator {
             UnaryOperator::Ref => {
-                //let ptr = get_reference(vm, operand)?;
-                //let type_id = vm.variables.get_variable_data(ptr).type_id;
-                //Ok(ValuePrimitive::Reference(Reference { field1: ptr, field2: type_id }))
-                todo!()
+                Ok(get_reference(vm, operand)?.into_vm_value_generalized(&mut vm.types))
             }
             UnaryOperator::Deref => {
-                //let operand_val = vm.evaluate_expr(operand)?;
-                //if let ValuePrimitive::Reference(Reference { field1: ptr, field2: _ }) = operand_val {
-                //    Ok(vm.variables.get_value_from_index(ptr).clone())
-                //} else {
-                //    Err(map_err(VmErrorType::TypeMismatch(
-                //        "Dereference operator (*) requires a reference value",
-                //    )))
-                //}
-                todo!()
+                let operand_val = vm.evaluate_expr(operand)?.into_simplified_value(&vm.types);
+                if let VmSimplifiedValue::Reference(reference) = operand_val {
+                    Ok(vm.variables.get_value_from_reference(&reference,&vm.types).clone())
+                } else {
+                    Err(map_err(VmErrorType::TypeMismatch(
+                        "Dereference operator (*) requires a reference value",
+                    )))
+                }
             }
             _ => {
                 let operand_val = vm.evaluate_expr(operand)?;

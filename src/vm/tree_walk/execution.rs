@@ -41,11 +41,11 @@ pub(super) fn execute_statement<Backend: VmBackend>(
             Ok(StatementEvent::None)
         }
         Statement::MutableAssignment { target, value } => {
-            let ptr = get_reference(vm, target)?;
+            let r#ref = get_reference(vm, target)?;
             let evaluated_value = evaluate_expr(vm,value)?;
             unsafe {
-                vm.variables.set_value_from_index(
-                    ptr,
+                vm.variables.set_value_from_reference(
+                    &r#ref,
                     evaluated_value,
                 ).map_err(map_err)?
             };

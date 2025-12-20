@@ -5,7 +5,7 @@ use macros::generate_unchecked;
 use thiserror::Error;
 
 use crate::prelude::{IndexPtr, SizedArray};
-use crate::vm::tree_walk::vm_value::VmValueGeneralized;
+use crate::vm::tree_walk::vm_value::{Reference, VmValueGeneralized};
 use crate::{
     ast::Identifier,
     types::{TypeContainer, TypeId},
@@ -197,14 +197,27 @@ impl ScopeStack {
     pub fn has_variable_current(&self, target: &Identifier) -> bool {
         self.current_scope().variables.contains_key(target)
     }
+    pub fn get_reference_from_name(&self, id: &Identifier) -> Option<Reference> {
+        let data=self.get_variable_data(id)?;
+        Some(Reference { ptr: data.stack_position, type_id: data.type_id})
+    }
+    pub fn get_value_from_reference(&self, reference:&Reference,type_container: &TypeContainer) -> VmValueGeneralized {
+        let size=type_container.get_metadata(&reference.type_id).unwrap().size;
+        let bytes=self.get_slice(reference.ptr,size);
+        VmValueGeneralized { bits: bytes, r#type: reference.type_id }
+    }
     /// Overwrite middle of a stack given the index,
     /// It is useful if you want to edit the middle of a stack.
-    pub unsafe fn set_value_from_index(
+    unsafe fn set_value_from_index(
         &mut self,
         ptr: StackPtr,
         value: VmValueGeneralized,
     ) -> Result<(), VmErrorType> {
         self.overwrite_at_position_checked(ptr.as_index(), value)
+    }
+    pub unsafe fn set_value_from_reference(&mut self,r#ref:&Reference,value:VmValueGeneralized)->Result<(),VmErrorType>{
+        if r#ref.type_id!=value.r#type{return Err(VmErrorType::TypeMismatch("reference has type mismatch"));}
+        unsafe { self.set_value_from_index(r#ref.ptr, value) }
     }
     #[generate_unchecked]
     fn overwrite_at_position_checked(
@@ -230,6 +243,11 @@ impl ScopeStack {
     fn flatten_and_push(&mut self, value: VmValueGeneralized) -> IndexPtr<VmUnit> {
         //TODO:I need to do somethinng for union type,example expanding it.
         self.stack.append(value.bits)
+    }
+
+    fn get_slice(&self, ptr: IndexPtr<VmUnit>, size: usize) -> Vec<VmUnit> {
+        let index=ptr.as_index();
+        self.stack[index..index+size].to_vec()
     }
 }
 
