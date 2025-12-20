@@ -60,6 +60,7 @@ pub enum ExprLevel {
     Comparison,
     Additive,
     Multiplicative,
+    RefDeref,
     Unary,
     MemberAccess,
     Primary,
@@ -158,25 +159,34 @@ impl<'a> Parser<'a> {
                 Ok(node)
             }
             ExprLevel::Multiplicative => {
-                let mut node = self.parse_expr_level(ExprLevel::Unary)?;
+                let mut node = self.parse_expr_level(ExprLevel::RefDeref)?;
                 while let Ok(op) = match_token!(self, TokenType::Star | TokenType::Slash) {
                     let operator = match op {
                         TokenType::Star => BinaryOperator::Multiply,
                         TokenType::Slash => BinaryOperator::Divide,
                         _ => unreachable!(),
                     };
-                    let right = self.parse_expr_level(ExprLevel::Unary)?;
+                    let right = self.parse_expr_level(ExprLevel::RefDeref)?;
                     let expr = Expression::binary(node, operator, right);
                     node = self.make_expr_node(expr, start);
                 }
                 Ok(node)
             }
+            ExprLevel::RefDeref => {
+                let operator = match self.peek_type() {
+                    Some(TokenType::Ampersand) => UnaryOperator::Ref,
+                    Some(TokenType::Star) => UnaryOperator::Deref,
+                    _ => return self.parse_expr_level(ExprLevel::Unary),
+                };
+                self.advance();
+                let operand = self.parse_expr_level(ExprLevel::MemberAccess)?;
+                let expr = Expression::unary(operator, operand);
+                Ok(self.make_expr_node(expr, start))
+            }
             ExprLevel::Unary => {
                 let operator = match self.peek_type() {
                     Some(TokenType::Minus) => UnaryOperator::Minus,
                     Some(TokenType::Keyword(Keyword::Not)) => UnaryOperator::Not,
-                    Some(TokenType::Ampersand) => UnaryOperator::Ref,
-                    Some(TokenType::Star) => UnaryOperator::Deref,
                     _ => return self.parse_expr_level(ExprLevel::MemberAccess),
                 };
                 self.advance();
