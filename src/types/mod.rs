@@ -219,7 +219,7 @@ impl OptimizedTypeDefinition {
                 layout: TypeLayout::Simple,
             },
             CompTimeTypeGeneric::Reference(_) => VmTypeMetaData {
-                size: 2,
+                size: 1,
                 layout: TypeLayout::Simple,
             },
             CompTimeTypeGeneric::Product(fields) => {
