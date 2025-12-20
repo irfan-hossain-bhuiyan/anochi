@@ -1,10 +1,9 @@
 use super::*;
 use crate::ast::{Expression, CodeMetaData, Literal, UnaryOperator};
 
-use crate::vm::tree_walk::vm_value::{ParsedValueType, Reference, ValuePrimitive, VmValueSimplfied};
+use crate::vm::tree_walk::vm_value::{ParsedValueType, Reference, ValuePrimitive, VmValueSimplified};
 use crate::ast::expression::ExprNodeGeneric;
 use crate::vm::tree_walk::vm_error::{VmError, VmErrorType};
-use crate::prelude::IndexPtr;
 use crate::types::{UnifiedTypeDefinition};
 use std::collections::{BTreeMap, BTreeSet};
 /// get_reference is used to get reference from expression,this is used,
@@ -24,7 +23,7 @@ pub(super) fn get_reference<Backend: VmBackend>(
         }
         Expression::Unary { operator: UnaryOperator::Deref, operand } => {
             let value = evaluate_expr(vm, operand)?;
-            if let VmValueSimplfied::Reference(reference) = value.into_simplified_value(&vm.types) {
+            if let VmValueSimplified::Reference(reference) = value.into_simplified_value(&vm.types) {
                 Ok(reference)
             } else {
                 Err(map_err(VmErrorType::TypeMismatch(
@@ -159,7 +158,7 @@ pub(super) fn evaluate_expr<Backend: VmBackend>(
             }
             UnaryOperator::Deref => {
                 let operand_val = vm.evaluate_expr(operand)?.into_simplified_value(&vm.types);
-                if let VmValueSimplfied::Reference(reference) = operand_val {
+                if let VmValueSimplified::Reference(reference) = operand_val {
                     Ok(vm.variables.get_value_from_reference(&reference,&vm.types).clone())
                 } else {
                     Err(map_err(VmErrorType::TypeMismatch(

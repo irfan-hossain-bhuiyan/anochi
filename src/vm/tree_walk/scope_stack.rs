@@ -6,7 +6,7 @@ use thiserror::Error;
 
 use crate::prelude::{IndexPtr, SizedArray};
 use crate::vm::tree_walk::ParsedValueType;
-use crate::vm::tree_walk::vm_value::VmValueSimplfied
+use crate::vm::tree_walk::vm_value::VmValueSimplified;
 use crate::vm::tree_walk::vm_value::{Reference, VmValueGeneralized};
 use crate::{
     ast::Identifier,
@@ -128,7 +128,7 @@ impl ScopeStack {
     }
     pub fn insert_variable_simple(&mut self,
         identifier: Identifier,
-        value: VmValueSimplfied,
+        value: VmValueSimplified,
         type_container: &mut TypeContainer
     ){
         self.insert_variable_default(identifier, value.into_vm_value_generalized(type_container));

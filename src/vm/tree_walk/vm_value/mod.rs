@@ -377,7 +377,7 @@ impl ParsedValueType for FuncId {
 }
 #[enum_dispatch(ParsedValueType)]
 #[derive(Debug, Clone, PartialEq, EnumAsInner)]
-pub enum VmValueSimplfied {
+pub enum VmValueSimplified {
     ValuePrimitive,
     StructValue,
     Reference,
@@ -385,25 +385,25 @@ pub enum VmValueSimplfied {
     FuncId,
 }
 
-impl Display for VmValueSimplfied {
+impl Display for VmValueSimplified {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            VmValueSimplfied::ValuePrimitive(v) => write!(f, "{}", v),
-            VmValueSimplfied::StructValue(v) => write!(f, "{}", v),
-            VmValueSimplfied::Reference(v) => write!(f, "{}", v),
-            VmValueSimplfied::TypeId(v) => write!(f, "{}", v),
-            VmValueSimplfied::FuncId(v) => write!(f, "{}", v),
+            VmValueSimplified::ValuePrimitive(v) => write!(f, "{}", v),
+            VmValueSimplified::StructValue(v) => write!(f, "{}", v),
+            VmValueSimplified::Reference(v) => write!(f, "{}", v),
+            VmValueSimplified::TypeId(v) => write!(f, "{}", v),
+            VmValueSimplified::FuncId(v) => write!(f, "{}", v),
         }
     }
 }
 
-impl VmValueSimplfied {
+impl VmValueSimplified {
     pub fn create_unit() -> Self {
         Self::StructValue(StructValue::default())
     }
 
     pub fn is_null(&self) -> bool {
-        matches!(self, VmValueSimplfied::StructValue(x) if x.is_empty())
+        matches!(self, VmValueSimplified::StructValue(x) if x.is_empty())
     }
 }
 
@@ -419,44 +419,44 @@ impl VmValueGeneralized {
     }
 
     pub fn from_simplified_value(
-        parsed: VmValueSimplfied,
+        parsed: VmValueSimplified,
         type_container: &mut TypeContainer,
     ) -> Self {
         parsed.into_vm_value_generalized(type_container)
     }
 
-    pub fn into_simplified_value(self, type_container: &TypeContainer) -> VmValueSimplfied {
+    pub fn into_simplified_value(self, type_container: &TypeContainer) -> VmValueSimplified {
         let type_def = type_container.get_type(&self.r#type).unwrap();
 
         match &type_def.0 {
             CompTimeTypeGeneric::Builtin(builtin_type) => match builtin_type {
                 CompTimeBuiltinType::Bool => {
                     let b = self.bits[0].as_bool().unwrap();
-                    VmValueSimplfied::ValuePrimitive(ValuePrimitive::Bool(*b))
+                    VmValueSimplified::ValuePrimitive(ValuePrimitive::Bool(*b))
                 }
                 CompTimeBuiltinType::Int => {
                     let i = self.bits[0].as_integer().unwrap();
-                    VmValueSimplfied::ValuePrimitive(ValuePrimitive::Integer(i.clone()))
+                    VmValueSimplified::ValuePrimitive(ValuePrimitive::Integer(i.clone()))
                 }
                 CompTimeBuiltinType::Float => {
                     let f = self.bits[0].as_float().unwrap();
-                    VmValueSimplfied::ValuePrimitive(ValuePrimitive::Float(f.clone()))
+                    VmValueSimplified::ValuePrimitive(ValuePrimitive::Float(f.clone()))
                 }
                 CompTimeBuiltinType::Type => {
                     let hash = self.bits[0].as_hash_value().unwrap();
                     let type_id = unsafe { TypeId::new(*hash) };
-                    VmValueSimplfied::TypeId(type_id)
+                    VmValueSimplified::TypeId(type_id)
                 }
                 CompTimeBuiltinType::Usize => {
                     let ptr_index = self.bits[0].as_usize().unwrap();
-                    VmValueSimplfied::ValuePrimitive(ValuePrimitive::Index(*ptr_index))
+                    VmValueSimplified::ValuePrimitive(ValuePrimitive::Index(*ptr_index))
                 }
             },
             CompTimeTypeGeneric::Reference(inner_type) => {
                 let index = self.bits[0].as_usize().unwrap();
                 let ptr_index = unsafe { VmPtr::new(*index) };
                 let r#ref = Reference::new(ptr_index, **inner_type);
-                VmValueSimplfied::from(r#ref)
+                VmValueSimplified::from(r#ref)
             }
             CompTimeTypeGeneric::Product(fields) => {
                 let mut total_bytes = self.bits;

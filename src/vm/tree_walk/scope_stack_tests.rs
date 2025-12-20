@@ -3,7 +3,7 @@ use crate::{
     types::TypeContainer,
     vm::tree_walk::{
         ScopeStack, VmErrorType,
-        vm_value::{ParsedValueType, ValuePrimitive},
+        vm_value::{ParsedValueType, ValuePrimitive,VmValueSimplified},
     },
 };
 use num_bigint::BigInt;
@@ -181,10 +181,27 @@ fn test_nested_scopes_complex() {
 fn scope_reference_test() {
     let mut stack = ScopeStack::new();
     let mut type_container = TypeContainer::default();
-    let var1= Identifier::new("var1".to_string());
-    let var2= Identifier::new("var2".to_string());
-    stack.insert_variable_simple(var1.clone(),ValuePrimitive::from_i64(-15).into(),&mut type_container);
-    let var1_ref=stack.get_reference_from_name(&var1).unwrap();
-    stack.insert_variable_simple(var2, var1_ref.into(),&mut type_container);
-    let stack.get_value_from_name(&var2, &type_container)
+    let var1 = Identifier::new("var1".to_string());
+    let var2 = Identifier::new("var2".to_string());
+    
+    stack.insert_variable_simple(var1.clone(), ValuePrimitive::from_i64(-15).into(), &mut type_container);
+    
+    let var1_ref = stack.get_reference_from_name(&var1).unwrap();
+    stack.insert_variable_simple(var2.clone(), var1_ref.into(), &mut type_container);
+    
+    let var2_value = stack.get_value_from_name(&var2, &type_container).unwrap();
+    let var2_simplified = var2_value.into_simplified_value(&type_container);
+    
+    if let VmValueSimplified::Reference(reference) = var2_simplified {
+        let dereferenced_value = stack.get_value_from_reference(&reference, &type_container);
+        let dereferenced_simplified = dereferenced_value.into_simplified_value(&type_container);
+        
+        if let VmValueSimplified::ValuePrimitive(ValuePrimitive::Integer(n)) = dereferenced_simplified {
+            assert_eq!(n, BigInt::from(-15));
+        } else {
+            panic!("Expected Integer, got {:?}", dereferenced_simplified);
+        }
+    } else {
+        panic!("Expected Reference, got {:?}", var2_simplified);
+    }
 }

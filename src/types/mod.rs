@@ -45,8 +45,8 @@ impl TypeId {
     pub fn to_type_def(&self, container: &TypeContainer) -> Option<TypeDefinition> {
         container.get_type_def(self)
     }
-    pub fn can_cast_to(&self,other:&Self,container:&TypeContainer)->bool{
-        self==other
+    pub fn can_cast_to(&self, other: &Self, container: &TypeContainer) -> bool {
+        self == other
     }
 }
 
@@ -145,7 +145,9 @@ impl TypeContainer {
     }
 
     pub(crate) fn get_unit_type(&mut self) -> HashPtr<OptimizedTypeDefinition> {
-        self.store_optimized(OptimizedTypeDefinition(CompTimeTypeGeneric::Product(Default::default())))
+        self.store_optimized(OptimizedTypeDefinition(CompTimeTypeGeneric::Product(
+            Default::default(),
+        )))
     }
 
     pub fn get_builtin_type_id(&mut self, builtin_type: CompTimeBuiltinType) -> TypeId {
@@ -206,19 +208,6 @@ impl UnifiedTypeDefinition {
     pub(crate) fn get_id(self, container: &mut TypeContainer) -> TypeId {
         container.store_unified_type(self)
     }
-
-    //pub fn to_optimized(self, container: &mut TypeContainer) -> OptimizedTypeDefinition {
-    //    match self {
-    //        UnifiedTypeDefinition::TypeId(x) => OptimizedTypeDefinition::TypeId(x),
-    //        UnifiedTypeDefinition::TypeDef(x) => {
-    //            let a = x.map(|x| {
-    //                let x = x.to_optimized(container);
-    //                container.store_type(x)
-    //            });
-    //            OptimizedTypeDefinition::new(a)
-    //        }
-    //    }
-    //}
 }
 
 // Implementation for OptimizedTypeDefinition
@@ -240,7 +229,7 @@ impl OptimizedTypeDefinition {
                 for (field_name, type_id) in fields {
                     field_offsets.insert(field_name.clone(), offset);
                     let field_size = container
-                        .get_metadata(&type_id)
+                        .get_metadata(type_id)
                         .map(|meta| meta.size)
                         .unwrap_or(0);
                     offset += field_size;
@@ -251,27 +240,7 @@ impl OptimizedTypeDefinition {
                     layout: TypeLayout::Product(field_offsets),
                 }
             }
-            CompTimeTypeGeneric::Sum(variants) => {
-                let mut tag_index = 0;
-                let mut variant_tags = HashMap::new();
-                let mut max_size = 0;
-
-                for variant_id in variants {
-                    variant_tags.insert(variant_id.clone(), tag_index);
-                    tag_index += 1;
-
-                    let variant_size = container
-                        .get_metadata(&variant_id)
-                        .map(|meta| meta.size)
-                        .unwrap_or(0);
-                    max_size = max_size.max(variant_size);
-                }
-
-                VmTypeMetaData {
-                    size: max_size + 1,
-                    layout: TypeLayout::Sum(variant_tags),
-                }
-            }
+            CompTimeTypeGeneric::Sum(variants) => unimplemented!()
         }
     }
 }
