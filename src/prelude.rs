@@ -4,7 +4,7 @@ use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
 use std::mem::MaybeUninit;
-use std::ops::{Deref, DerefMut, Index, IndexMut};
+use std::ops::{Deref, DerefMut};
 
 use enum_dispatch::enum_dispatch;
 use macros::generate_unchecked;
@@ -17,7 +17,7 @@ pub type HashValue = u64;
 /// to store objects and detect duplicates. Each push operation returns a hash that
 /// serves as a pointer to the object, enabling O(1) access and deduplication.
 /// Type-safe hash pointer for HashCons
-#[derive(Debug, Hash)]
+#[derive(Debug)]
 pub struct HashPtr<T: ?Sized> {
     hash: HashValue,
     _marker: std::marker::PhantomData<T>,
@@ -27,8 +27,13 @@ impl<T: ?Sized> HashPtr<T> {
     pub unsafe fn new(hash: HashValue) -> Self {
         Self {
             hash,
-            _marker: PhantomData::default(),
+            _marker: PhantomData,
         }
+    }
+}
+impl<T:?Sized> Hash for HashPtr<T> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.hash.hash(state);
     }
 }
 impl<T: ?Sized> PartialEq for HashPtr<T> {
@@ -44,7 +49,7 @@ impl<T: ?Sized> Ord for HashPtr<T> {
 }
 impl<T: ?Sized> PartialOrd for HashPtr<T> {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.hash.partial_cmp(&other.hash)
+        Some(self.cmp(other))
     }
 }
 // PartialOrd returns Option<cmp::Ordering>,Like in partial ordering you can't guarentee.So Option

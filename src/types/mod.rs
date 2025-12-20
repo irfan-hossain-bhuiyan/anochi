@@ -24,6 +24,7 @@ pub enum CompTimeBuiltinType {
     Bool,
     Type,
     Usize,
+    Func,
 }
 impl BuiltInType for CompTimeBuiltinType {}
 

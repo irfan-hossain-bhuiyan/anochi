@@ -357,7 +357,7 @@ impl ParsedValueType for TypeId {
 
 impl Display for FuncId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "FuncId({:?})", self)
+        write!(f, "FuncId({self:?})")
     }
 }
 
@@ -367,12 +367,11 @@ impl ParsedValueType for FuncId {
     }
 
     fn get_type_of_value(&self) -> UnifiedTypeDefinition {
-        UnifiedTypeDefinition::builtin(CompTimeBuiltinType::Type)
+        UnifiedTypeDefinition::builtin(CompTimeBuiltinType::Func)
     }
 
-    fn into_vm_units(self) -> Vec<crate::vm::tree_walk::VmUnit> {
-        todo!()
-        //vec![crate::vm::tree_walk::VmUnitType::Usize()]
+    fn into_vm_units(self) -> Vec<VmUnit> {
+        vec![VmUnit::Usize(self.as_index())]
     }
 }
 #[enum_dispatch(ParsedValueType)]
@@ -450,6 +449,11 @@ impl VmValueGeneralized {
                 CompTimeBuiltinType::Usize => {
                     let ptr_index = self.bits[0].as_usize().unwrap();
                     VmValueSimplified::ValuePrimitive(ValuePrimitive::Index(*ptr_index))
+                }
+                CompTimeBuiltinType::Func => {
+                    let funn_id=self.bits[0].as_usize().unwrap();
+                    let func_id= unsafe { FuncId::new(*funn_id)};
+                    VmValueSimplified::from(func_id)
                 }
             },
             CompTimeTypeGeneric::Reference(inner_type) => {
