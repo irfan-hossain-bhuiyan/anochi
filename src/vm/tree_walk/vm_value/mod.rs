@@ -11,7 +11,6 @@ use enum_as_inner::EnumAsInner;
 use enum_dispatch::enum_dispatch;
 use num_bigint::BigInt;
 use num_rational::BigRational;
-use std::any::Any;
 use std::collections::BTreeMap;
 use std::fmt::Display;
 use std::mem::take;

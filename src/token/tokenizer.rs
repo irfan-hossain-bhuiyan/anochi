@@ -158,9 +158,6 @@ impl<'a> Tokenizer<'a> {
         )
     }
 
-    fn make_token_at_current(&self, token_type: TokenType) -> Token {
-        self.make_token(token_type, self.line, self.column, self.current)
-    }
 
     fn make_single_char_token(
         &mut self,

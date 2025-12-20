@@ -119,7 +119,7 @@ pub(super) fn execute_statement<Backend: VmBackend>(
             };
             Ok(StatementEvent::Return(return_value))
         }
-        Statement::Comptime { statements } => todo!(),
+        Statement::Comptime { statements: _ } => todo!(),
     }
 }
 

@@ -109,10 +109,6 @@ let stmt_node = parser.parse_statements().map_err(|x|x.into_code_error())?;
     pub fn vm(&self) -> &Vm<Backend> {
         &self.vm
     }
-
-    fn stack_trace(&self) {
-        self.vm.print_stack();
-    }
 }
 
 impl Default for CodeRunner<crate::vm::backend::IoBackend> {

@@ -1,7 +1,6 @@
 //! Virtual Machine for the Anochi programming language.
 
 use crate::{
-    ast::{StatNodeGeneric, expression::ExprNodeGeneric},
     prelude::HashValue,
 };
 use enum_as_inner::EnumAsInner;
@@ -75,8 +74,6 @@ pub struct Vm<Backend = IoBackend> {
     pub(super) backend: Backend,
 }
 
-type ExpNode<T> = ExprNodeGeneric<T>;
-type StmtNode<T> = StatNodeGeneric<T>;
 
 mod evaluation;
 mod execution;
@@ -92,9 +89,7 @@ impl<Backend: VmBackend> Vm<Backend> {
         vm.load_builtin_types();
         vm
     }
-    fn get_type_def(&self, id: &TypeId) -> Option<crate::types::TypeDefinition> {
-        self.types.get_type_def(id)
-    }
+
     fn load_builtin_types(&mut self) {
         use crate::types::CompTimeBuiltinType;
 
@@ -213,9 +208,6 @@ impl<Backend: VmBackend> Vm<Backend> {
     }
     fn get_func(&self, func_id: FuncId) -> &VmFunc {
         self.funcs.get_checked(func_id).unwrap()
-    }
-    fn get_func_mut(&mut self, func_id: FuncId) -> &mut VmFunc {
-        self.funcs.get_mut_checked(func_id).unwrap()
     }
 
     fn into_type(&mut self, input: VmValueGeneralized) -> Result<TypeId,VmErrorType > {

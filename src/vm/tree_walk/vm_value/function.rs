@@ -2,9 +2,8 @@ use macros::generate_unchecked;
 
 use crate::{
     ast::StatementNode,
-    prelude::{IndexPtr, Mappable},
-    token::{Position, tokenizer::HasPosition},
-    types::{TypeContainer, TypeId}, vm::tree_walk::VmErrorType, ast::StatNodeGeneric,
+    prelude::IndexPtr,
+    types::{TypeContainer, TypeId}, vm::tree_walk::VmErrorType,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -43,7 +42,7 @@ impl VmFunc {
                 self.output = Some(output);
                 Ok(())
             }
-            _ => return Err(VmErrorType::TypeMismatch("")),
+            _ => Err(VmErrorType::TypeMismatch("")),
         }
     }
 

@@ -2,7 +2,6 @@ use std::collections::{HashMap, VecDeque};
 use std::fmt::{Debug, Display};
 
 use macros::generate_unchecked;
-use thiserror::Error;
 
 use crate::prelude::{IndexPtr, SizedArray};
 use crate::vm::tree_walk::ParsedValueType;
@@ -14,17 +13,13 @@ use crate::{
     vm::tree_walk::{VmErrorType, VmUnit},
 };
 type ExprResult = Result<VmValueGeneralized, VmErrorType>;
-#[derive(Debug, Clone, Error)]
-enum Error {
-    #[error("You can't mutate a constant variable")]
-    MutatingConstant,
-}
 
 #[derive(Debug, Clone)]
-/// Check if the variable is immutable,mutable etc.
-enum VariableState {
+pub enum VariableState {
+    #[allow(dead_code)]
     Constant,
     Immutable,
+    #[allow(dead_code)]
     Mutable,
 }
 pub type StackPtr = IndexPtr<VmUnit>;
@@ -42,6 +37,7 @@ pub type VmPtr = IndexPtr<VmUnit>;
 #[derive(Debug, Clone)]
 pub struct VariableData {
     pub type_id: TypeId,
+    #[allow(dead_code)]
     var_state: VariableState,
     stack_position: VmPtr,
 }

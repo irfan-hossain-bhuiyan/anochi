@@ -14,7 +14,7 @@ use derive_more::Deref;
 use enum_as_inner::EnumAsInner;
 pub use type_def::TypeDefinition;
 
-trait BuiltInType {}
+pub trait BuiltInType {}
 /// Represents primitive types that are built into the type system.
 /// These types are pre-registered in the TypeContainer and cannot be user-defined.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -46,7 +46,7 @@ impl TypeId {
     pub fn to_type_def(&self, container: &TypeContainer) -> Option<TypeDefinition> {
         container.get_type_def(self)
     }
-    pub fn can_cast_to(&self, other: &Self, container: &TypeContainer) -> bool {
+    pub fn can_cast_to(&self, other: &Self, _container: &TypeContainer) -> bool {
         self == other
     }
 }
@@ -241,7 +241,7 @@ impl OptimizedTypeDefinition {
                     layout: TypeLayout::Product(field_offsets),
                 }
             }
-            CompTimeTypeGeneric::Sum(variants) => unimplemented!()
+            CompTimeTypeGeneric::Sum(_variants) => unimplemented!()
         }
     }
 }

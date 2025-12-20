@@ -78,9 +78,6 @@ impl FreeRange {
         Self { start, end }
     }
 
-    fn contains(&self, index: usize) -> bool {
-        index >= self.start && index <= self.end
-    }
 
     fn len(&self) -> usize {
         self.end - self.start + 1
