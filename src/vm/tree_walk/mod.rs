@@ -32,7 +32,7 @@ impl std::fmt::Display for VmUnit {
 }
 
 pub mod vm_value;
-pub use vm_value::{ParsedValueType, StructValue, ValuePrimitive, VmSimplifiedValue};
+pub use vm_value::{ParsedValueType, StructValue, ValuePrimitive, VmValueSimplfied};
 
 use crate::{
     ast::{ExpressionNode, Identifier, StatementNode, StatmentBlockNode},
@@ -109,7 +109,7 @@ impl<Backend: VmBackend> Vm<Backend> {
             let type_id = self.types.store_unified_type(type_def);
             self.variables.insert_variable_default(
                 Identifier::new(name.to_string()),
-                VmSimplifiedValue::TypeId(type_id).into_vm_value_generalized(&mut self.types),
+                VmValueSimplfied::TypeId(type_id).into_vm_value_generalized(&mut self.types),
             );
         }
     }
@@ -190,7 +190,7 @@ impl<Backend: VmBackend> Vm<Backend> {
         self.funcs.push(func)
     }
     /// It type check the function that is currently passed,and execute it.
-    fn execute_function(&mut self, func_id: FuncId, inputs: VmSimplifiedValue) -> VmExprResult {
+    fn execute_function(&mut self, func_id: FuncId, inputs: VmValueSimplfied) -> VmExprResult {
         let func = self.get_func(func_id);
         let param_type = func.get_param();
         if !inputs.of_type(param_type, &mut self.types) {

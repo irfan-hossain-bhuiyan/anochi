@@ -5,6 +5,8 @@ use macros::generate_unchecked;
 use thiserror::Error;
 
 use crate::prelude::{IndexPtr, SizedArray};
+use crate::vm::tree_walk::ParsedValueType;
+use crate::vm::tree_walk::vm_value::VmValueSimplfied
 use crate::vm::tree_walk::vm_value::{Reference, VmValueGeneralized};
 use crate::{
     ast::Identifier,
@@ -124,6 +126,14 @@ impl ScopeStack {
             current_scope.variables.insert(identifier, var_data);
         }
     }
+    pub fn insert_variable_simple(&mut self,
+        identifier: Identifier,
+        value: VmValueSimplfied,
+        type_container: &mut TypeContainer
+    ){
+        self.insert_variable_default(identifier, value.into_vm_value_generalized(type_container));
+    }
+
     pub fn insert_variable_check(
         &mut self,
         identifier: Identifier,

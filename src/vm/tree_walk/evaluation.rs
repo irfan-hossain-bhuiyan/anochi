@@ -1,7 +1,7 @@
 use super::*;
 use crate::ast::{Expression, CodeMetaData, Literal, UnaryOperator};
 
-use crate::vm::tree_walk::vm_value::{ParsedValueType, Reference, ValuePrimitive, VmSimplifiedValue};
+use crate::vm::tree_walk::vm_value::{ParsedValueType, Reference, ValuePrimitive, VmValueSimplfied};
 use crate::ast::expression::ExprNodeGeneric;
 use crate::vm::tree_walk::vm_error::{VmError, VmErrorType};
 use crate::prelude::IndexPtr;
@@ -24,7 +24,7 @@ pub(super) fn get_reference<Backend: VmBackend>(
         }
         Expression::Unary { operator: UnaryOperator::Deref, operand } => {
             let value = evaluate_expr(vm, operand)?;
-            if let VmSimplifiedValue::Reference(reference) = value.into_simplified_value(&vm.types) {
+            if let VmValueSimplfied::Reference(reference) = value.into_simplified_value(&vm.types) {
                 Ok(reference)
             } else {
                 Err(map_err(VmErrorType::TypeMismatch(
@@ -136,7 +136,7 @@ pub(super) fn evaluate_expr<Backend: VmBackend>(
     let expression = &expression_node.exp;
     match expression {
         Expression::Literal(literal) => match literal {
-            Literal::Identifier(x) => vm.variables.get_value_from_name(&x,&vm.types).map_err(map_err),
+            Literal::Identifier(x) => vm.variables.get_value_from_name(x,&vm.types).map_err(map_err),
             Literal::Bool(_) | Literal::Float(_) | Literal::Integer(_) => {
                 let value=ValuePrimitive::from(literal.clone());
                 Ok(value.into_vm_value_generalized(&mut vm.types))
@@ -159,7 +159,7 @@ pub(super) fn evaluate_expr<Backend: VmBackend>(
             }
             UnaryOperator::Deref => {
                 let operand_val = vm.evaluate_expr(operand)?.into_simplified_value(&vm.types);
-                if let VmSimplifiedValue::Reference(reference) = operand_val {
+                if let VmValueSimplfied::Reference(reference) = operand_val {
                     Ok(vm.variables.get_value_from_reference(&reference,&vm.types).clone())
                 } else {
                     Err(map_err(VmErrorType::TypeMismatch(

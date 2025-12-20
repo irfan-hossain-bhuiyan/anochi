@@ -101,7 +101,7 @@ let stmt_node = parser.parse_statements().map_err(|x|x.into_code_error())?;
         Ok(value)
     }
     
-    pub fn evaluate_expr_simple(&mut self, source: &str) -> Result<crate::vm::tree_walk::VmSimplifiedValue, CodeRunnerError> {
+    pub fn evaluate_expr_simple(&mut self, source: &str) -> Result<crate::vm::tree_walk::VmValueSimplfied, CodeRunnerError> {
         let value = self.evaluate_expr(source)?;
         Ok(value.into_simplified_value(self.vm.get_type_container()))
     }

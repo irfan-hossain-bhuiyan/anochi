@@ -4,7 +4,7 @@ use vm::backend::IoBackend;
 use vm::tree_walk::{Vm };
 
 use crate::prelude::Mappable;
-use crate::vm::tree_walk::vm_value::{VmSimplifiedValue, ValuePrimitive, ParsedValueType};
+use crate::vm::tree_walk::vm_value::{VmValueSimplfied, ValuePrimitive, ParsedValueType};
 use crate::{ast, token, vm};
 
 #[test]

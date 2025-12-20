@@ -93,7 +93,7 @@ impl ParsedValueType for Reference {
     }
 
     fn into_vm_units(self) -> Vec<VmUnit> {
-        todo!()
+        vec![VmUnit::Usize(self.ptr.as_index())]
     }
 }
 
@@ -377,7 +377,7 @@ impl ParsedValueType for FuncId {
 }
 #[enum_dispatch(ParsedValueType)]
 #[derive(Debug, Clone, PartialEq, EnumAsInner)]
-pub enum VmSimplifiedValue {
+pub enum VmValueSimplfied {
     ValuePrimitive,
     StructValue,
     Reference,
@@ -385,25 +385,25 @@ pub enum VmSimplifiedValue {
     FuncId,
 }
 
-impl Display for VmSimplifiedValue {
+impl Display for VmValueSimplfied {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            VmSimplifiedValue::ValuePrimitive(v) => write!(f, "{}", v),
-            VmSimplifiedValue::StructValue(v) => write!(f, "{}", v),
-            VmSimplifiedValue::Reference(v) => write!(f, "{}", v),
-            VmSimplifiedValue::TypeId(v) => write!(f, "{}", v),
-            VmSimplifiedValue::FuncId(v) => write!(f, "{}", v),
+            VmValueSimplfied::ValuePrimitive(v) => write!(f, "{}", v),
+            VmValueSimplfied::StructValue(v) => write!(f, "{}", v),
+            VmValueSimplfied::Reference(v) => write!(f, "{}", v),
+            VmValueSimplfied::TypeId(v) => write!(f, "{}", v),
+            VmValueSimplfied::FuncId(v) => write!(f, "{}", v),
         }
     }
 }
 
-impl VmSimplifiedValue {
+impl VmValueSimplfied {
     pub fn create_unit() -> Self {
         Self::StructValue(StructValue::default())
     }
 
     pub fn is_null(&self) -> bool {
-        matches!(self, VmSimplifiedValue::StructValue(x) if x.is_empty())
+        matches!(self, VmValueSimplfied::StructValue(x) if x.is_empty())
     }
 }
 
@@ -419,44 +419,44 @@ impl VmValueGeneralized {
     }
 
     pub fn from_simplified_value(
-        parsed: VmSimplifiedValue,
+        parsed: VmValueSimplfied,
         type_container: &mut TypeContainer,
     ) -> Self {
         parsed.into_vm_value_generalized(type_container)
     }
 
-    pub fn into_simplified_value(self, type_container: &TypeContainer) -> VmSimplifiedValue {
+    pub fn into_simplified_value(self, type_container: &TypeContainer) -> VmValueSimplfied {
         let type_def = type_container.get_type(&self.r#type).unwrap();
 
         match &type_def.0 {
             CompTimeTypeGeneric::Builtin(builtin_type) => match builtin_type {
                 CompTimeBuiltinType::Bool => {
                     let b = self.bits[0].as_bool().unwrap();
-                    VmSimplifiedValue::ValuePrimitive(ValuePrimitive::Bool(*b))
+                    VmValueSimplfied::ValuePrimitive(ValuePrimitive::Bool(*b))
                 }
                 CompTimeBuiltinType::Int => {
                     let i = self.bits[0].as_integer().unwrap();
-                    VmSimplifiedValue::ValuePrimitive(ValuePrimitive::Integer(i.clone()))
+                    VmValueSimplfied::ValuePrimitive(ValuePrimitive::Integer(i.clone()))
                 }
                 CompTimeBuiltinType::Float => {
                     let f = self.bits[0].as_float().unwrap();
-                    VmSimplifiedValue::ValuePrimitive(ValuePrimitive::Float(f.clone()))
+                    VmValueSimplfied::ValuePrimitive(ValuePrimitive::Float(f.clone()))
                 }
                 CompTimeBuiltinType::Type => {
                     let hash = self.bits[0].as_hash_value().unwrap();
                     let type_id = unsafe { TypeId::new(*hash) };
-                    VmSimplifiedValue::TypeId(type_id)
+                    VmValueSimplfied::TypeId(type_id)
                 }
                 CompTimeBuiltinType::Usize => {
                     let ptr_index = self.bits[0].as_usize().unwrap();
-                    VmSimplifiedValue::ValuePrimitive(ValuePrimitive::Index(*ptr_index))
+                    VmValueSimplfied::ValuePrimitive(ValuePrimitive::Index(*ptr_index))
                 }
             },
             CompTimeTypeGeneric::Reference(inner_type) => {
                 let index = self.bits[0].as_usize().unwrap();
                 let ptr_index = unsafe { VmPtr::new(*index) };
                 let r#ref = Reference::new(ptr_index, **inner_type);
-                VmSimplifiedValue::from(r#ref)
+                VmValueSimplfied::from(r#ref)
             }
             CompTimeTypeGeneric::Product(fields) => {
                 let mut total_bytes = self.bits;
