@@ -136,4 +136,5 @@ pub enum Keyword {
     Fn,
     Return,
     Comptime,
+    Extern,
 }

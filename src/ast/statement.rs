@@ -68,6 +68,7 @@ pub enum StatementGeneric<T> {
     Comptime {
         statements: StatementBlockGeneric<T>,
     },
+    ForeignCall(String),
 }
 
 // Mappable implementations for Statement and related types
@@ -137,6 +138,7 @@ impl<T,U> Mappable<T,U> for StatementGeneric<T> {
             Self::Comptime { statements } => StatementGeneric::Comptime {
                 statements: statements.inner_map(f),
             },
+            Self::ForeignCall(s) => StatementGeneric::ForeignCall(s),
         }
     }
 }
