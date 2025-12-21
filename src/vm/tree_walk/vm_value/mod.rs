@@ -1,7 +1,6 @@
 use crate::ast::{BinaryOperator, Identifier, Literal, UnaryOperator};
 use crate::types::{
-    CompTimeBuiltinType, CompTimeTypeGeneric, TypeContainer, TypeDefinition, TypeId,
-    UnifiedTypeDefinition,
+    CompTimeBuiltinType, CompTimeTypeGeneric, TypeContainer, TypeDefinition, TypeId, TypeLayout, UnifiedTypeDefinition
 };
 use crate::vm::tree_walk::VmUnit;
 use crate::vm::tree_walk::scope_stack::VmPtr;
@@ -14,6 +13,7 @@ use num_rational::BigRational;
 use std::collections::BTreeMap;
 use std::fmt::Display;
 use std::mem::take;
+use std::panic;
 
 mod function;
 pub use function::{FuncId, VmFunc};
@@ -348,7 +348,7 @@ impl Display for StructValue {
             if !first {
                 write!(f, ", ")?;
             }
-            write!(f, "{}: {}", key, value)?;
+            write!(f, "{key}: {value}")?;
             first = false;
         }
         write!(f, "}}")
@@ -560,9 +560,23 @@ impl VmValueGeneralized {
     pub(crate) fn of_type(&self, expected_type_id: TypeId, types: &mut TypeContainer) -> bool {
         self.r#type.can_cast_to(&expected_type_id, types)
     }
-
+    // TODO: Member access operation in vmgeneralized type is really unoptimized,
+    // Like to access the reference it also copying the whole orginal struct,That is a waste of a
+    // lot of copying
+    // So think about a.b.c etc,Like we can't it will first copy a then b then c,Lot of copying for
+    // nothing. Need to fix it in the future
+    // I am overthinking,I just need to optimize for chained based . operation,The reason for that,
+    // let c=a.b;
+    // let e=c.d;
+    // Now my optimization operation,which will look at it and create a reference for c=a.b access,
+    // and than e=c.d another reference operation,no copying happening
+    // but if I do c=something,it might accidently override.
+    // So in brief to optimize a.b.c the right reference apporach will create complexity.
+    // We can optimize a.b.c with because we know a.b don't need to output(which will copy it)
+    // in ast I will take the entire thing inside a vec ,So we exactly know what to copy,
+    // Only for chain operation,Other optimization isn't necessary,
     pub fn member_access(
-        self,
+        &self,
         member: &Identifier,
         vm: &mut TypeContainer,
     ) -> Result<Self, VmErrorType> {
@@ -574,12 +588,11 @@ impl VmValueGeneralized {
             let type_id = self.r#type;
             let parent_meta = vm
                 .get_metadata(&type_id)
-                .ok_or(VmErrorType::InvalidTypeDefination)?;
-
+                .unwrap();
             let offset = match &parent_meta.layout {
-                crate::types::TypeLayout::Product(fields) => fields
+                TypeLayout::Product(fields) => fields
                     .get(member)
-                    .ok_or_else(|| VmErrorType::UndefinedIdentifier(member.clone()))?,
+                    .unwrap(),
                 _ => return Err(VmErrorType::TypeMismatch("Expected Struct")),
             };
 
@@ -592,9 +605,7 @@ impl VmValueGeneralized {
 
             let start = *offset;
             let end = start + member_meta.size;
-            if end > self.bits.len() {
-                return Err(VmErrorType::InvalidStackAccess);
-            }
+            debug_assert!(end<=self.bits.len());
             let member_bits = self.bits[start..end].to_vec();
 
             Ok(VmValueGeneralized::new(member_bits, *member_type))
