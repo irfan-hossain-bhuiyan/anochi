@@ -22,6 +22,12 @@ pub(super) fn get_reference<Backend: VmBackend>(
             .variables
             .get_reference_from_name(id)
             .ok_or_else(|| map_err(VmErrorType::UndefinedIdentifier(id.clone()))),
+        Expression::MemberAccess { object, member } => {
+            let parent_ref = get_reference(vm, object)?;
+            parent_ref
+                .member_access(member, &mut vm.types)
+                .map_err(map_err)
+        }
         Expression::Unary {
             operator: UnaryOperator::Deref,
             operand,
@@ -101,11 +107,11 @@ pub(super) fn evaluate_expr<Backend: VmBackend>(
                             .to_owned(),
                     ))
                     .map_err(map_err)?;
-                let operand_val = operand_val
+                
+                operand_val
                     .unary_op(operator)
                     .map_err(map_err)
-                    .map(|x| x.into_vm_value_generalized(&mut vm.types));
-                operand_val
+                    .map(|x| x.into_vm_value_generalized(&mut vm.types))
             }
         },
         Expression::Grouping { expression } => vm.evaluate_expr(expression),
@@ -120,7 +126,12 @@ pub(super) fn evaluate_expr<Backend: VmBackend>(
             //let mut type_set = BTreeSet::new();
             todo!()
         }
-        Expression::MemberAccess { .. } => todo!(),
+        Expression::MemberAccess { object, member } => {
+            let obj_val = vm.evaluate_expr(object)?;
+            obj_val
+                .member_access(member, &mut vm.types)
+                .map_err(map_err)
+        }
         Expression::Function {
             input,
             output,

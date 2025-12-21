@@ -126,3 +126,66 @@ fn test_reference_and_dereference() {
     assert_eq!(z, ValuePrimitive::from_i64(20).into());
 }
 
+#[test]
+fn test_struct_member_access() {
+    let mut runner = CodeRunner::default();
+    runner.run_statements(r"
+        let p = {x=10, y=20};
+        let x = p.x;
+        let y = p.y;
+    ").unwrap();
+    assert_eq!(
+        runner.evaluate_expr_simple("x").unwrap(),
+        ValuePrimitive::from_i64(10).into()
+    );
+    assert_eq!(
+        runner.evaluate_expr_simple("y").unwrap(),
+        ValuePrimitive::from_i64(20).into()
+    );
+}
+
+#[test]
+fn test_reference_member_access() {
+    let mut runner = CodeRunner::default();
+    runner
+        .run_statements(
+            r"
+        let p = {x=10, y=20};
+        let r = &p;
+        let rx_ref = r.x;
+        *rx_ref = 30;
+    ",
+        )
+        .unwrap();
+    // Check p.x is 30.
+    // To check p.x, we can just eval p.x (which returns value since p is struct)
+    assert_eq!(
+        runner.evaluate_expr_simple("p.x").unwrap(),
+        ValuePrimitive::from_i64(30).into()
+    );
+}
+
+#[test]
+fn test_nested_struct_access() {
+    let mut runner = CodeRunner::default();
+    runner
+        .run_statements(
+            r"
+        let p = {pos={x=10, y=20}, z=30};
+        let x = p.pos.x;
+        let r = &p;
+        let ry_ref = r.pos.y;
+        *ry_ref = 50;
+    ",
+        )
+        .unwrap();
+    assert_eq!(
+        runner.evaluate_expr_simple("x").unwrap(),
+        ValuePrimitive::from_i64(10).into()
+    );
+    assert_eq!(
+        runner.evaluate_expr_simple("p.pos.y").unwrap(),
+        ValuePrimitive::from_i64(50).into()
+    );
+}
+

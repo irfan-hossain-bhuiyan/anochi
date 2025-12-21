@@ -71,6 +71,34 @@ impl Reference {
     pub fn new(ptr: VmPtr, type_id: TypeId) -> Self {
         Self { ptr, type_id }
     }
+
+    pub fn member_access(
+        &self,
+        member: &Identifier,
+        vm: &mut TypeContainer,
+    ) -> Result<Self, VmErrorType> {
+        let parent_meta = vm
+            .get_metadata(&self.type_id)
+            .ok_or(VmErrorType::InvalidTypeDefination)?;
+
+        let offset = match &parent_meta.layout {
+            crate::types::TypeLayout::Product(fields) => fields
+                .get(member)
+                .ok_or_else(|| VmErrorType::UndefinedIdentifier(member.clone()))?,
+            _ => return Err(VmErrorType::TypeMismatch("Expected Struct")),
+        };
+
+        let parent_type = vm.get_type(&self.type_id).unwrap();
+        let member_type = match &parent_type.0 {
+            crate::types::CompTimeTypeGeneric::Product(fields) => fields.get(member).unwrap(),
+            _ => unreachable!(),
+        };
+
+        let new_ptr_index = self.ptr.as_index() + offset;
+        let new_ptr = unsafe { crate::vm::tree_walk::scope_stack::VmPtr::new(new_ptr_index) };
+
+        Ok(Reference::new(new_ptr, *member_type))
+    }
 }
 impl Display for Reference {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -531,6 +559,46 @@ impl VmValueGeneralized {
 
     pub(crate) fn of_type(&self, expected_type_id: TypeId, types: &mut TypeContainer) -> bool {
         self.r#type.can_cast_to(&expected_type_id, types)
+    }
+
+    pub fn member_access(
+        self,
+        member: &Identifier,
+        vm: &mut TypeContainer,
+    ) -> Result<Self, VmErrorType> {
+        let simplified = self.clone().into_simplified_value(vm);
+        if let VmValueSimplified::Reference(r#ref) = simplified {
+            let new_ref = r#ref.member_access(member, vm)?;
+            Ok(VmValueSimplified::from(new_ref).into_vm_value_generalized(vm))
+        } else {
+            let type_id = self.r#type;
+            let parent_meta = vm
+                .get_metadata(&type_id)
+                .ok_or(VmErrorType::InvalidTypeDefination)?;
+
+            let offset = match &parent_meta.layout {
+                crate::types::TypeLayout::Product(fields) => fields
+                    .get(member)
+                    .ok_or_else(|| VmErrorType::UndefinedIdentifier(member.clone()))?,
+                _ => return Err(VmErrorType::TypeMismatch("Expected Struct")),
+            };
+
+            let parent_type = vm.get_type(&type_id).unwrap();
+            let member_type = match &parent_type.0 {
+                crate::types::CompTimeTypeGeneric::Product(fields) => fields.get(member).unwrap(),
+                _ => unreachable!(),
+            };
+            let member_meta = vm.get_metadata(member_type).unwrap();
+
+            let start = *offset;
+            let end = start + member_meta.size;
+            if end > self.bits.len() {
+                return Err(VmErrorType::InvalidStackAccess);
+            }
+            let member_bits = self.bits[start..end].to_vec();
+
+            Ok(VmValueGeneralized::new(member_bits, *member_type))
+        }
     }
 }
 
