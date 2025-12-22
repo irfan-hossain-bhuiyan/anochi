@@ -1,6 +1,5 @@
 use crate::{
-    code_error::CodeError,
-    token::token_type::{Identifier, Keyword, TokenType, TokenizerErrorType},
+    code_error::CodeError, prelude::decimal_str_to_rational, token::token_type::{Identifier, Keyword, TokenType, TokenizerErrorType}
 };
 use derive_more::{ Deref};
 use macros::generate_unchecked;
@@ -323,7 +322,7 @@ impl<'a> Tokenizer<'a> {
         }
 
         let token_type = if is_float {
-            match number.parse::<num_rational::BigRational>() {
+            match  decimal_str_to_rational(&number){
                 Ok(value) => TokenType::Float(value),
                 Err(_) => return Err(self.create_error(TokenizerErrorType::InvalidFloat)),
             }

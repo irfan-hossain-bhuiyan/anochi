@@ -114,10 +114,10 @@ impl VmBackend for RayLibBackend {
              "draw_circle" => {
                       let x = Self::get_int_arg("x", _scope, types)? as i32;
                       let y = Self::get_int_arg("y", _scope, types)? as i32;
-                      let radius = Self::get_float_arg("radius", _scope, types)? as f32;
+                      let radius = Self::get_int_arg("radius", _scope, types)? as i32;
                  if let (Some(rl), Some(thread)) = (&mut self.rl, &self.thread) {
                       let mut d = rl.begin_drawing(thread);
-                      d.draw_circle(x, y, radius, Color::RED);
+                      d.draw_circle(x, y, radius as f32, Color::RED);
                  }
                  Ok(VmValueSimplified::create_unit().into_vm_value_generalized(types))
              }
@@ -168,7 +168,7 @@ impl VmBackend for RayLibBackend {
             },
             ForeignFuncSignature {
                 name: "draw_circle".to_string(),
-                params: vec![("x".to_string(), "int".to_string()), ("y".to_string(), "int".to_string()), ("radius".to_string(), "float".to_string())],
+                params: vec![("x".to_string(), "int".to_string()), ("y".to_string(), "int".to_string()), ("radius".to_string(), "int".to_string())],
                 return_type: None,
             },
             ForeignFuncSignature {

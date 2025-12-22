@@ -55,7 +55,7 @@ fn main() {
             
             begin_drawing!{};
             clear_background!{};
-            draw_circle!{x=10, y=10, radius=10.0};
+            draw_circle!{x=x, y=y, radius=radius};
             draw_fps!{};
             end_drawing!{};
         }

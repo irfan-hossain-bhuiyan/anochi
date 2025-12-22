@@ -4,11 +4,10 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 #[cfg(test)]
 mod tests {
     use num_rational::BigRational;
-    use num_traits::FromPrimitive;
     #[test]
     fn test_big_rational_parse_decimal() {
-        let result = "10.0".parse::<BigRational>().unwrap();
-        assert_eq!(result,BigRational::from_f64(10.0).unwrap())
+        let result = "10.0".parse::<BigRational>();
+        assert!(result.is_err())
 
     }
 }
@@ -490,5 +489,51 @@ impl<T, const MAX_SIZE: usize> SizedArray<T, MAX_SIZE> {
             index: start_index,
             _marker: PhantomData,
         }
+    }
+}
+
+
+use num_bigint::BigInt;
+use num_rational::BigRational;
+
+pub fn decimal_str_to_rational(s: &str) -> Result<BigRational, &'static str> {
+    let s = s.trim();
+
+    if s.is_empty() {
+        return Err("empty string");
+    }
+
+    let negative = s.starts_with('-');
+    let s = s.strip_prefix('-').unwrap_or(s);
+
+    let parts: Vec<&str> = s.split('.').collect();
+    if parts.len() > 2 {
+        return Err("invalid decimal format");
+    }
+
+    let int_part = parts[0];
+    let frac_part = parts.get(1).copied().unwrap_or("");
+
+    let mut num = BigInt::parse_bytes(int_part.as_bytes(), 10)
+        .ok_or("invalid integer part")?;
+
+    if !frac_part.is_empty() {
+        let frac = BigInt::parse_bytes(frac_part.as_bytes(), 10)
+            .ok_or("invalid fractional part")?;
+        let scale = BigInt::from(10u32).pow(frac_part.len() as u32);
+
+        num = num * &scale + frac;
+        let mut rat = BigRational::new(num, scale);
+
+        if negative {
+            rat = -rat;
+        }
+        Ok(rat)
+    } else {
+        let mut rat = BigRational::from_integer(num);
+        if negative {
+            rat = -rat;
+        }
+        Ok(rat)
     }
 }
