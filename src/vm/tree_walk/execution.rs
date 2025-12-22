@@ -120,6 +120,13 @@ pub(super) fn execute_statement<Backend: VmBackend>(
             Ok(StatementEvent::Return(return_value))
         }
         Statement::Comptime { statements: _ } => todo!(),
+        Statement::ForeignCall(name) => {
+            let result = vm
+                .backend
+                .call_foreign(name, &mut vm.variables, &mut vm.types)
+                .map_err(map_err)?;
+            Ok(StatementEvent::Return(result))
+        }
     }
 }
 

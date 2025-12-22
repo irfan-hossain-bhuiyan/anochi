@@ -7,6 +7,10 @@
 use std::io::{self, Write};
 use std::fs::OpenOptions;
 use std::path::Path;
+use crate::vm::tree_walk::scope_stack::ScopeStack;
+use crate::types::TypeContainer;
+use crate::vm::tree_walk::vm_value::VmValueGeneralized;
+use crate::vm::tree_walk::vm_error::VmErrorType;
 
 /// Result type for backend operations
 pub type BackendResult<T> = Result<T, BackendError>;
@@ -44,6 +48,35 @@ pub trait VmBackend: std::fmt::Debug {
     
     /// Check if output is available
     fn has_output(&self) -> bool;
+
+    /// Initialize the backend (e.g. open windows, setup resources)
+    fn initialize(&mut self) -> BackendResult<()> {
+        Ok(())
+    }
+
+    /// Execute a foreign function
+    fn call_foreign(
+        &mut self,
+        name: &str,
+        _scope: &mut ScopeStack,
+        _types: &mut TypeContainer,
+    ) -> Result<VmValueGeneralized, VmErrorType> {
+        Err(VmErrorType::ForeignError(format!(
+            "Foreign function '{}' not found or backend does not support foreign calls",
+            name
+        )))
+    }
+
+    /// Get list of foreign function signatures provided by this backend
+    fn get_foreign_signatures(&self) -> Vec<ForeignFuncSignature> {
+        Vec::new()
+    }
+}
+
+pub struct ForeignFuncSignature {
+    pub name: String,
+    pub params: Vec<(String, String)>, // (name, type_name)
+    pub return_type: Option<String>,
 }
 
 

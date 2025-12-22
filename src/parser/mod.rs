@@ -359,16 +359,7 @@ TokenType::Keyword(Keyword::Return) => {
                 let stmt = Statement::Comptime { statements };
                 Ok(self.make_stat_node(stmt, start))
             }
-            TokenType::Keyword(Keyword::Extern) => {
-                self.advance();
-                let TokenType::String(name) = match_token_or_err!(self, TokenType::String(_))? else {
-                    unreachable!()
-                };
-                let name = name.clone();
-                match_token_or_err!(self, TokenType::Semicolon)?;
-                let stmt = Statement::ForeignCall(name);
-                Ok(self.make_stat_node(stmt, start))
-            }
+
             _ => Err(StatementParseErrorType::NoStatement.with_pos(self.peek_position())),
         }
     }

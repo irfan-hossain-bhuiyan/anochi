@@ -27,6 +27,8 @@ pub enum VmErrorType {
     FuncInvalidInput,
     #[error("Accessing index of stack,that is invalid.")]
     InvalidStackAccess,
+    #[error("Foreign function error: {0}")]
+    ForeignError(String),
 }
 pub type VmError=CodeError<VmErrorType>;
 impl crate::code_error::CodeErrorType for VmErrorType {}
