@@ -1,5 +1,18 @@
 use std::collections::hash_map::DefaultHasher;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
+
+#[cfg(test)]
+mod tests {
+    use num_rational::BigRational;
+    use num_traits::FromPrimitive;
+    #[test]
+    fn test_big_rational_parse_decimal() {
+        let result = "10.0".parse::<BigRational>().unwrap();
+        assert_eq!(result,BigRational::from_f64(10.0).unwrap())
+
+    }
+}
+
 use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;

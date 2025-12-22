@@ -117,8 +117,7 @@ impl<Backend: VmBackend> Vm<Backend> {
              if let Some(type_id) = self.get_type_id_by_name(type_name) {
                  fields.insert(Identifier::new(name.clone()), UnifiedTypeDefinition::TypeId(type_id));
              } else {
-                 eprintln!("Warning: Unknown type '{}' for param '{}' in foreign function '{}'. Skipping binding.", type_name, name, sig.name);
-                 return;
+                 panic!("Warning: Unknown type '{}' for param '{}' in foreign function '{}'. Skipping binding.", type_name, name, sig.name);
              }
          }
          
@@ -132,8 +131,7 @@ impl<Backend: VmBackend> Vm<Backend> {
              if let Some(tid) = self.get_type_id_by_name(&rt) {
                  Some(tid)
              } else {
-                 eprintln!("Warning: Unknown return type '{}' for foreign function '{}'. Skipping binding.", rt, sig.name);
-                 return;
+                 panic!("Warning: Unknown return type '{}' for foreign function '{}'. Skipping binding.", rt, sig.name);
              }
          } else {
              None
@@ -147,7 +145,6 @@ impl<Backend: VmBackend> Vm<Backend> {
          if let Some(vm_func) = VmFunc::new_checked(param_type_id, return_type_id, stmt_node, &self.types) {
              let func_id = self.add_function(vm_func);
              // 5. Register in variables scope as a Function value
-             use crate::vm::tree_walk::vm_value::VmValueSimplified;
              let val = VmValueSimplified::FuncId(func_id).into_vm_value_generalized(&mut self.types);
              // We insert into scope. `insert_variable_default` works on current scope.
              self.variables.insert_variable_default(Identifier::new(sig.name), val);
@@ -158,7 +155,6 @@ impl<Backend: VmBackend> Vm<Backend> {
         let ident = crate::ast::Identifier::new(name.to_string());
         if let Ok(val) = self.variables.get_value_from_name(&ident, &self.types) {
             let simplified = val.into_simplified_value(&self.types);
-             use crate::vm::tree_walk::vm_value::VmValueSimplified;
              if let VmValueSimplified::TypeId(tid) = simplified {
                  return Some(tid);
              }

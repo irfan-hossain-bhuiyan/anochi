@@ -62,8 +62,7 @@ pub trait VmBackend: std::fmt::Debug {
         _types: &mut TypeContainer,
     ) -> Result<VmValueGeneralized, VmErrorType> {
         Err(VmErrorType::ForeignError(format!(
-            "Foreign function '{}' not found or backend does not support foreign calls",
-            name
+            "Foreign function '{name}' not found or backend does not support foreign calls"
         )))
     }
 

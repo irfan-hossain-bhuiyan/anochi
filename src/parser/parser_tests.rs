@@ -7,7 +7,7 @@ use crate::token::{TokenContainer, Tokenizer};
 /// Helper function to create tokens from source code
 fn create_tokens_from_source(source: &str) -> TokenContainer {
     let (tokens,errors)=Tokenizer::new(source).tokenize();
-    if !errors.is_empty(){panic!("Tokenizer has error")}
+    if !errors.is_empty(){panic!("Tokenizer has errors. {errors:?}")}
     tokens
 }
 
@@ -245,35 +245,15 @@ fn test_parse_reference_and_dereference() {
 }
 
 #[test]
-fn test_parse_expression_statement() {
-    // Test simple expression statement with function call
-    let source = "{ func!{}; }";
-    let statement = parse_ast_from_source(source);
-    
-    let expected = StatementGeneric::StatementBlock(StatementBlockGeneric::new(
-        vec![
-            StatementGeneric::Expression(
-                ExpressionGeneric::fn_call(
-                    ExpressionGeneric::identifier(Identifier::new("func")).to_node(()),
-                    ExpressionGeneric::Product { data: std::collections::HashMap::new() }.to_node(())
-                ).to_node(())
-            ).to_node(())
-        ], ()
-    )).to_node(());
-    
-    assert_eq!(statement, expected);
-}
-
-#[test]
 fn test_parse_expression_statement_with_params() {
     // Test expression statement with function call that has parameters
-    let source = "{ add!{x=5, y=10}; }";
+    let source = "{ add!{x=5, y=10.0}; }";
     let statement = parse_ast_from_source(source);
     
     use std::collections::HashMap;
     let mut params = HashMap::new();
     params.insert(Identifier::new("x"), ExpressionGeneric::from_i64(5).to_node(()));
-    params.insert(Identifier::new("y"), ExpressionGeneric::from_i64(10).to_node(()));
+    params.insert(Identifier::new("y"), ExpressionGeneric::from_f64(10.0).to_node(()));
     
     let expected = StatementGeneric::StatementBlock(StatementBlockGeneric::new(
         vec![

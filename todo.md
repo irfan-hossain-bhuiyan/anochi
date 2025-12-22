@@ -30,6 +30,7 @@
 - [x] Change the current index from usize to IndexPtr<>,because the type is making problem
 - [x] HashMap will map to it.ScopeStack which is a VecDeque<HashMap<>>,Now the VecDeque will also save the last scope index.
 ## Doing:
+- [ ] Found out big-numeral floating point parsing is invalid,Need to fix later.
 - [ ] Implement all funciton that converts StructValue and enum value to it's equivalent unit type.
 - [ ] Implement addition,substraction for VmValue
 - [ ] adding 

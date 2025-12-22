@@ -8,19 +8,12 @@ use num_traits::ToPrimitive;
 use crate::ast::Identifier;
 
 
+#[derive(Default)]
 pub struct RayLibBackend {
     rl: Option<RaylibHandle>,
     thread: Option<RaylibThread>,
 }
 
-impl Default for RayLibBackend {
-    fn default() -> Self {
-        Self {
-            rl: None,
-            thread: None,
-        }
-    }
-}
 
 impl RayLibBackend {
     pub fn new() -> Self {
@@ -45,7 +38,7 @@ impl VmBackend for RayLibBackend {
             // Fallback if not initialized? Or error?
             // User said "on debug it prints on the raylib window"
             // If window not open, maybe just print to stdout
-            println!("[RayLib Disabled]: {}", message);
+            println!("[RayLib Disabled]: {message}");
             Ok(())
         }
     }
@@ -55,12 +48,12 @@ impl VmBackend for RayLibBackend {
     }
 
     fn print(&mut self, message: &str) -> BackendResult<()> {
-        println!("{}", message);
+        println!("{message}");
         Ok(())
     }
 
     fn print_error(&mut self, message: &str) -> BackendResult<()> {
-        eprintln!("{}", message);
+        eprintln!("{message}");
         Ok(())
     }
 
@@ -146,7 +139,7 @@ impl VmBackend for RayLibBackend {
                  }
                  Ok(VmValueSimplified::create_unit().into_vm_value_generalized(types))
              }
-            _ => Err(VmErrorType::ForeignError(format!("Unknown raylib function: {}", name)))
+            _ => Err(VmErrorType::ForeignError(format!("Unknown raylib function: {name}")))
         }
     }
 
