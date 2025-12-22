@@ -4,8 +4,8 @@ mod parser_error;
 mod parser_tests;
 
 use crate::ast::{
-    BinaryOperator, Expression, ExpressionNode, CodeMetaData, Statement,
-    StatementBlockGeneric,  StatementNode,  UnaryOperator,
+    BinaryOperator, CodeMetaData, Expression, ExpressionNode, Statement, StatementBlockGeneric,
+    StatementNode, UnaryOperator,
 };
 use crate::token::token_type::Keyword::{self, And, Or};
 use crate::token::{Position, Token, TokenSlice, TokenType};
@@ -43,11 +43,11 @@ pub struct Parser<'a> {
     //DESIGN DECISION:It is here because the vm,might go inside a function inside loop,if the
     //funciton has break,continue the vm will validate it,because it is inside loop.
 }
-type Exp=Expression;
+type Exp = Expression;
 type ExpNode = ExpressionNode;
-type ReExp= Result<Exp,ParserError>;
+type ReExp = Result<Exp, ParserError>;
 type ReExpNode = Result<ExpNode, ParserError>;
-type Stat=Statement;
+type Stat = Statement;
 type StatNode = StatementNode;
 type ReStatNode = Result<StatNode, ParserError>;
 type StatBlock = StatementBlockGeneric<CodeMetaData>;
@@ -243,7 +243,7 @@ impl<'a> Parser<'a> {
             }
         }
     }
-    
+
     pub fn parse_statement(&mut self) -> ReStatNode {
         let start = self.current;
         // Assignment: identifier = expression
@@ -266,15 +266,17 @@ impl<'a> Parser<'a> {
                 Ok(self.make_stat_node(stmt, start))
             }
             TokenType::Identifier(_) | TokenType::Star => {
-                let x = self.parse_expression()?;
-                // Check for typed assignment: identifier : type = value
-
-                // Regular assignment: identifier = value
-                let _ = match_token_or_err!(self, TokenType::Equal)?;
                 let expr = self.parse_expression()?;
-                let _ = match_token_or_err!(self, TokenType::Semicolon)?;
-                let stmt = Statement::mutable_assignment(x, expr);
-                Ok(self.make_stat_node(stmt, start))
+                if match_token!(self, TokenType::Equal).is_ok() {
+                    let value = self.parse_expression()?;
+                    match_token_or_err!(self, TokenType::Semicolon)?;
+                    let stmt = Statement::mutable_assignment(expr, value);
+                    Ok(self.make_stat_node(stmt, start))
+                } else {
+                    match_token_or_err!(self, TokenType::Semicolon)?;
+                    let stmt = Statement::Expression(expr);
+                    Ok(self.make_stat_node(stmt, start))
+                }
             }
             TokenType::LeftBrace => match self.parse_statement_block() {
                 Ok(x) => {
@@ -346,7 +348,7 @@ impl<'a> Parser<'a> {
                 match_token_or_err!(self, TokenType::Semicolon)?;
                 Ok(self.make_stat_node(stmt, start))
             }
-TokenType::Keyword(Keyword::Return) => {
+            TokenType::Keyword(Keyword::Return) => {
                 self.advance();
                 let expr = self.parse_expression().ok();
                 match_token_or_err!(self, TokenType::Semicolon)?;
@@ -360,7 +362,10 @@ TokenType::Keyword(Keyword::Return) => {
                 Ok(self.make_stat_node(stmt, start))
             }
 
-            _ => Err(StatementParseErrorType::NoStatement.with_pos(self.peek_position())),
+            _ => {
+                // Try to parse as an expression statement
+                Err(StatementParseErrorType::NoStatement.with_pos(self.peek_position()))
+            }
         }
     }
     // Function ::= "|" Identifier "|" ("->" Expression)? "{" Statement "}"
@@ -405,7 +410,10 @@ TokenType::Keyword(Keyword::Return) => {
             }
         }
         let slice = self.tokens.slice(start, self.current).pos_range();
-        Ok(StatementBlockGeneric::new(statements, CodeMetaData::new(slice)))
+        Ok(StatementBlockGeneric::new(
+            statements,
+            CodeMetaData::new(slice),
+        ))
     }
 
     pub fn new(tokens: &'a TokenSlice) -> Self {

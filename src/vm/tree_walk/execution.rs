@@ -127,6 +127,11 @@ pub(super) fn execute_statement<Backend: VmBackend>(
                 .map_err(map_err)?;
             Ok(StatementEvent::Return(result))
         }
+        Statement::Expression(expr) => {
+            // Evaluate the expression and discard the result
+            evaluate_expr(vm, expr)?;
+            Ok(StatementEvent::None)
+        }
     }
 }
 

@@ -117,7 +117,7 @@ impl<Backend: VmBackend> Vm<Backend> {
              if let Some(type_id) = self.get_type_id_by_name(type_name) {
                  fields.insert(Identifier::new(name.clone()), UnifiedTypeDefinition::TypeId(type_id));
              } else {
-                 panic!("Warning: Unknown type '{}' for param '{}' in foreign function '{}'. Skipping binding.", type_name, name, sig.name);
+                 eprintln!("Warning: Unknown type '{}' for param '{}' in foreign function '{}'. Skipping binding.", type_name, name, sig.name);
                  return;
              }
          }
@@ -132,7 +132,7 @@ impl<Backend: VmBackend> Vm<Backend> {
              if let Some(tid) = self.get_type_id_by_name(&rt) {
                  Some(tid)
              } else {
-                 panic!("Warning: Unknown return type '{}' for foreign function '{}'. Skipping binding.", rt, sig.name);
+                 eprintln!("Warning: Unknown return type '{}' for foreign function '{}'. Skipping binding.", rt, sig.name);
                  return;
              }
          } else {

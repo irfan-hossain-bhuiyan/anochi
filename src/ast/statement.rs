@@ -69,6 +69,8 @@ pub enum StatementGeneric<T> {
         statements: StatementBlockGeneric<T>,
     },
     ForeignCall(String),
+    /// Expression used as a statement (result is discarded)
+    Expression(ExprNodeGeneric<T>),
 }
 
 // Mappable implementations for Statement and related types
@@ -139,6 +141,7 @@ impl<T,U> Mappable<T,U> for StatementGeneric<T> {
                 statements: statements.inner_map(f),
             },
             Self::ForeignCall(s) => StatementGeneric::ForeignCall(s),
+            Self::Expression(expr) => StatementGeneric::Expression(expr.inner_map(f)),
         }
     }
 }

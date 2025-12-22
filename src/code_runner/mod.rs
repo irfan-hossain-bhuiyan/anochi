@@ -5,8 +5,8 @@
 //! and return the result.
 
 use crate::{
-    code_error::CodeError, parser::{Parser, ParserErrorType}, prelude::Mappable, token::{Tokenizer, token_type::TokenizerErrorType}, vm::{
-        backend::VmBackend,
+    code_error::CodeError, parser::{Parser, ParserErrorType}, prelude::Mappable, token::{Position, Tokenizer, token_type::TokenizerErrorType}, vm::{
+        backend::{IoBackend, VmBackend},
         tree_walk::{Vm, VmErrorType, vm_value::VmValueGeneralized},
     }
 };
@@ -41,7 +41,7 @@ impl CodeRunnerErrorType {
 /// the complete pipeline: tokenization -> parsing -> execution, returning
 /// the final result or any errors that occur along the way.
 ///
-pub struct CodeRunner<Backend: VmBackend = crate::vm::backend::IoBackend> {
+pub struct CodeRunner<Backend= IoBackend> {
     vm: Vm<Backend>,
 }
 
@@ -108,6 +108,11 @@ let stmt_node = parser.parse_statements().map_err(|x|x.into_code_error())?;
 
     pub fn vm(&self) -> &Vm<Backend> {
         &self.vm
+    }
+
+    /// Initialize the VM backend (e.g., open windows, register foreign functions)
+    pub fn initialize(&mut self) -> Result<(), CodeRunnerError> {
+        self.vm.initialize().map_err(|e| CodeRunnerError::new(e.into(), Position::default()))
     }
 }
 

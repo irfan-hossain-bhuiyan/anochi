@@ -4,7 +4,8 @@ use crate::types::{TypeContainer};
 use crate::vm::tree_walk::{ VmValueGeneralized, VmValueSimplified, ParsedValueType};
 use crate::vm::tree_walk::vm_error::VmErrorType;
 use raylib::prelude::*;
-//use num_traits::cast::ToPrimitive;
+use num_traits::ToPrimitive;
+use crate::ast::Identifier;
 
 
 pub struct RayLibBackend {
@@ -204,7 +205,7 @@ impl RayLibBackend {
     }
     
     fn get_float_arg(name: &str, scope: &ScopeStack, types: &TypeContainer) -> Result<f64, VmErrorType> {
-         let val = scope.get_value_from_name(&crate::ast::Identifier::new(name.to_string()), types)?;
+         let val = scope.get_value_from_name(&Identifier::new(name.to_string()), types)?;
          let simplified = val.into_simplified_value(types);
          // Handle float (BigRational) to f64 conversion if possible, or assume explicit Float primitive
          match simplified {

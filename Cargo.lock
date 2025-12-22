@@ -22,6 +22,7 @@ dependencies = [
  "macros",
  "num-bigint",
  "num-rational",
+ "num-traits",
  "raylib",
  "rustyline",
  "strum",

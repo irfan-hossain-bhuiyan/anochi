@@ -15,3 +15,4 @@ derive_more = { version = "2.0.1", features = ["deref", "deref_mut", "display", 
 macros={path="./macros"}
 enum_dispatch = "0.3.13"
 raylib = "5.5.1"
+num-traits = "0.2.19"

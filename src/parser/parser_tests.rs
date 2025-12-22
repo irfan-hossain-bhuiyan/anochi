@@ -13,7 +13,7 @@ fn create_tokens_from_source(source: &str) -> TokenContainer {
 
 
 
-/// Helper function to parse AST from source
+/// Helper function to parse AST from source (for blocks)
 fn parse_ast_from_source(source: &str) -> StatNodeGeneric<()> {
     let tokens = create_tokens_from_source(source);
     let mut parser = Parser::new(&tokens);
@@ -237,6 +237,83 @@ fn test_parse_reference_and_dereference() {
                     ExpressionGeneric::identifier(Identifier::new("r")).to_node(())
                 ).to_node(()),
                 ExpressionGeneric::from_i64(20).to_node(())
+            ).to_node(())
+        ], ()
+    )).to_node(());
+    
+    assert_eq!(statement, expected);
+}
+
+#[test]
+fn test_parse_expression_statement() {
+    // Test simple expression statement with function call
+    let source = "{ func!{}; }";
+    let statement = parse_ast_from_source(source);
+    
+    let expected = StatementGeneric::StatementBlock(StatementBlockGeneric::new(
+        vec![
+            StatementGeneric::Expression(
+                ExpressionGeneric::fn_call(
+                    ExpressionGeneric::identifier(Identifier::new("func")).to_node(()),
+                    ExpressionGeneric::Product { data: std::collections::HashMap::new() }.to_node(())
+                ).to_node(())
+            ).to_node(())
+        ], ()
+    )).to_node(());
+    
+    assert_eq!(statement, expected);
+}
+
+#[test]
+fn test_parse_expression_statement_with_params() {
+    // Test expression statement with function call that has parameters
+    let source = "{ add!{x=5, y=10}; }";
+    let statement = parse_ast_from_source(source);
+    
+    use std::collections::HashMap;
+    let mut params = HashMap::new();
+    params.insert(Identifier::new("x"), ExpressionGeneric::from_i64(5).to_node(()));
+    params.insert(Identifier::new("y"), ExpressionGeneric::from_i64(10).to_node(()));
+    
+    let expected = StatementGeneric::StatementBlock(StatementBlockGeneric::new(
+        vec![
+            StatementGeneric::Expression(
+                ExpressionGeneric::fn_call(
+                    ExpressionGeneric::identifier(Identifier::new("add")).to_node(()),
+                    ExpressionGeneric::Product { data: params }.to_node(())
+                ).to_node(())
+            ).to_node(())
+        ], ()
+    )).to_node(());
+    
+    assert_eq!(statement, expected);
+}
+
+#[test]
+fn test_parse_multiple_expression_statements() {
+    // Test multiple expression statements in a row
+    let source = "{ func1!{}; func2!{}; func3!{}; }";
+    let statement = parse_ast_from_source(source);
+    
+    let expected = StatementGeneric::StatementBlock(StatementBlockGeneric::new(
+        vec![
+            StatementGeneric::Expression(
+                ExpressionGeneric::fn_call(
+                    ExpressionGeneric::identifier(Identifier::new("func1")).to_node(()),
+                    ExpressionGeneric::Product { data: std::collections::HashMap::new() }.to_node(())
+                ).to_node(())
+            ).to_node(()),
+            StatementGeneric::Expression(
+                ExpressionGeneric::fn_call(
+                    ExpressionGeneric::identifier(Identifier::new("func2")).to_node(()),
+                    ExpressionGeneric::Product { data: std::collections::HashMap::new() }.to_node(())
+                ).to_node(())
+            ).to_node(()),
+            StatementGeneric::Expression(
+                ExpressionGeneric::fn_call(
+                    ExpressionGeneric::identifier(Identifier::new("func3")).to_node(()),
+                    ExpressionGeneric::Product { data: std::collections::HashMap::new() }.to_node(())
+                ).to_node(())
             ).to_node(())
         ], ()
     )).to_node(());
