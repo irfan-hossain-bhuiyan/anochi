@@ -1,0 +1,42 @@
+let x = 320;
+let y = 240;
+let vx = 5;
+let vy = 3;
+let radius = 20;
+let width = 640;
+let height = 480;
+
+loop {
+    if (window_should_close!{}) {
+        break;
+    }
+    
+    x = x + vx;
+    y = y + vy;
+    
+    if (x - radius < 0) {
+        x = radius;
+        vx = 0 - vx;
+    }
+    
+    if (x + radius > width) {
+        x = width - radius;
+        vx = 0 - vx;
+    }
+    
+    if (y - radius < 0) {
+        y = radius;
+        vy = 0 - vy;
+    }
+    
+    if (y + radius > height) {
+        y = height - radius;
+        vy = 0 - vy;
+    }
+    
+    begin_drawing!{};
+    clear_background!{};
+    draw_circle!{x=x, y=y, radius=radius};
+    draw_fps!{};
+    end_drawing!{};
+}
