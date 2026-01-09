@@ -33,7 +33,7 @@ fn test_scope() {
     let mut runner = CodeRunner::default();
     runner
         .run_statements("let y=0;let x=10;{let x=20;y=x;}")
-        .unwrap();
+        .unwrap();-
     let x = runner.evaluate_expr_simple("x").unwrap();
     let y = runner.evaluate_expr_simple("y").unwrap();
     assert_eq!(x, ValuePrimitive::from_i64(10).into());

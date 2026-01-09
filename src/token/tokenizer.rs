@@ -66,8 +66,7 @@ impl Position {
         let start_line = self.line;
         let start_col = self.column;
         format!(
-            "[Error at {}:{}  ({}..{})]: {}",
-            start_line, start_col, start_idx, end_idx, slice
+            "[Error at {start_line}:{start_col}  ({start_idx}..{end_idx})]: {slice}"
         )
     }
     pub fn is_empty(&self) -> bool {

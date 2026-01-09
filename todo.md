@@ -29,10 +29,10 @@
 - [x] Stack will have a fixed size,and a index,to get it's current pointer.
 - [x] Change the current index from usize to IndexPtr<>,because the type is making problem
 - [x] HashMap will map to it.ScopeStack which is a VecDeque<HashMap<>>,Now the VecDeque will also save the last scope index.
+- [x] Found out big-numeral floating point parsing is invalid,
+- [x] Implement addition,substraction for VmValue
 ## Doing:
-- [ ] Found out big-numeral floating point parsing is invalid,Need to fix later.
 - [ ] Implement all funciton that converts StructValue and enum value to it's equivalent unit type.
-- [ ] Implement addition,substraction for VmValue
 - [ ] adding 
 - [ ] VmValue will be just one type,It is a unit array and type id.
 - [ ] VmValue is converted from struct parsed value,to array based value,make a general VmValue,this will be a composiiton of 
