@@ -81,6 +81,7 @@ pub struct Vm<Backend = IoBackend> {
 
 mod evaluation;
 mod execution;
+mod type_check;
 
 impl<Backend: VmBackend> Vm<Backend> {
     pub fn new(backend: Backend) -> Self {
@@ -206,6 +207,14 @@ impl<Backend: VmBackend> Vm<Backend> {
         evaluation::evaluate_expr(self, expr_node)
     }
 
+    pub fn type_check_statement(&mut self, stat_node: &mut StatementNode) -> Result<(), VmError> {
+        type_check::type_check_statement(self, stat_node)
+    }
+
+    pub fn type_check_expr(&mut self, expr_node: &mut ExpressionNode) -> Result<TypeId, VmError> {
+        type_check::type_check_expr(self, expr_node)
+    }
+
     pub fn get_type_container(&self) -> &TypeContainer {
         &self.types
     }
@@ -282,6 +291,14 @@ impl<Backend: VmBackend> Vm<Backend> {
         self.funcs.get_checked(func_id).unwrap()
     }
 
+    pub(super) fn insert_variable_type_only(
+        &mut self,
+        identifier: Identifier,
+        type_id: TypeId,
+    ) {
+        self.variables.insert_variable_type_only(identifier, type_id, &mut self.types);
+    }
+
     fn into_type(&mut self, input: VmValueGeneralized) -> Result<TypeId,VmErrorType > {
         let simplified = input.into_simplified_value(&self.types);
         ParsedValueType::into_type_id(simplified, &mut self.types)
@@ -295,3 +312,5 @@ impl<Backend: VmBackend> Vm<Backend> {
 mod scope_stack_tests;
 #[cfg(test)]
 mod vm_tests;
+#[cfg(test)]
+mod type_test;

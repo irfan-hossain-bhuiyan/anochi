@@ -401,6 +401,35 @@ impl ParsedValueType for FuncId {
         vec![VmUnit::Usize(self.as_index())]
     }
 }
+
+/// Represents a variable whose type is known but value is unknown
+/// Used during type checking phase
+#[derive(Debug, Clone, PartialEq)]
+pub struct VmUnknown;
+
+impl Display for VmUnknown {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Unknown")
+    }
+}
+
+impl ParsedValueType for VmUnknown {
+    fn into_unified_type_definition(self, _type_container: &TypeContainer) -> Option<UnifiedTypeDefinition> {
+        None
+    }
+
+    fn get_type_of_value(&self) -> UnifiedTypeDefinition {
+        // VmUnknown doesn't have its own type - it's a placeholder
+        // The actual type is stored separately in the VmValueGeneralized
+        panic!("VmUnknown should never be queried for its type value")
+    }
+
+    fn into_vm_units(self) -> Vec<VmUnit> {
+        // VmUnknown doesn't store any actual data
+        vec![]
+    }
+}
+
 #[enum_dispatch(ParsedValueType)]
 #[derive(Debug, Clone, PartialEq, EnumAsInner)]
 pub enum VmValueSimplified {
@@ -409,6 +438,7 @@ pub enum VmValueSimplified {
     Reference,
     TypeId,
     FuncId,
+    VmUnknown,
 }
 
 impl Display for VmValueSimplified {
@@ -419,6 +449,7 @@ impl Display for VmValueSimplified {
             VmValueSimplified::Reference(v) => write!(f, "{}", v),
             VmValueSimplified::TypeId(v) => write!(f, "{}", v),
             VmValueSimplified::FuncId(v) => write!(f, "{}", v),
+            VmValueSimplified::VmUnknown(v) => write!(f, "{}", v),
         }
     }
 }

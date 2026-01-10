@@ -119,7 +119,11 @@ pub(super) fn execute_statement<Backend: VmBackend>(
             };
             Ok(StatementEvent::Return(return_value))
         }
-        Statement::Comptime { statements: _ } => todo!(),
+        Statement::Comptime { .. } => {
+            // Comptime blocks are executed during type checking phase
+            // Skip execution during runtime
+            Ok(StatementEvent::None)
+        }
         Statement::ForeignCall(name) => {
             let result = vm
                 .backend

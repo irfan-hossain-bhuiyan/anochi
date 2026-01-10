@@ -146,6 +146,21 @@ impl ScopeStack {
         Ok(())
     }
 
+    /// Inserts a variable with only type information (no value) during type checking phase
+    /// Uses VmUnknown as a placeholder for the value
+    pub fn insert_variable_type_only(
+        &mut self,
+        identifier: Identifier,
+        type_id: TypeId,
+        _type_container: &mut TypeContainer,
+    ) {
+        // Create a VmValueGeneralized with empty bits and the given type
+        let value = VmValueGeneralized::new(vec![], type_id);
+        self.insert_variable_default(identifier, value);
+    }
+
+
+
     pub fn set_value_from_name(
         &mut self,
         identifier: &Identifier,
