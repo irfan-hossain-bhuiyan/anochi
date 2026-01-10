@@ -33,7 +33,7 @@
 - [x] Implement addition,substraction for VmValue
 ## Doing:
 - [ ] Implement all funciton that converts StructValue and enum value to it's equivalent unit type.
-- [ ] adding 
+- [ ] Changing the function 
 - [ ] VmValue will be just one type,It is a unit array and type id.
 - [ ] VmValue is converted from struct parsed value,to array based value,make a general VmValue,this will be a composiiton of 
 - [ ] make stackvalues a different type,it will have basic primitive for for ValuePrimitive,

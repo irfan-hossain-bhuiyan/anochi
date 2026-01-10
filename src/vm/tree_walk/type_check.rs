@@ -166,8 +166,12 @@ pub(super) fn type_check_expr<Backend: VmBackend>(
     vm: &mut Vm<Backend>,
     expr_node: &mut ExpressionNode,
 ) -> Result<TypeId, VmError> {
-    let node_data = expr_node.data().get_position().clone();
-    let map_err = |e| VmError::new(e, node_data.clone());
+    let node_data=expr_node.data();
+    if let Some(type_id)=node_data.type_data{
+        return Ok(type_id)
+    }
+    let node_position = node_data.get_position().clone();
+    let map_err = |e| VmError::new(e, node_position.clone());
     
     let type_id = match &mut expr_node.exp {
         Expression::Literal(literal) => {
@@ -183,9 +187,7 @@ pub(super) fn type_check_expr<Backend: VmBackend>(
                 crate::ast::Literal::Float(_) => vm.types.get_builtin_type_id(crate::types::CompTimeBuiltinType::Float),
                 crate::ast::Literal::String(_) => {
                     // TODO: Implement string type
-                    return Err(map_err(VmErrorType::InvalidOperation(
-                        "String type not yet implemented".to_string()
-                    )));
+                    panic!("String type is not implemtented yet.")
                 }
             }
         }
@@ -230,8 +232,7 @@ pub(super) fn type_check_expr<Backend: VmBackend>(
                     )));
                 }
                 _ => {
-                    let operand_type = type_check_expr(vm, operand)?;
-                    operand_type
+                    type_check_expr(vm, operand)?
                 }
             }
         }
