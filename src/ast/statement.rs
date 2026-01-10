@@ -5,11 +5,11 @@ use super::expression::ExprNodeGeneric;
 use derive_more::{Deref, DerefMut};
 
 #[derive(Debug, Clone, PartialEq, Deref, DerefMut)]
-pub struct StatNodeGeneric<T>{
-    data:T,
+pub struct StatNodeGeneric<T> {
+    pub data: T,
     #[deref]
     #[deref_mut]
-    pub stat:StatementGeneric<T>,
+    pub stat: StatementGeneric<T>,
 }
 
 #[derive(Debug, Clone, PartialEq, Deref, DerefMut)]
@@ -31,6 +31,7 @@ impl<T> StatementBlockGeneric<T> {
 }
 
 use enum_as_inner::EnumAsInner;
+use super::{ToStringTree, StringTree};
 
 #[derive(Debug, Clone, PartialEq, EnumAsInner)]
 pub enum StatementGeneric<T> {
@@ -243,5 +244,80 @@ impl<T> StatNodeGeneric<T>{
 
     pub fn data(&self) -> &T {
         &self.data
+    }
+}
+
+impl<T> ToStringTree for StatNodeGeneric<T> {
+    fn to_string_tree(&self) -> StringTree {
+        self.stat.to_string_tree()
+    }
+}
+
+impl<T> ToStringTree for StatementBlockGeneric<T> {
+    fn to_string_tree(&self) -> StringTree {
+        if self.statements.is_empty() {
+             return StringTree::leaf("EmptyBlock");
+        }
+        let children: Vec<StringTree> = self.statements.iter().map(|s| s.to_string_tree()).collect();
+        StringTree::node("Block", children)
+    }
+}
+
+impl<T> ToStringTree for StatementGeneric<T> {
+    fn to_string_tree(&self) -> StringTree {
+        match self {
+            Self::Assignment { target, r#type, value } => {
+                let mut children = Vec::new();
+                if let Some(t) = r#type {
+                    children.push(StringTree::node("Type:", vec![t.to_string_tree()]));
+                }
+                children.push(StringTree::node("Value:", vec![value.to_string_tree()]));
+                StringTree::node(format!("Assignment({})", target), children)
+            }
+            Self::MutableAssignment { target, value } => {
+                StringTree::node("MutableAssignment", vec![
+                    StringTree::node("Target:", vec![target.to_string_tree()]),
+                    StringTree::node("Value:", vec![value.to_string_tree()])
+                ])
+            }
+             Self::Statements(block) | Self::StatementBlock(block) => {
+                 block.to_string_tree()
+             }
+             Self::If { condition, on_true } => {
+                 StringTree::node("If", vec![
+                     StringTree::node("Condition:", vec![condition.to_string_tree()]),
+                     StringTree::node("Then:", vec![on_true.to_string_tree()])
+                 ])
+             }
+             Self::IfElse { condition, on_true, on_false } => {
+                 StringTree::node("IfElse", vec![
+                     StringTree::node("Condition:", vec![condition.to_string_tree()]),
+                     StringTree::node("Then:", vec![on_true.to_string_tree()]),
+                     StringTree::node("Else:", vec![on_false.to_string_tree()])
+                 ])
+             }
+             Self::Debug { expr_vec } => {
+                 let children = expr_vec.iter().map(|e| e.to_string_tree()).collect();
+                 StringTree::node("Debug", children)
+             }
+             Self::Loop { statements } => {
+                 StringTree::node("Loop", vec![statements.to_string_tree()])
+             }
+             Self::Break => StringTree::leaf("Break"),
+             Self::Continue => StringTree::leaf("Continue"),
+             Self::Return(opt_expr) => {
+                 match opt_expr {
+                     Some(expr) => StringTree::node("Return", vec![expr.to_string_tree()]),
+                     None => StringTree::leaf("Return"),
+                 }
+             }
+             Self::Comptime { statements } => {
+                 StringTree::node("Comptime", vec![statements.to_string_tree()])
+             }
+             Self::ForeignCall(name) => StringTree::leaf(format!("ForeignCall({})", name)),
+             Self::Expression(expr) => {
+                 StringTree::node("ExpressionStmt", vec![expr.to_string_tree()])
+             }
+        }
     }
 }

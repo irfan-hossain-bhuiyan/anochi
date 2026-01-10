@@ -5,7 +5,7 @@ use crate::token::token_type::{Identifier, TokenType};
 use crate::token::token_type::Keyword::{False, True};
 use super::literal::Literal;
 use super::operators::{BinaryOperator, UnaryOperator};
-use super::{IdentifierToExp, StatNodeGeneric};
+use super::{IdentifierToExp, StatNodeGeneric, ToStringTree, StringTree};
 
 use derive_more::{Deref, DerefMut, From};
 
@@ -98,7 +98,7 @@ pub enum ExpressionGeneric<T> {
     FnCall {
         caller:Box<ExprNodeGeneric<T>>,
         callee:Box<ExprNodeGeneric<T>>,
-    }
+    },
 }
 
 impl<T,U> Mappable<T,U> for ExpressionGeneric<T> {
@@ -263,4 +263,79 @@ impl<T> ExpressionGeneric<T> {
         }
     }
 
+}
+
+impl<T> ToStringTree for ExprNodeGeneric<T> {
+    fn to_string_tree(&self) -> StringTree {
+        self.exp.to_string_tree()
+    }
+}
+
+impl<T> ToStringTree for ExpressionGeneric<T> {
+    fn to_string_tree(&self) -> StringTree {
+        match self {
+            Self::Literal(lit) => StringTree::leaf(format!("Literal({})", lit)),
+            Self::Binary { operator, left, right } => {
+                StringTree::node(
+                    format!("Binary({})", operator),
+                    vec![left.to_string_tree(), right.to_string_tree()]
+                )
+            }
+            Self::Unary { operator, operand } => {
+                StringTree::node(
+                    format!("Unary({})", operator),
+                    vec![operand.to_string_tree()]
+                )
+            }
+            Self::Grouping { expression } => {
+                StringTree::node(
+                    "Grouping".to_string(),
+                    vec![expression.to_string_tree()]
+                )
+            }
+            Self::MemberAccess { object, member } => {
+                StringTree::node(
+                    format!("MemberAccess({})", member),
+                    vec![object.to_string_tree()]
+                )
+            }
+            Self::Product { data } => {
+                let mut sorted_data: Vec<_> = data.iter().collect();
+                sorted_data.sort_by_key(|(k, _)| *k);
+                let children: Vec<StringTree> = sorted_data
+                    .into_iter()
+                    .map(|(k, v)| {
+                        StringTree::node(format!("{}:", k), vec![v.to_string_tree()])
+                    })
+                    .collect();
+                StringTree::node("Product".to_string(), children)
+            }
+            Self::Sum { data } => {
+                let children: Vec<StringTree> = data
+                    .iter()
+                    .map(|item| item.to_string_tree())
+                    .collect();
+                StringTree::node("Sum".to_string(), children)
+            }
+            Self::Function { input, output, statements } => {
+                let mut children = vec![
+                    StringTree::node("Input:".to_string(), vec![input.to_string_tree()])
+                ];
+                if let Some(out) = output {
+                    children.push(StringTree::node("Output:".to_string(), vec![out.to_string_tree()]));
+                }
+                children.push(StringTree::node("Body:".to_string(), vec![statements.to_string_tree()]));
+                StringTree::node("Function".to_string(), children)
+            }
+            Self::FnCall { caller, callee } => {
+                StringTree::node(
+                    "FnCall".to_string(),
+                    vec![
+                        StringTree::node("Caller:".to_string(), vec![caller.to_string_tree()]),
+                        StringTree::node("Callee:".to_string(), vec![callee.to_string_tree()])
+                    ]
+                )
+            }
+        }
+    }
 }

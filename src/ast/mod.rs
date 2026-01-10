@@ -29,6 +29,53 @@ pub use literal::Literal;
 pub use operators::{BinaryOperator, UnaryOperator};
 pub use statement::{StatementGeneric, StatementBlockGeneric, StatNodeGeneric};
 
+#[derive(Clone, Debug, PartialEq)]
+pub enum StringTree {
+    Leaf(String),
+    Node(String, Vec<StringTree>),
+}
+
+impl StringTree {
+    pub fn leaf(s: impl Into<String>) -> Self {
+        Self::Leaf(s.into())
+    }
+
+    pub fn node(label: impl Into<String>, children: Vec<StringTree>) -> Self {
+        Self::Node(label.into(), children)
+    }
+}
+
+impl std::fmt::Display for StringTree {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.fmt_with_prefix(f, "")
+    }
+}
+
+impl StringTree {
+    fn fmt_with_prefix(&self, f: &mut std::fmt::Formatter<'_>, prefix: &str) -> std::fmt::Result {
+        match self {
+            Self::Leaf(s) => writeln!(f, "{}", s),
+            Self::Node(label, children) => {
+                writeln!(f, "{}", label)?;
+                let count = children.len();
+                for (i, child) in children.iter().enumerate() {
+                    let is_last = i == count - 1;
+                    let connector = if is_last { "└── " } else { "├── " };
+                    let child_prefix = if is_last { "    " } else { "│   " };
+                    write!(f, "{}{}", prefix, connector)?;
+                    child.fmt_with_prefix(f, &(prefix.to_string() + child_prefix))?;
+                }
+                Ok(())
+            }
+        }
+    }
+}
+
+pub trait ToStringTree {
+    fn to_string_tree(&self) -> StringTree;
+}
+
+
 pub type IdentifierMap<T> = HashMap<Identifier, T>;
 pub type IdentifierToExp<T> = IdentifierMap<ExprNodeGeneric<T>>;
 

@@ -1,0 +1,7 @@
+let x = 42;
+debug(x);
+if x > 40 {
+    debug(1);
+} else {
+    debug(0);
+}

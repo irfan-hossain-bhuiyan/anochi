@@ -29,6 +29,44 @@ fn test_parse_empty_block() {
         Vec::new(), ()
     ))
     .to_node(());
+    assert_eq!(statement,expected)
+}
+
+#[test]
+fn test_parse_if_else() {
+    let source = "if true { 
+        let x = 42; 
+        } 
+    else { 
+        let y = 100; 
+    }";
+    let statement = parse_ast_from_source(source);
+    let expected = StatementGeneric::if_else(
+        ExpressionGeneric::from_bool(true).to_node(()),
+        StatementGeneric::StatementBlock(StatementBlockGeneric::new(
+            vec![
+                StatementGeneric::assignment(
+                    Identifier::new("x"),
+                    None,
+                    ExpressionGeneric::from_i64(42).to_node(()),
+                )
+                .to_node(()),
+            ], ()
+        ))
+        .to_node(()),
+        StatementGeneric::StatementBlock(StatementBlockGeneric::new(
+            vec![
+                StatementGeneric::assignment(
+                    Identifier::new("y"),
+                    None,
+                    ExpressionGeneric::from_i64(100).to_node(()),
+                )
+                .to_node(()),
+            ], ()
+        ))
+        .to_node(()),
+    )
+    .to_node(());
     assert_eq!(statement, expected);
 }
 
