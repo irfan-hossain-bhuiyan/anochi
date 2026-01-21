@@ -38,6 +38,10 @@ impl<T> ExprNodeGeneric<T>{
     pub fn data(&self) -> &T {
         &self.data
     }
+
+    pub fn data_mut(&mut self) -> &mut T {
+        &mut self.data
+    }
 }
 
 use enum_as_inner::EnumAsInner;

@@ -7,8 +7,8 @@ pub(super) fn type_check_statement<Backend: VmBackend>(
     vm: &mut Vm<Backend>,
     stat_node: &mut StatementNode,
 ) -> Result<(), VmError> {
-    let node_data = stat_node.data().get_position().clone();
-    let map_err = |e| VmError::new(e, node_data.clone());
+    let node_position = stat_node.data().get_position().clone();
+    let map_err = |e| VmError::new(e, node_position.clone());
     
     match &mut stat_node.stat {
         Statement::Assignment {
@@ -21,10 +21,12 @@ pub(super) fn type_check_statement<Backend: VmBackend>(
             
             // If explicit type annotation exists, verify compatibility
             let final_type = if let Some(type_expr) = r#type {
-                let annotated_type = type_check_expr(vm, type_expr)?;
-                
+                let type_value = vm.evaluate_expr(type_expr)?.into_simplified_value(&vm.types);
+                let VmValueSimplified::TypeId(annotated_type)=type_value else {
+                    return Err(map_err(VmErrorType::TypeMismatch("The expression should return type.")))
+                };
                 // Verify value type matches annotation
-                if !value_type.can_cast_to(&annotated_type, &mut vm.types) {
+                if !value_type.can_cast_to(&annotated_type, &vm.types) {
                     return Err(map_err(VmErrorType::TypeMismatch(
                         "Value type does not match type annotation"
                     )));
@@ -33,12 +35,6 @@ pub(super) fn type_check_statement<Backend: VmBackend>(
             } else {
                 value_type
             };
-            
-            // Store type in AST metadata (temporarily disabled - needs mutable access)
-            // TODO: Consider using interior mutability for CodeMetaData
-            // if let Err(e) = stat_node.data().update_type(final_type) {
-            //     return Err(map_err(VmErrorType::InvalidTypeDefination));
-            // }
             
             // Insert variable with type-only info
             vm.insert_variable_type_only(target.clone(), final_type);
@@ -79,11 +75,12 @@ pub(super) fn type_check_statement<Backend: VmBackend>(
         
         Statement::MutableAssignment { target, value } => {
             // Type check both sides
-            let _target_type = type_check_expr(vm, target)?;
-            let _value_type = type_check_expr(vm, value)?;
-            
-            // TODO: Verify type compatibility
-            Ok(())
+            let target_type = type_check_expr(vm, target)?;
+            let value_type = type_check_expr(vm, value)?;
+            if value_type.can_cast_to(&target_type,&vm.types){
+                return Ok(())
+            }
+            Err(map_err(VmErrorType::TypeMismatch("assigninng value is invalid.")))
         }
         
         Statement::If { condition, on_true } => {
@@ -115,9 +112,12 @@ pub(super) fn type_check_statement<Backend: VmBackend>(
                     "If condition must be boolean"
                 )));
             }
-            
+            vm.create_scope();
             type_check_statement(vm, on_true)?;
+            vm.drop_scope();
+            vm.create_scope();
             type_check_statement(vm, on_false)?;
+            vm.drop_scope();
             Ok(())
         }
         
@@ -151,7 +151,7 @@ pub(super) fn type_check_statement<Backend: VmBackend>(
         
         Statement::ForeignCall(_name) => {
             // Foreign calls are assumed to be type-safe
-            Ok(())
+            panic!("Shouldn't be called now.")
         }
         
         Statement::Expression(expr) => {
@@ -166,7 +166,7 @@ pub(super) fn type_check_expr<Backend: VmBackend>(
     vm: &mut Vm<Backend>,
     expr_node: &mut ExpressionNode,
 ) -> Result<TypeId, VmError> {
-    let node_data=expr_node.data();
+    let node_data=expr_node.data_mut();
     if let Some(type_id)=node_data.type_data{
         return Ok(type_id)
     }
@@ -301,13 +301,6 @@ pub(super) fn type_check_expr<Backend: VmBackend>(
             vm.types.get_unit_type()
         }
     };
-    
-    // Store type in AST metadata (AST metadata is immutable from here)
-    // We skip storing because we can't mutate through the method
-    // TODO: Consider making CodeMetaData mutable or using interior mutability
-    // if let Err(_e) = expr_node.data().update_type(type_id) {
-    //     return Err(map_err(VmErrorType::InvalidTypeDefination));
-    // }
-    
+    expr_node.data_mut().type_data=Some(type_id);
     Ok(type_id)
 }

@@ -1,6 +1,6 @@
 /// A validated identifier following C-style naming rules.
 /// Must start with a letter or underscore, and contain only alphanumeric characters and underscores.
-use derive_more::{Display, Deref, Into};
+use derive_more::{Deref, Display, Into};
 
 /// A validated identifier following C-style naming rules.
 /// Must start with a letter or underscore, and contain only alphanumeric characters and underscores.
@@ -9,7 +9,7 @@ pub struct Identifier(String);
 
 impl Identifier {
     /// Create a new Identifier from a string with validation.
-    /// 
+    ///
     /// # Panics
     /// Panics if the string doesn't follow C-style identifier rules:
     /// - Must start with a letter or underscore
@@ -19,26 +19,24 @@ impl Identifier {
     }
 }
 
-
-
 impl std::convert::TryFrom<String> for Identifier {
     type Error = String;
-    
+
     fn try_from(value: String) -> Result<Self, Self::Error> {
         if value.is_empty() {
             return Err("Identifier cannot be empty".to_string());
         }
-        
+
         let mut chars = value.chars();
         let first_char = chars.next().unwrap();
-        
+
         // First character must be a letter or underscore
         if !first_char.is_ascii_alphabetic() && first_char != '_' {
             return Err(format!(
                 "Identifier '{value}' must start with a letter or underscore, not '{first_char}'"
             ));
         }
-        
+
         // Remaining characters must be alphanumeric or underscore
         for ch in chars {
             if !ch.is_ascii_alphanumeric() && ch != '_' {
@@ -47,23 +45,23 @@ impl std::convert::TryFrom<String> for Identifier {
                 ));
             }
         }
-        
+
         Ok(Identifier(value))
     }
 }
 
 impl std::convert::TryFrom<&str> for Identifier {
     type Error = String;
-    
+
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         Self::try_from(value.to_string())
     }
 }
 
-use thiserror::Error;
+use enum_as_inner::EnumAsInner;
 use num_bigint::BigInt;
 use num_rational::BigRational;
-use enum_as_inner::EnumAsInner;
+use thiserror::Error;
 
 // Token types for the Anochi language.
 #[derive(Debug, Clone, PartialEq, EnumAsInner)]
@@ -80,14 +78,14 @@ pub enum TokenType {
     Comma,
     Dot,
     Minus,
-   Colon,
+    Colon,
     Plus,
     Semicolon,
     Slash,
     Star,
     Ampersand,
     Bang,
-   Pipe,
+    Pipe,
     BangEqual,
     Equal,
     EqualEqual,
@@ -97,8 +95,8 @@ pub enum TokenType {
     LessEqual,
     Arrow,
 }
-#[derive(Debug,Clone,PartialEq,Error)]
-pub enum TokenizerErrorType{
+#[derive(Debug, Clone, PartialEq, Error)]
+pub enum TokenizerErrorType {
     #[error("Can't convert float from the string")]
     InvalidFloat,
     #[error("Can't convert integer from string")]
@@ -114,8 +112,7 @@ pub enum TokenizerErrorType{
 }
 impl crate::code_error::CodeErrorType for TokenizerErrorType {}
 
-use strum::{EnumString, Display as StrumDisplay, IntoStaticStr};
-
+use strum::{Display as StrumDisplay, EnumString, IntoStaticStr};
 
 #[derive(Debug, Clone, PartialEq, EnumString, StrumDisplay, IntoStaticStr)]
 #[strum(serialize_all = "lowercase")]
