@@ -77,10 +77,10 @@ pub(super) fn type_check_statement<Backend: VmBackend>(
             // Type check both sides
             let target_type = type_check_expr(vm, target)?;
             let value_type = type_check_expr(vm, value)?;
-            if value_type.can_cast_to(&target_type,&vm.types){
-                return Ok(())
+            if !value_type.can_cast_to(&target_type,&vm.types){
+                return Err(map_err(VmErrorType::TypeMismatch("assigninng value is invalid.")))
             }
-            Err(map_err(VmErrorType::TypeMismatch("assigninng value is invalid.")))
+            Ok(())
         }
         
         Statement::If { condition, on_true } => {
@@ -94,7 +94,9 @@ pub(super) fn type_check_statement<Backend: VmBackend>(
                 )));
             }
             
+            vm.create_scope();
             type_check_statement(vm, on_true)?;
+            vm.drop_scope();
             Ok(())
         }
         
