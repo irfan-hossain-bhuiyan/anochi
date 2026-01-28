@@ -5,6 +5,7 @@ use std::collections::BTreeMap;
 use crate::{
     prelude::HashValue, vm::backend::ForeignFuncSignature,
 };
+
 use enum_as_inner::EnumAsInner;
 use num_bigint::BigInt;
 use num_rational::BigRational;

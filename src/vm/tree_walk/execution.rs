@@ -3,7 +3,6 @@ use crate::ast::{Statement};
 use crate::vm::tree_walk::vm_value::{ValuePrimitive, ParsedValueType};
 use crate::vm::tree_walk::vm_error::{VmError, VmErrorType};
 use crate::vm::tree_walk::evaluation::{evaluate_expr, get_reference};
-
 pub(super) fn execute_statement<Backend: VmBackend>(
     vm: &mut Vm<Backend>,
     stat_node: &StatementNode,

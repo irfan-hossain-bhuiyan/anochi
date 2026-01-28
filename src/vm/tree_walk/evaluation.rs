@@ -13,6 +13,7 @@ pub(super) fn get_reference<Backend: VmBackend>(
     vm: &mut Vm<Backend>,
     expression_node: &ExpressionNode,
 ) -> Result<Reference, VmError> {
+
     let node_data = expression_node.data().get_position().clone();
     let map_err = |e| VmError::new(e, node_data.clone());
     let expression = &expression_node.exp;

@@ -9,7 +9,6 @@ use std::collections::{BTreeMap, HashMap};
 #[test]
 fn test_type_container_complex_nested_deduplication() {
     let mut container = TypeContainer::new();
-
     // Create basic types
     let i64_type = UnifiedTypeDefinition::builtin(BuiltinKind::I64);
     let bool_type = UnifiedTypeDefinition::builtin(BuiltinKind::Bool);
