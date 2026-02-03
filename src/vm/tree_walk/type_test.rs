@@ -87,9 +87,9 @@ fn test_explicit_type_annotation() {
 fn test_comptime_operation() {
     let mut vm = Vm::<IoBackend>::new(IoBackend::default());
     vm.load_builtin_types();
-    let mut stmt = parse_stmt(
-        r"let y:int=10;
-        let x:int=69;
+    let mut stmt = parse_stmt(r"
+        comptime{let i32=int;}
+        let x=69;
     ",
     );
     let result = vm.type_check_statement(&mut stmt);
