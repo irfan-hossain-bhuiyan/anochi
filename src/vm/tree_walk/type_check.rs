@@ -38,6 +38,7 @@ pub(super) fn type_check_statement<Backend: VmBackend>(
             
             // Insert variable with type-only info
             vm.insert_variable_type_only(target.clone(), final_type);
+            // I suppose this stores them in stack,So I can get feedback later.
             
             Ok(())
         }
@@ -49,8 +50,8 @@ pub(super) fn type_check_statement<Backend: VmBackend>(
             }
             
             // Then: execute the block (produces real values)
-            vm.run_block(statements)?;
-            
+            vm.execute_statements(statements)?;
+            // The declared variable should be in stack,I think
             Ok(())
         }
         

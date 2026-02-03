@@ -3,7 +3,7 @@
 use thiserror::Error;
 
 use crate::{ast::{ Identifier}, code_error::CodeError};
-#[derive(Error, Debug, PartialEq)]
+#[derive(Error, Debug, PartialEq,Eq)]
 pub enum VmErrorType {
     /// Division by zero error
     #[error("Division by zero")]

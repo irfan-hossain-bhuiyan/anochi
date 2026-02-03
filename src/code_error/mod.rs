@@ -5,7 +5,7 @@ use derive_more::Deref;
 use crate::{prelude::Mappable, token::Position};
 
 pub trait CodeErrorType {}
-#[derive(Debug,Default,Deref)]
+#[derive(Debug,Default,Deref,PartialEq)]
 pub struct CodeError<T>{
     #[deref]
     error_type:T,

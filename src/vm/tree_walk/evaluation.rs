@@ -1,6 +1,5 @@
 use super::*;
 use crate::ast::{CodeMetaData, Expression, Literal, UnaryOperator};
-
 use crate::ast::expression::ExprNodeGeneric;
 use crate::vm::tree_walk::vm_error::{VmError, VmErrorType};
 use crate::vm::tree_walk::vm_value::{

@@ -66,6 +66,166 @@ pub enum ExprLevel {
     Primary,
 }
 impl<'a> Parser<'a> {
+    // Always use parse statements for testing rather than parse_statement
+    pub fn parse_statements(&mut self) -> ReStatNode {
+        let start = self.current;
+        let mut vec = Vec::new();
+        while !self.is_at_end() {
+            let stmt = self.parse_statement()?;
+            vec.push(stmt);
+        }
+        let slice = self.tokens.slice(start, self.current).pos_range();
+        let stmt = Statement::Statements(StatementBlockGeneric::new(vec, CodeMetaData::new(slice)));
+        let stmt = self.make_stat_node(stmt, start);
+        Ok(stmt)
+    }
+    pub fn parse_statement(&mut self) -> ReStatNode {
+        let start = self.current;
+        // Assignment: identifier = expression
+        match self.peek_type().unwrap().clone() {
+            TokenType::Keyword(Keyword::Let) => {
+                self.advance();
+                let TokenType::Identifier(x) = match_token_or_err!(self, TokenType::Identifier(_))?
+                else {
+                    unreachable!()
+                };
+                let mut r#type = None;
+                let x = x.clone();
+                if match_token! {self,TokenType::Colon}.is_ok() {
+                    r#type = Some(self.parse_expression()?);
+                }
+                let _ = match_token_or_err!(self, TokenType::Equal)?;
+                let expr = self.parse_expression()?;
+                let _ = match_token_or_err!(self, TokenType::Semicolon)?;
+                let stmt = Statement::assignment(x, r#type, expr);
+                Ok(self.make_stat_node(stmt, start))
+            }
+            TokenType::Identifier(_) | TokenType::Star => {
+                let expr = self.parse_expression()?;
+                if match_token!(self, TokenType::Equal).is_ok() {
+                    let value = self.parse_expression()?;
+                    match_token_or_err!(self, TokenType::Semicolon)?;
+                    let stmt = Statement::mutable_assignment(expr, value);
+                    Ok(self.make_stat_node(stmt, start))
+                } else {
+                    match_token_or_err!(self, TokenType::Semicolon)?;
+                    let stmt = Statement::Expression(expr);
+                    Ok(self.make_stat_node(stmt, start))
+                }
+            }
+            TokenType::LeftBrace => match self.parse_statement_block() {
+                Ok(x) => {
+                    let stmt = Stat::StatementBlock(x);
+                    Ok(self.make_stat_node(stmt, start))
+                }
+                Err(x) => Err(x),
+            },
+            TokenType::Keyword(Keyword::If) => {
+                self.advance();
+                let expr = self.parse_expression()?;
+                let on_true = self.parse_statement()?;
+                match match_token!(self, TokenType::Keyword(Keyword::Else)) {
+                    Err(_) => {
+                        let stmt = Statement::if_stmt(expr, on_true);
+                        Ok(self.make_stat_node(stmt, start))
+                    }
+                    Ok(_) => {
+                        let on_false = self.parse_statement()?;
+                        let stmt = Statement::if_else(expr, on_true, on_false);
+                        Ok(self.make_stat_node(stmt, start))
+                    }
+                }
+            }
+            TokenType::Keyword(Keyword::Debug) => {
+                self.advance();
+                let _ = match_token_or_err!(self, TokenType::LeftParen)?;
+                let mut expr_vec = Vec::new();
+                while let Ok(x) = self.parse_expr_level(ExprLevel::Additive) {
+                    expr_vec.push(x);
+                    if match_token!(self, TokenType::Comma).is_err() {
+                        break;
+                    }
+                }
+                let _ = match_token_or_err!(self, TokenType::RightParen)?;
+                let _ = match_token_or_err!(self, TokenType::Semicolon)?;
+                let stmt = Statement::debug(expr_vec);
+                Ok(self.make_stat_node(stmt, start))
+            }
+            TokenType::Keyword(Keyword::Loop) => {
+                self.advance();
+                self.is_in_loop = true;
+                let statement = self.parse_statement_block()?;
+                self.is_in_loop = false;
+                let stmt = Statement::Loop {
+                    statements: statement,
+                };
+                Ok(self.make_stat_node(stmt, start))
+            }
+            TokenType::Keyword(Keyword::Break) => {
+                if !self.is_in_loop {
+                    return Err(
+                        StatementParseErrorType::BreakOutsideLoop.with_pos(self.peek_position())
+                    );
+                }
+                self.advance();
+                match_token_or_err!(self, TokenType::Semicolon)?;
+                let stmt = Statement::Break;
+                Ok(self.make_stat_node(stmt, start))
+            }
+            TokenType::Keyword(Keyword::Continue) => {
+                if !self.is_in_loop {
+                    return Err(
+                        StatementParseErrorType::ContinueOutsideLoop.with_pos(self.peek_position())
+                    );
+                }
+                self.advance();
+                let stmt = Statement::Continue;
+                match_token_or_err!(self, TokenType::Semicolon)?;
+                Ok(self.make_stat_node(stmt, start))
+            }
+            TokenType::Keyword(Keyword::Return) => {
+                self.advance();
+                let expr = self.parse_expression().ok();
+                match_token_or_err!(self, TokenType::Semicolon)?;
+                let stmt = Statement::Return(expr);
+                Ok(self.make_stat_node(stmt, start))
+            }
+            TokenType::Keyword(Keyword::Comptime) => {
+                self.advance();
+                let statements = self.parse_statement_block()?;
+                let stmt = Statement::Comptime { statements };
+                Ok(self.make_stat_node(stmt, start))
+            }
+
+            _ => {
+                // Try to parse as an expression statement
+                Err(StatementParseErrorType::NoStatement.with_pos(self.peek_position()))
+            }
+        }
+    }
+    // Function ::= "|" Identifier "|" ("->" Expression)? "{" Statement "}"
+    fn parse_function(&mut self) -> ReExp {
+        assert!(
+            matches!(self.peek_type(), Some(TokenType::Keyword(Keyword::Fn))),
+            "parse_function called without Fn keyword"
+        );
+        self.advance();
+        let input = self.parse_expr_level(ExprLevel::Primary)?;
+        let output = if match_token!(self, TokenType::Arrow).is_err() {
+            None
+        } else {
+            Some(Box::new(self.parse_expr_level(ExprLevel::Primary)?))
+        };
+        let statements = self.parse_statement()?;
+        let input = Box::new(input);
+        let statements = Box::new(statements);
+        let expr = Expression::Function {
+            input,
+            output,
+            statements,
+        };
+        Ok(expr)
+    }
     fn make_expr_node(&self, expr: Exp, start: usize) -> ExpNode {
         let slice = self.tokens.slice(start, self.current).pos_range();
         expr.to_node(CodeMetaData::new(slice))
@@ -244,154 +404,6 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn parse_statement(&mut self) -> ReStatNode {
-        let start = self.current;
-        // Assignment: identifier = expression
-        match self.peek_type().unwrap().clone() {
-            TokenType::Keyword(Keyword::Let) => {
-                self.advance();
-                let TokenType::Identifier(x) = match_token_or_err!(self, TokenType::Identifier(_))?
-                else {
-                    unreachable!()
-                };
-                let mut r#type = None;
-                let x = x.clone();
-                if match_token! {self,TokenType::Colon}.is_ok() {
-                    r#type = Some(self.parse_expression()?);
-                }
-                let _ = match_token_or_err!(self, TokenType::Equal)?;
-                let expr = self.parse_expression()?;
-                let _ = match_token_or_err!(self, TokenType::Semicolon)?;
-                let stmt = Statement::assignment(x, r#type, expr);
-                Ok(self.make_stat_node(stmt, start))
-            }
-            TokenType::Identifier(_) | TokenType::Star => {
-                let expr = self.parse_expression()?;
-                if match_token!(self, TokenType::Equal).is_ok() {
-                    let value = self.parse_expression()?;
-                    match_token_or_err!(self, TokenType::Semicolon)?;
-                    let stmt = Statement::mutable_assignment(expr, value);
-                    Ok(self.make_stat_node(stmt, start))
-                } else {
-                    match_token_or_err!(self, TokenType::Semicolon)?;
-                    let stmt = Statement::Expression(expr);
-                    Ok(self.make_stat_node(stmt, start))
-                }
-            }
-            TokenType::LeftBrace => match self.parse_statement_block() {
-                Ok(x) => {
-                    let stmt = Stat::StatementBlock(x);
-                    Ok(self.make_stat_node(stmt, start))
-                }
-                Err(x) => Err(x),
-            },
-            TokenType::Keyword(Keyword::If) => {
-                self.advance();
-                let expr = self.parse_expression()?;
-                let on_true = self.parse_statement()?;
-                match match_token!(self, TokenType::Keyword(Keyword::Else)) {
-                    Err(_) => {
-                        let stmt = Statement::if_stmt(expr, on_true);
-                        Ok(self.make_stat_node(stmt, start))
-                    }
-                    Ok(_) => {
-                        let on_false = self.parse_statement()?;
-                        let stmt = Statement::if_else(expr, on_true, on_false);
-                        Ok(self.make_stat_node(stmt, start))
-                    }
-                }
-            }
-            TokenType::Keyword(Keyword::Debug) => {
-                self.advance();
-                let _ = match_token_or_err!(self, TokenType::LeftParen)?;
-                let mut expr_vec = Vec::new();
-                while let Ok(x) = self.parse_expr_level(ExprLevel::Additive) {
-                    expr_vec.push(x);
-                    if match_token!(self, TokenType::Comma).is_err() {
-                        break;
-                    }
-                }
-                let _ = match_token_or_err!(self, TokenType::RightParen)?;
-                let _ = match_token_or_err!(self, TokenType::Semicolon)?;
-                let stmt = Statement::debug(expr_vec);
-                Ok(self.make_stat_node(stmt, start))
-            }
-            TokenType::Keyword(Keyword::Loop) => {
-                self.advance();
-                self.is_in_loop = true;
-                let statement = self.parse_statement_block()?;
-                self.is_in_loop = false;
-                let stmt = Statement::Loop {
-                    statements: statement,
-                };
-                Ok(self.make_stat_node(stmt, start))
-            }
-            TokenType::Keyword(Keyword::Break) => {
-                if !self.is_in_loop {
-                    return Err(
-                        StatementParseErrorType::BreakOutsideLoop.with_pos(self.peek_position())
-                    );
-                }
-                self.advance();
-                match_token_or_err!(self, TokenType::Semicolon)?;
-                let stmt = Statement::Break;
-                Ok(self.make_stat_node(stmt, start))
-            }
-            TokenType::Keyword(Keyword::Continue) => {
-                if !self.is_in_loop {
-                    return Err(
-                        StatementParseErrorType::ContinueOutsideLoop.with_pos(self.peek_position())
-                    );
-                }
-                self.advance();
-                let stmt = Statement::Continue;
-                match_token_or_err!(self, TokenType::Semicolon)?;
-                Ok(self.make_stat_node(stmt, start))
-            }
-            TokenType::Keyword(Keyword::Return) => {
-                self.advance();
-                let expr = self.parse_expression().ok();
-                match_token_or_err!(self, TokenType::Semicolon)?;
-                let stmt = Statement::Return(expr);
-                Ok(self.make_stat_node(stmt, start))
-            }
-            TokenType::Keyword(Keyword::Comptime) => {
-                self.advance();
-                let statements = self.parse_statement_block()?;
-                let stmt = Statement::Comptime { statements };
-                Ok(self.make_stat_node(stmt, start))
-            }
-
-            _ => {
-                // Try to parse as an expression statement
-                Err(StatementParseErrorType::NoStatement.with_pos(self.peek_position()))
-            }
-        }
-    }
-    // Function ::= "|" Identifier "|" ("->" Expression)? "{" Statement "}"
-    fn parse_function(&mut self) -> ReExp {
-        assert!(
-            matches!(self.peek_type(), Some(TokenType::Keyword(Keyword::Fn))),
-            "parse_function called without Fn keyword"
-        );
-        self.advance();
-        let input = self.parse_expr_level(ExprLevel::Primary)?;
-        let output = if match_token!(self, TokenType::Arrow).is_err() {
-            None
-        } else {
-            Some(Box::new(self.parse_expr_level(ExprLevel::Primary)?))
-        };
-        let statements = self.parse_statement()?;
-        let input = Box::new(input);
-        let statements = Box::new(statements);
-        let expr = Expression::Function {
-            input,
-            output,
-            statements,
-        };
-        Ok(expr)
-    }
-
     fn parse_statement_block(&mut self) -> Result<StatBlock, ParserError> {
         let start = self.current;
         assert!(
@@ -500,16 +512,5 @@ impl<'a> Parser<'a> {
         &self.tokens[self.current - 1]
     }
 
-    pub fn parse_statements(&mut self) -> ReStatNode {
-        let start = self.current;
-        let mut vec = Vec::new();
-        while !self.is_at_end() {
-            let stmt = self.parse_statement()?;
-            vec.push(stmt);
-        }
-        let slice = self.tokens.slice(start, self.current).pos_range();
-        let stmt = Statement::Statements(StatementBlockGeneric::new(vec, CodeMetaData::new(slice)));
-        let stmt = self.make_stat_node(stmt, start);
-        Ok(stmt)
-    }
+    
 }

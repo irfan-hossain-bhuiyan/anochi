@@ -1,6 +1,5 @@
 use std::collections::{HashMap, VecDeque};
 use std::fmt::{Debug, Display};
-
 use macros::generate_unchecked;
 
 use crate::prelude::{IndexPtr, SizedArray};

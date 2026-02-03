@@ -2,17 +2,14 @@
 
 use std::collections::BTreeMap;
 
-use crate::{
-    prelude::HashValue, vm::backend::ForeignFuncSignature,
-};
-
+use crate::{prelude::HashValue, vm::backend::ForeignFuncSignature};
 use enum_as_inner::EnumAsInner;
 use num_bigint::BigInt;
 use num_rational::BigRational;
 use vm_value::VmValueGeneralized;
 /// Untyped VM unit - the fundamental storage unit on the VM stack
 /// All type information is tracked separately via TypeContainer and VariableData
-#[derive(Debug, Clone, PartialEq,EnumAsInner)]
+#[derive(Debug, Clone, PartialEq, EnumAsInner)]
 pub enum VmUnit {
     Bool(bool),
     Integer(BigInt),
@@ -79,7 +76,6 @@ pub struct Vm<Backend = IoBackend> {
     pub(super) backend: Backend,
 }
 
-
 mod evaluation;
 mod execution;
 mod type_check;
@@ -97,90 +93,11 @@ impl<Backend: VmBackend> Vm<Backend> {
     }
 
     pub fn initialize(&mut self) -> Result<(), VmErrorType> {
-         self.backend.initialize().map_err(|e| VmErrorType::ForeignError(e.to_string()))?;
-         self.init_foreign_functions();
-         Ok(())
-    }
-
-    fn init_foreign_functions(&mut self) {
-        let signatures = self.backend.get_foreign_signatures();
-        for sig in signatures {
-            self.bind_foreign_function(sig);
-        }
-    }
-
-    fn bind_foreign_function(&mut self, sig: ForeignFuncSignature) {
-         use crate::ast::{Identifier, Statement};
-         use crate::types::CompTimeTypeGeneric;
-         
-         // 1. Create argument structure type
-         let mut fields: BTreeMap<Identifier, UnifiedTypeDefinition> = BTreeMap::new();
-         for (name, type_name) in &sig.params {
-             if let Some(type_id) = self.get_type_id_by_name(type_name) {
-                 fields.insert(Identifier::new(name.clone()), UnifiedTypeDefinition::TypeId(type_id));
-             } else {
-                 panic!("Warning: Unknown type '{}' for param '{}' in foreign function '{}'. Skipping binding.", type_name, name, sig.name);
-             }
-         }
-         
-         let param_type_def = UnifiedTypeDefinition::TypeDef(
-             CompTimeTypeGeneric::Product(fields)
-         );
-         let param_type_id = self.types.store_unified_type(param_type_def);
-         
-         // 2. Resolve return type
-         let return_type_id = if let Some(rt) = sig.return_type {
-             if let Some(tid) = self.get_type_id_by_name(&rt) {
-                 Some(tid)
-             } else {
-                 panic!("Warning: Unknown return type '{}' for foreign function '{}'. Skipping binding.", rt, sig.name);
-             }
-         } else {
-             None
-         };
-
-         // 3. Create StatementNode (ForeignCall)
-         let stmt = Statement::ForeignCall(sig.name.clone());
-         let stmt_node = stmt.to_node(crate::ast::CodeMetaData::default());
-         
-         // 4. Create VmFunc
-         if let Some(vm_func) = VmFunc::new_checked(param_type_id, return_type_id, stmt_node, &self.types) {
-             let func_id = self.add_function(vm_func);
-             // 5. Register in variables scope as a Function value
-             let val = VmValueSimplified::FuncId(func_id).into_vm_value_generalized(&mut self.types);
-             // We insert into scope. `insert_variable_default` works on current scope.
-             self.variables.insert_variable_default(Identifier::new(sig.name), val);
-         }
-    }
-    
-    fn get_type_id_by_name(&self, name: &str) -> Option<crate::types::TypeId> {
-        let ident = crate::ast::Identifier::new(name.to_string());
-        if let Ok(val) = self.variables.get_value_from_name(&ident, &self.types) {
-            let simplified = val.into_simplified_value(&self.types);
-             if let VmValueSimplified::TypeId(tid) = simplified {
-                 return Some(tid);
-             }
-        }
-        None
-    }
-
-    fn load_builtin_types(&mut self) {
-        use crate::types::CompTimeBuiltinType;
-
-        let builtin_types = [
-            ("int", CompTimeBuiltinType::Int),
-            ("float", CompTimeBuiltinType::Float),
-            ("bool", CompTimeBuiltinType::Bool),
-        ];
-
-        for (name, builtin_kind) in builtin_types {
-            let type_def = UnifiedTypeDefinition::builtin(builtin_kind);
-            let type_id = self.types.store_unified_type(type_def);
-            self.variables.insert_variable_default(
-                Identifier::new(name.to_string()),
-                VmValueSimplified::TypeId(type_id).into_vm_value_generalized(&mut self.types),
-            );
-        }
+        self.backend
+            .initialize()
+            .map_err(|e| VmErrorType::ForeignError(e.to_string()))?;
+        self.init_foreign_functions();
+        Ok(())
     }
     pub fn extract_struct(&mut self, strct: StructValue) -> Result<(), VmErrorType> {
         for (k, v) in strct.value {
@@ -188,7 +105,7 @@ impl<Backend: VmBackend> Vm<Backend> {
         }
         Ok(())
     }
-    
+
     pub(super) fn insert_variable(
         &mut self,
         target: Identifier,
@@ -197,8 +114,7 @@ impl<Backend: VmBackend> Vm<Backend> {
         if self.variables.has_variable_current(&target) {
             return Err(VmErrorType::SameVariableName);
         }
-        self.variables
-            .insert_variable_default(target, value );
+        self.variables.insert_variable_default(target, value);
         Ok(())
     }
     pub fn execute_statement(&mut self, stat_node: &StatementNode) -> StatementResult {
@@ -235,11 +151,19 @@ impl<Backend: VmBackend> Vm<Backend> {
             .insert_variable_check(identifier, value, expected_type_id, type_container)
     }
 
-    pub(super) fn run_block(
+    pub(super) fn execute_block(
         &mut self,
         stmtblock: &StatmentBlockNode,
     ) -> Result<StatementEvent, VmError> {
         self.create_scope();
+        let output=self.execute_statements(stmtblock);
+        self.drop_scope();
+        output
+    }
+    pub fn execute_statements(
+        &mut self,
+        stmtblock: &StatmentBlockNode,
+    ) -> Result<StatementEvent, VmError> {
         let mut inner_code = || {
             for stmt in stmtblock.statements.iter() {
                 let output = self.execute_statement(stmt)?;
@@ -251,8 +175,106 @@ impl<Backend: VmBackend> Vm<Backend> {
             Ok(StatementEvent::None)
         };
         let output = inner_code();
-        self.drop_scope();
         output
+    }
+
+    pub(super) fn add_function(&mut self, func: VmFunc) -> FuncId {
+        self.funcs.push(func)
+    }
+    pub(super) fn insert_variable_type_only(&mut self, identifier: Identifier, type_id: TypeId) {
+        self.variables
+            .insert_variable_type_only(identifier, type_id, &mut self.types);
+    }
+
+    fn init_foreign_functions(&mut self) {
+        let signatures = self.backend.get_foreign_signatures();
+        for sig in signatures {
+            self.bind_foreign_function(sig);
+        }
+    }
+
+    fn bind_foreign_function(&mut self, sig: ForeignFuncSignature) {
+        use crate::ast::{Identifier, Statement};
+        use crate::types::CompTimeTypeGeneric;
+
+        // 1. Create argument structure type
+        let mut fields: BTreeMap<Identifier, UnifiedTypeDefinition> = BTreeMap::new();
+        for (name, type_name) in &sig.params {
+            if let Some(type_id) = self.get_type_id_by_name(type_name) {
+                fields.insert(
+                    Identifier::new(name.clone()),
+                    UnifiedTypeDefinition::TypeId(type_id),
+                );
+            } else {
+                panic!(
+                    "Warning: Unknown type '{}' for param '{}' in foreign function '{}'. Skipping binding.",
+                    type_name, name, sig.name
+                );
+            }
+        }
+
+        let param_type_def = UnifiedTypeDefinition::TypeDef(CompTimeTypeGeneric::Product(fields));
+        let param_type_id = self.types.store_unified_type(param_type_def);
+
+        // 2. Resolve return type
+        let return_type_id = if let Some(rt) = sig.return_type {
+            if let Some(tid) = self.get_type_id_by_name(&rt) {
+                Some(tid)
+            } else {
+                panic!(
+                    "Warning: Unknown return type '{}' for foreign function '{}'. Skipping binding.",
+                    rt, sig.name
+                );
+            }
+        } else {
+            None
+        };
+
+        // 3. Create StatementNode (ForeignCall)
+        let stmt = Statement::ForeignCall(sig.name.clone());
+        let stmt_node = stmt.to_node(crate::ast::CodeMetaData::default());
+
+        // 4. Create VmFunc
+        if let Some(vm_func) =
+            VmFunc::new_checked(param_type_id, return_type_id, stmt_node, &self.types)
+        {
+            let func_id = self.add_function(vm_func);
+            // 5. Register in variables scope as a Function value
+            let val = VmValueSimplified::FuncId(func_id).into_vm_value_generalized(&mut self.types);
+            // We insert into scope. `insert_variable_default` works on current scope.
+            self.variables
+                .insert_variable_default(Identifier::new(sig.name), val);
+        }
+    }
+
+    fn get_type_id_by_name(&self, name: &str) -> Option<crate::types::TypeId> {
+        let ident = crate::ast::Identifier::new(name.to_string());
+        if let Ok(val) = self.variables.get_value_from_name(&ident, &self.types) {
+            let simplified = val.into_simplified_value(&self.types);
+            if let VmValueSimplified::TypeId(tid) = simplified {
+                return Some(tid);
+            }
+        }
+        None
+    }
+
+    fn load_builtin_types(&mut self) {
+        use crate::types::CompTimeBuiltinType;
+
+        let builtin_types = [
+            ("int", CompTimeBuiltinType::Int),
+            ("float", CompTimeBuiltinType::Float),
+            ("bool", CompTimeBuiltinType::Bool),
+        ];
+
+        for (name, builtin_kind) in builtin_types {
+            let type_def = UnifiedTypeDefinition::builtin(builtin_kind);
+            let type_id = self.types.store_unified_type(type_def);
+            self.variables.insert_variable_default(
+                Identifier::new(name.to_string()),
+                VmValueSimplified::TypeId(type_id).into_vm_value_generalized(&mut self.types),
+            );
+        }
     }
 
     fn create_scope(&mut self) {
@@ -263,9 +285,6 @@ impl<Backend: VmBackend> Vm<Backend> {
         self.variables.drop_scope();
     }
 
-    pub(super) fn add_function(&mut self, func: VmFunc) -> FuncId {
-        self.funcs.push(func)
-    }
     /// It type check the function that is currently passed,and execute it.
     fn execute_function(&mut self, func_id: FuncId, inputs: VmValueSimplified) -> VmExprResult {
         let func = self.get_func(func_id);
@@ -292,26 +311,16 @@ impl<Backend: VmBackend> Vm<Backend> {
         self.funcs.get_checked(func_id).unwrap()
     }
 
-    pub(super) fn insert_variable_type_only(
-        &mut self,
-        identifier: Identifier,
-        type_id: TypeId,
-    ) {
-        self.variables.insert_variable_type_only(identifier, type_id, &mut self.types);
-    }
-
-    fn into_type(&mut self, input: VmValueGeneralized) -> Result<TypeId,VmErrorType > {
+    fn into_type(&mut self, input: VmValueGeneralized) -> Result<TypeId, VmErrorType> {
         let simplified = input.into_simplified_value(&self.types);
         ParsedValueType::into_type_id(simplified, &mut self.types)
             .ok_or(VmErrorType::InvalidTypeDefination)
     }
-
-
 }
 
 #[cfg(test)]
 mod scope_stack_tests;
 #[cfg(test)]
-mod vm_tests;
-#[cfg(test)]
 mod type_test;
+#[cfg(test)]
+mod vm_tests;

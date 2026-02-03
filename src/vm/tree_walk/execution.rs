@@ -3,6 +3,7 @@ use crate::ast::{Statement};
 use crate::vm::tree_walk::vm_value::{ValuePrimitive, ParsedValueType};
 use crate::vm::tree_walk::vm_error::{VmError, VmErrorType};
 use crate::vm::tree_walk::evaluation::{evaluate_expr, get_reference};
+
 pub(super) fn execute_statement<Backend: VmBackend>(
     vm: &mut Vm<Backend>,
     stat_node: &StatementNode,
@@ -50,7 +51,7 @@ pub(super) fn execute_statement<Backend: VmBackend>(
             };
             Ok(StatementEvent::None)
         }
-        Statement::StatementBlock(stmtblock) => vm.run_block(&stmtblock),
+        Statement::StatementBlock(stmtblock) => vm.execute_block(&stmtblock),
         Statement::If { condition, on_true } => {
             let Some(ValuePrimitive::Bool(x)) =
                 evaluate_expr(vm,condition)?.try_into_primitive(&vm.types)
@@ -98,7 +99,7 @@ pub(super) fn execute_statement<Backend: VmBackend>(
         Statement::Break => Ok(StatementEvent::Break),
         Statement::Loop { statements } => {
             loop {
-                match vm.run_block(statements)? {
+                match vm.execute_block(statements)? {
                     StatementEvent::None => {}
                     StatementEvent::Break => {
                         break;
