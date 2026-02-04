@@ -3,14 +3,17 @@ use crate::ast::{Expression, Statement};
 use crate::vm::tree_walk::vm_error::{VmError, VmErrorType};
 
 /// Type checks a statement and stores type information in AST metadata
-pub(super) fn type_check_statement<Backend: VmBackend>(
+pub(super) fn type_check_statement_and_execute_comptime<Backend: VmBackend>(
     vm: &mut Vm<Backend>,
     stat_node: &mut StatementNode,
 ) -> Result<(), VmError> {
+    // The stack that got created on type_check should get removed,
+    // The data of type should be stored in the ast.
     let node_position = stat_node.data().get_position().clone();
     let map_err = |e| VmError::new(e, node_position.clone());
     
-    match &mut stat_node.stat {
+    vm.create_scope();
+    let output=match &mut stat_node.stat {
         Statement::Assignment {
             target,
             r#type,
@@ -44,20 +47,17 @@ pub(super) fn type_check_statement<Backend: VmBackend>(
         }
         
         Statement::Comptime { statements } => {
-            // First: type check the block
+            // Here only type checking happens,
+            // Running code happens differently.
             for stmt in statements.statements.iter_mut() {
-                type_check_statement(vm, stmt)?;
+                type_check_statement_and_execute_comptime(vm, stmt)?;
             }
-            
-            // Then: execute the block (produces real values)
-            vm.execute_statements(statements)?;
-            // The declared variable should be in stack,I think
             Ok(())
         }
         
         Statement::Statements(block) => {
             for stmt in block.statements.iter_mut() {
-                type_check_statement(vm, stmt)?;
+                type_check_statement_and_execute_comptime(vm, stmt)?;
             }
             Ok(())
         }
@@ -66,7 +66,7 @@ pub(super) fn type_check_statement<Backend: VmBackend>(
             vm.create_scope();
             let result = (|| {
                 for stmt in block.statements.iter_mut() {
-                    type_check_statement(vm, stmt)?;
+                    type_check_statement_and_execute_comptime(vm, stmt)?;
                 }
                 Ok(())
             })();
@@ -96,7 +96,7 @@ pub(super) fn type_check_statement<Backend: VmBackend>(
             }
             
             vm.create_scope();
-            type_check_statement(vm, on_true)?;
+            type_check_statement_and_execute_comptime(vm, on_true)?;
             vm.drop_scope();
             Ok(())
         }
@@ -116,10 +116,10 @@ pub(super) fn type_check_statement<Backend: VmBackend>(
                 )));
             }
             vm.create_scope();
-            type_check_statement(vm, on_true)?;
+            type_check_statement_and_execute_comptime(vm, on_true)?;
             vm.drop_scope();
             vm.create_scope();
-            type_check_statement(vm, on_false)?;
+            type_check_statement_and_execute_comptime(vm, on_false)?;
             vm.drop_scope();
             Ok(())
         }
@@ -135,7 +135,7 @@ pub(super) fn type_check_statement<Backend: VmBackend>(
             vm.create_scope();
             let result = (|| {
                 for stmt in statements.statements.iter_mut() {
-                    type_check_statement(vm, stmt)?;
+                    type_check_statement_and_execute_comptime(vm, stmt)?;
                 }
                 Ok(())
             })();
@@ -161,7 +161,17 @@ pub(super) fn type_check_statement<Backend: VmBackend>(
             type_check_expr(vm, expr)?;
             Ok(())
         }
+    };
+    vm.drop_scope();
+
+    // Now run the comptime so the data is stored in the stack.
+    match &mut stat_node.stat {
+        Statement::Comptime { statements }=>{
+            vm.execute_statements(statements);
+        },
+        _=>{},
     }
+    output
 }
 
 /// Type checks an expression and returns its type

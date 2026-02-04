@@ -215,7 +215,7 @@ impl ScopeStack {
     }
     /// Check if variable exists in current scope
     pub fn has_variable_current(&self, target: &Identifier) -> bool {
-        self.current_scope().variables.contains_key(target)
+        self.current_scope().variables.get(target).is_some()
     }
     pub fn get_reference_from_name(&self, id: &Identifier) -> Option<Reference> {
         let data=self.get_variable_data(id)?;

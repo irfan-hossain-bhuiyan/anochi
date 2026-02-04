@@ -10,7 +10,6 @@ fn parse_stmt(source: &str) -> crate::ast::StatNodeGeneric<crate::ast::CodeMetaD
     parser.parse_statements().expect("Parse error")
 }
 
-use crate::ast::{ Identifier, Statement};
 
 fn get_type_id_from_metadata(meta: &crate::ast::CodeMetaData) -> Option<crate::types::TypeId> {
     meta.type_data
@@ -29,6 +28,12 @@ fn test_simple_literal() {
         result.is_ok(),
         "Type checking should succeed for simple integer assignment"
     );
+    let mut stmt1 = parse_stmt(r"
+        let boolean=true;
+        boolean=100;
+        ");
+    let result=vm.type_check_statement(&mut stmt1);
+    assert!(result.is_err());
 
     let expected_type = vm
         .types
@@ -42,19 +47,7 @@ fn test_simple_literal() {
     //    panic!("Expected assignment statement");
     //}
     
-    // Testing boolean flag.
-    let var_data = vm
-        .variables
-        .get_variable_data(&Identifier::new("flag"))
-        .unwrap();
-    let expected_type = vm
-        .types
-        .get_builtin_type_id(crate::types::CompTimeBuiltinType::Bool);
-    assert_eq!(
-        var_data.type_id, expected_type,
-        "Variable should have Bool type"
-    );
-
+    
 }
 
 #[test]
@@ -71,17 +64,6 @@ fn test_explicit_type_annotation() {
         "Type checking should succeed with explicit type annotation"
     );
 
-    let var_data = vm
-        .variables
-        .get_variable_data(&Identifier::new("x"))
-        .unwrap();
-    let expected_type = vm
-        .types
-        .get_builtin_type_id(crate::types::CompTimeBuiltinType::Int);
-    assert_eq!(
-        var_data.type_id, expected_type,
-        "Variable should have Int type"
-    );
 }
 #[test]
 fn test_comptime_operation() {
@@ -89,21 +71,10 @@ fn test_comptime_operation() {
     vm.load_builtin_types();
     let mut stmt = parse_stmt(r"
         comptime{let i32=int;}
-        let x=69;
+        let num:i32=100;
     ",
     );
     let result = vm.type_check_statement(&mut stmt);
     assert_eq!(result, Ok(()));
 
-    let var_data = vm
-        .variables
-        .get_variable_data(&Identifier::new("x"))
-        .unwrap();
-    let expected_type = vm
-        .types
-        .get_builtin_type_id(crate::types::CompTimeBuiltinType::Int);
-    assert_eq!(
-        var_data.type_id, expected_type,
-        "Variable should have Int type"
-    );
 }

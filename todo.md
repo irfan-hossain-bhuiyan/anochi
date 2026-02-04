@@ -148,5 +148,4 @@ But in type theory we always have recursive types,
 A other representaton of set is you can have a subset of welldefined set,or union of some set,not manually construct new set from a universal prespective
 as type is the universal of all types you can't have {a=type,b=type}
 
-## Bug fixes:
-let x:type={x=i64,y=i64} is not working,fix it
+

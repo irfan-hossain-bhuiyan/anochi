@@ -125,7 +125,7 @@ impl<Backend: VmBackend> Vm<Backend> {
     }
 
     pub fn type_check_statement(&mut self, stat_node: &mut StatementNode) -> Result<(), VmError> {
-        type_check::type_check_statement(self, stat_node)
+        type_check::type_check_statement_and_execute_comptime(self, stat_node)
     }
 
     pub fn type_check_expr(&mut self, expr_node: &mut ExpressionNode) -> Result<TypeId, VmError> {
