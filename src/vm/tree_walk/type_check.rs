@@ -7,28 +7,30 @@ pub(super) fn type_check_statement_and_execute_comptime<Backend: VmBackend>(
     vm: &mut Vm<Backend>,
     stat_node: &mut StatementNode,
 ) -> Result<(), VmError> {
-    // The stack that got created on type_check should get removed,
-    // The data of type should be stored in the ast.
     let node_position = stat_node.data().get_position().clone();
     let map_err = |e| VmError::new(e, node_position.clone());
-    
+
+    if let Statement::Comptime { statements } = &mut stat_node.stat {
+        for stmt in statements.statements.iter_mut() {
+            type_check_statement_and_execute_comptime(vm, stmt)?;
+        }
+        vm.execute_statements(statements)?;
+        return Ok(());
+    }
+
     vm.create_scope();
-    let output=match &mut stat_node.stat {
+    let output = match &mut stat_node.stat {
         Statement::Assignment {
             target,
             r#type,
             value,
         } => {
-            // Type check the value expression
             let value_type = type_check_expr(vm, value)?;
-            
-            // If explicit type annotation exists, verify compatibility
             let final_type = if let Some(type_expr) = r#type {
                 let type_value = vm.evaluate_expr(type_expr)?.into_simplified_value(&vm.types);
-                let VmValueSimplified::TypeId(annotated_type)=type_value else {
+                let VmValueSimplified::TypeId(annotated_type) = type_value else {
                     return Err(map_err(VmErrorType::TypeMismatch("The expression should return type.")))
                 };
-                // Verify value type matches annotation
                 if !value_type.can_cast_to(&annotated_type, &vm.types) {
                     return Err(map_err(VmErrorType::TypeMismatch(
                         "Value type does not match type annotation"
@@ -38,22 +40,11 @@ pub(super) fn type_check_statement_and_execute_comptime<Backend: VmBackend>(
             } else {
                 value_type
             };
-            
-            // Insert variable with type-only info
             vm.insert_variable_type_only(target.clone(), final_type);
-            // I suppose this stores them in stack,So I can get feedback later.
-            
             Ok(())
         }
-        
-        Statement::Comptime { statements } => {
-            // Here only type checking happens,
-            // Running code happens differently.
-            for stmt in statements.statements.iter_mut() {
-                type_check_statement_and_execute_comptime(vm, stmt)?;
-            }
-            Ok(())
-        }
+
+        Statement::Comptime { .. } => unreachable!(),
         
         Statement::Statements(block) => {
             for stmt in block.statements.iter_mut() {
@@ -162,15 +153,8 @@ pub(super) fn type_check_statement_and_execute_comptime<Backend: VmBackend>(
             Ok(())
         }
     };
-    vm.drop_scope();
 
-    // Now run the comptime so the data is stored in the stack.
-    match &mut stat_node.stat {
-        Statement::Comptime { statements }=>{
-            vm.execute_statements(statements);
-        },
-        _=>{},
-    }
+    vm.drop_scope();
     output
 }
 

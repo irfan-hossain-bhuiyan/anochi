@@ -137,7 +137,52 @@ impl<Backend: VmBackend> Vm<Backend> {
     }
 
     pub(crate) fn print_stack(&self) {
-        println!("{}", self.variables);
+        println!("\n=== VM Stack Overview ===");
+        println!("Total stack size: {}\n", self.variables.get_stack().len());
+        
+        for (scope_idx, variables) in self.variables.iter_scopes_with_variables() {
+            if scope_idx == 0 {
+                println!("Scope {} (Global):", scope_idx);
+            } else {
+                println!("Scope {}:", scope_idx);
+            }
+            
+            if variables.is_empty() {
+                println!("  <no variables>\n");
+                continue;
+            }
+            
+            for (name, var_data) in variables {
+                let type_name = if let Some(type_def) = self.types.get_type(&var_data.type_id) {
+                    format!("{:?}", type_def)
+                } else {
+                    format!("<unknown>")
+                };
+                
+                let type_size = self.types.get_metadata(&var_data.type_id)
+                    .map(|m| m.size)
+                    .unwrap_or(0);
+                
+                let start_idx = var_data.get_index();
+                let end_idx = start_idx + type_size;
+                
+                print!("  {} : {} [{}..{}]", name, type_name, start_idx, end_idx);
+                
+                if type_size > 0 {
+                    print!(" = [");
+                    for i in start_idx..end_idx {
+                        if i > start_idx {
+                            print!(", ");
+                        }
+                        print!("{}", self.variables.get_stack()[i]);
+                    }
+                    print!("]")
+                }
+                println!();
+            }
+            println!();
+        }
+        println!("=========================\n");
     }
 
     pub fn insert_variable_check(
@@ -174,8 +219,8 @@ impl<Backend: VmBackend> Vm<Backend> {
             }
             Ok(StatementEvent::None)
         };
-        let output = inner_code();
-        output
+        
+        inner_code()
     }
 
     pub(super) fn add_function(&mut self, func: VmFunc) -> FuncId {

@@ -54,7 +54,7 @@ impl VariableData {
         self.stack_position
     }
 
-    fn get_index(&self) -> usize {
+    pub fn get_index(&self) -> usize {
         self.get_ptr().as_index()
     }
 }
@@ -268,6 +268,14 @@ impl ScopeStack {
     fn get_slice(&self, ptr: IndexPtr<VmUnit>, size: usize) -> Vec<VmUnit> {
         let index=ptr.as_index();
         self.stack[index..index+size].to_vec()
+    }
+
+    pub fn get_stack(&self) -> &SizedArray<VmUnit> {
+        &self.stack
+    }
+
+    pub fn iter_scopes_with_variables(&self) -> impl Iterator<Item = (usize, &ScopeValues)> + '_ {
+        self.scopes.iter().enumerate().map(|(idx, scope)| (idx, &scope.variables))
     }
 }
 
